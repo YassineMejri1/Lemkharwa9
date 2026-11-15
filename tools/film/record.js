@@ -6,6 +6,7 @@
      node tools/film/record.js --out <folder> --shots city,end   only these shots
      node tools/film/record.js --out <folder> --every 15         one frame in 15 (a quick look at the whole film)
      node tools/film/record.js --out <folder> --size 960         smaller pictures, faster
+     node tools/film/record.js --out <folder> --blur 2           two slices per frame, blended by build.js into motion blur
      node tools/film/record.js --list                            print the shot list and stop
 
    Needs Node 22 or newer (for its built-in WebSocket) and Chrome. Nothing is installed.
@@ -37,7 +38,7 @@ function serve() {
 
 async function main() {
   const out = arg('out', null), only = arg('shots', null), every = +arg('every', 1), width = +arg('size', 1920), listOnly = !!arg('list', false);
-  const soft = !!arg('soft', false), from = +arg('from', 0), jpeg = +arg('quality', 95);
+  const soft = !!arg('soft', false), from = +arg('from', 0), jpeg = +arg('quality', 95), subs = Math.max(1, +arg('blur', 1));
   if (!out && !listOnly) throw new Error('Say where the pictures go: --out <folder>');
   const chromePath = findChrome();
   if (!chromePath) throw new Error('Chrome not found. Set the CHROME environment variable to its path.');
@@ -96,7 +97,7 @@ async function main() {
     const shots = info.shots;
     let at = 0; shots.forEach((s) => { s.first = at; at += s.frames; });
     console.log('film: ' + at + ' frames, ' + (at / info.fps).toFixed(2) + ' s at ' + info.fps + ' frames a second');
-    shots.forEach((s) => console.log('  ' + String(s.first).padStart(4) + '  ' + (s.first / info.fps).toFixed(2).padStart(6) + ' s  ' + s.id.padEnd(12) + s.frames + ' frames  ' + (s.note || '')));
+    shots.forEach((s) => console.log('  ' + String(s.first).padStart(4) + '  ' + (s.first / info.fps).toFixed(2).padStart(6) + ' s  ' + s.id.padEnd(12) + s.frames + ' frames'));
     if (listOnly) return;
     const pick = only && only !== true ? String(only).split(',') : null;
     const t0 = Date.now(); let made = 0;
@@ -109,12 +110,15 @@ async function main() {
       await run('__film.begin(' + JSON.stringify(s.id) + ')');
       for (let f = 0; f < s.frames; f++) {
         const keep = (s.first + f) % every === 0 && s.first + f >= from;
-        await run('__film.frame(' + JSON.stringify(s.id) + ',' + f + ')');
-        if (!keep) continue;
-        const shot = await send('Page.captureScreenshot', { format: 'jpeg', quality: jpeg, fromSurface: true, captureBeyondViewport: false });
-        if (!shot.result || !shot.result.data) throw new Error('no picture for frame ' + (s.first + f) + ': ' + JSON.stringify(shot.error || {}));
-        fs.writeFileSync(path.join(out, 'f' + String(s.first + f).padStart(5, '0') + '.jpg'), Buffer.from(shot.result.data, 'base64'));
-        made++;
+        for (let k = 0; k < subs; k++) {
+          await run('__film.frame(' + JSON.stringify(s.id) + ',' + f + ',' + k + ',' + subs + ')');
+          if (!keep) continue;
+          const shot = await send('Page.captureScreenshot', { format: 'jpeg', quality: jpeg, fromSurface: true, captureBeyondViewport: false });
+          if (!shot.result || !shot.result.data) throw new Error('no picture for frame ' + (s.first + f) + ': ' + JSON.stringify(shot.error || {}));
+          const name = subs > 1 ? 'g' + String((s.first + f) * subs + k).padStart(6, '0') : 'f' + String(s.first + f).padStart(5, '0');
+          fs.writeFileSync(path.join(out, name + '.jpg'), Buffer.from(shot.result.data, 'base64'));
+          made++;
+        }
       }
       const note = await run('__film.finish(' + JSON.stringify(s.id) + ')');
       console.log('shot ' + s.id + ': ' + ((Date.now() - tb) / 1000).toFixed(1) + ' s  ' + note);
