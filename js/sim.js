@@ -85,7 +85,7 @@
     var s = {
       seed: seed, rng: rng, site: site, level: level, dayLength: opts.dayLength || R.dayLength,
       weatherSource: opts.weather.source, weatherFallback: !!opts.weather.fallback,
-      weather: JA.weather.pickWindow(opts.weather, level.sols, level.id, rng),
+      weather: JA.weather.pickWindow(opts.weather, level.sols, level.id, rng, site.id),
       env: makeEnv(site, level, rng),
       sol: 0, totalSols: level.sols, t: 0,
       air: level.id === 'cadet' ? 50 : 60, food: level.id === 'cadet' ? 28 : 45, dose: 0, bags: 0,
@@ -108,9 +108,11 @@
       pioneer: !!opts.pioneer, mats: { rock: 0, metal: 0, glass: 0 }, built: {}, broken: {},      // Pioneer mode: your bag, what you built, which rocks are gone
       stats: { storms: 0, stormOut: 0, cells: 0, ice: 0, crates: 0, cores: 0, repairs: 0, tricks: 0, bestThrow: 0, drive: 0, dayGoals: 0, sprint: 0, baked: 0 },
       glitchPlan: {}, crisisPlan: {}, crisis: null, decisions: [], after: [], flags: {}, leak: 0, stale: 1,
-      forecast: true, night: false, over: null, log: [], seenFacts: {}
+      forecast: true, night: false, over: null, log: [], seenFacts: {},
+      perks: {}                                     // what the science taught the crew (see discover and JA.GEO perk)
     };
-    for (var i = 0; i < R.beds; i++) s.m.food.beds.push({ state: 'empty', g: 0, crop: 'lettuce' });
+    for (var i = 0; i < R.beds; i++) s.m.food.beds.push({ state: i < R.seedlings ? 'growing' : 'empty', g: i < R.seedlings ? R.seedlingGrowth : 0, crop: 'lettuce' });
+    s.food += R.extraFood;
     s.darkSol = 0;
     s.env.forEach(function (e, k) { if (e.kind === 'dark') s.darkSol = k + 1; });
     var pool = [];
@@ -122,8 +124,24 @@
       s.air -= R.pioneerAir; s.food -= R.pioneerFood; s.water = Math.max(12, s.water - R.pioneerWater);
     }
     if (JA.crisis) JA.crisis.plan(s);
+    s.devil = planDevil(site, level, seed);
     startSol(s);
     return s;
+  }
+
+  // At most one lucky dust devil per Mars mission crosses the solar panels (never on the first or the last day).
+  // It has its own random stream, so it does not shift the breakdowns and crises planned from the same seed.
+  function planDevil(site, level, seed) {
+    if (site.id !== 'mars' || level.sols < 4) return null;
+    var r = rng32((seed ^ 0x5eed0de1) >>> 0);
+    if (r() >= R.devilChance) return null;
+    return { sol: 2 + Math.floor(r() * (level.sols - 2)), at: 0.3 + r() * 0.4, state: 'pending', gain: 0 };
+  }
+  // The devil blows part of the dust off every panel. Returns how much power came back, on average (0–1).
+  function devilClean(s) {
+    var before = 0, after = 0;
+    for (var i = 0; i < s.rack.eff.length; i++) { before += s.rack.eff[i]; s.rack.eff[i] = Math.min(1, s.rack.eff[i] + R.devilClean); after += s.rack.eff[i]; }
+    return (after - before) / s.rack.eff.length;
   }
 
   function startSol(s) {
@@ -140,7 +158,7 @@
     s.storm = null;
     if (w && w.level > 0) {
       var start = s.dayLength * (0.3 + s.rng() * 0.36);
-      s.storm = { start: start, end: start + R.stormDuration, level: w.level, cls: w.cls, warned: false, active: false, over: false,
+      s.storm = { start: start, end: start + R.stormDuration, level: w.level, cls: w.cls, cause: w.cause || 'sep', warned: false, active: false, over: false,
         strength: w.strength * 3 * s.site.stormMult * s.level.stormScale };
       s.stats.storms++;
     }
@@ -206,8 +224,16 @@
 
   function env(s) { return s.env[s.sol - 1]; }
   function weather(s) { return s.weather[s.sol - 1] || { level: 0, cls: null, date: null }; }
-  function shield(s) { return Math.min(0.9, R.wallBlock + s.bags * R.bagBlock + 0.05 * built(s, 'berm')); }
-  function warnLead(s) { return (s.m.comms.on ? R.warnDish : R.warnNoDish) + (s.inst.rad ? R.radWarn : 0) + s.level.warnBonus; }
+  // what the science taught: each perk is unlocked by the first core studied at one geology site (JA.GEO)
+  function perk(s, kind) { return !!(s.perks && s.perks[kind]); }
+  function airPerIce(s) { return R.airPerIce + (perk(s, 'air') ? R.perkAir : 0); }
+  function waterPerIce(s) { return R.waterPerIce + (perk(s, 'water') ? R.perkWater : 0); }
+  function bagBlock(s) { return R.bagBlock + (perk(s, 'bags') ? R.perkBag : 0); }
+  function drillHeat(s) { return perk(s, 'drill') ? R.perkDrill : 1; }
+  function shield(s) { return Math.min(0.9, R.wallBlock + s.bags * bagBlock(s) + 0.05 * built(s, 'berm')); }
+  // Seconds of warning before a storm. Dish on: Earth's forecasters warn you. Dish off: only the suit sensor, as the
+  // particles arrive. The Radiation Watcher, once set up, catches the first and fastest particles a little sooner.
+  function warnLead(s) { return Math.max(0, (s.m.comms.on ? R.warnDish : R.warnNoDish) + (s.inst.rad ? R.radWarn : 0) + s.level.warnBonus); }
   function stormPhase(s) {
     var st = s.storm; if (!st) return 'none';
     if (st.over) return 'over'; if (st.active) return 'active'; if (st.warned) return 'warning';
@@ -363,8 +389,9 @@
       a.prog += dt / R.iceTime;
       if (a.prog >= 1) {
         a.prog = 0; a.queue--; a.power--;
-        s.air = Math.min(100, s.air + R.airPerIce); s.today.airMade += R.airPerIce;
-        ev.push({ type: 'air', amount: R.airPerIce });
+        var made = airPerIce(s);
+        s.air = Math.min(100, s.air + made); s.today.airMade += made;
+        ev.push({ type: 'air', amount: made });
         note(s, 'electro');
         if (a.power === 0) ev.push({ type: 'empty', machine: 'air' });
       }
@@ -407,6 +434,13 @@
       m.rover.charge = Math.max(0, c0 - dt); s.stats.drive += dt;
       // running the battery right down hurts it: from now on it holds a little less
       if (c0 > 0 && m.rover.charge <= 0) { s.wear.rover = Math.min(R.flatWearMax, s.wear.rover + R.flatWear); note(s, 'flat'); }
+    }
+
+    // the one lucky dust devil of the mission: it shows up on the horizon, then crosses the panels
+    var dv = s.devil;
+    if (dv && dv.sol === s.sol) {
+      if (dv.state === 'pending' && s.t >= dv.at * D - R.devilLead) { dv.state = 'coming'; ev.push({ type: 'devil', phase: 'coming', lead: Math.max(0, dv.at * D - s.t) }); }
+      if (dv.state === 'coming' && s.t >= dv.at * D) { dv.state = 'done'; dv.gain = devilClean(s); ev.push({ type: 'devil', phase: 'clean', gain: dv.gain }); }
     }
 
     var g = s.glitch;
@@ -476,8 +510,8 @@
   function feedIce(s, id) {
     if (id === 'air') { if (s.m.air.queue >= R.hopperMax) return no('The Air Maker hopper is full. Give it a power cell so it can work!'); s.m.air.queue++; }
     else {
-      if (s.water > waterCap(s) - R.waterPerIce / 2) return no('The water tank is full.');
-      var add = Math.min(R.waterPerIce, waterCap(s) - s.water);
+      if (s.water > waterCap(s) - waterPerIce(s) / 2) return no('The water tank is full.');
+      var add = Math.min(waterPerIce(s), waterCap(s) - s.water);
       s.water += add; s.today.water.ice += add;
       s.today.ice++; s.stats.ice++;
       return { ok: true, add: add };
@@ -516,6 +550,8 @@
     var site = JA.GEO[s.site.id][core.site], f = site.finds[core.n] || site.finds[0];
     var find = { title: f.title, text: f.text, src: f.src, quality: core.quality, place: site.name, icon: site.icon, sol: s.sol, kind: 'core',
       key: core.site + '-' + (site.finds[core.n] ? core.n : 0) };
+    // the first core studied from each site teaches something useful for good
+    if (site.perk && !perk(s, site.perk.kind)) { s.perks[site.perk.kind] = s.sol; find.perk = site.perk.text; find.perkKind = site.perk.kind; }
     s.finds.push(find);
     didScience(s);
     return find;
@@ -581,14 +617,23 @@
     info = info || {};
     var L = s.level, t = s.today, ev = [], last = s.sol >= s.totalSols;
     if (info.late) { s.air = Math.max(0, s.air - R.lateAir); t.late = true; }
-    // if you turned in early, the rest of the day still passes (safely indoors)
+    // if you turned in early, the rest of the day still passes (safely indoors).
+    // info.launch: the crew has lifted off, so the rest of the day does not pass at the outpost.
     var guard = 0;
     s.sleeping = true;
-    while (s.t < s.dayLength && !s.dayDone && guard++ < 4000) ev = ev.concat(tick(s, 0.5, { outside: false }));
+    while (!info.launch && s.t < s.dayLength && !s.dayDone && guard++ < 4000) ev = ev.concat(tick(s, 0.5, { outside: false }));
     s.sleeping = false;
     s.dayDone = true;
-    var sf = shield(s), dinnerV = 0, night = 0, dry = 0;
+    var sf = shield(s), dinnerV = 0, night = 0, dry = 0, picked = 0, pickedFood = 0;
     if (!last) {
+      // After the shift the crew inside picks whatever is ripe, stores it and plants the same crop again. Food then
+      // depends on what you decided (power for the lamps, ice for the water, which crop) more than on how fast you run:
+      // picking during the day still gets a bed growing again sooner. (Not while the leak has the food store sealed.)
+      if (s.flags.pantryShut !== s.sol) s.m.food.beds.forEach(function (b) {
+        if (b.state !== 'ripe') return;
+        picked++; pickedFood += crop(b.crop).food; b.state = 'growing'; b.g = 0;
+      });
+      s.food = Math.min(100, s.food + pickedFood); t.crewCrates = picked; t.crewFood = pickedFood;
       // dried space food needs water: with an empty tank the crew opens extra ready-made packs (see dinner)
       var shared = (s.colony && s.colony.asks) || 0;
       dry = dryDinner(s); dinnerV = dinner(s) - dry - shared;
@@ -610,7 +655,8 @@
       t.late ? { text: 'Late rush home', v: -R.lateAir } : null
     ].filter(Boolean).concat(extra('air')) });
     lines.push({ res: 'food', icon: '🥬', parts: [
-      t.crates ? { text: t.crates + ' veggie crate' + (t.crates > 1 ? 's' : '') + ' stored', v: t.cratesFood } : { text: 'No harvest today', v: 0 },
+      t.crates ? { text: t.crates + ' veggie crate' + (t.crates > 1 ? 's' : '') + ' stored', v: t.cratesFood } : picked ? null : { text: 'No harvest today', v: 0 },
+      picked ? { text: 'The crew picked ' + picked + ' ripe bed' + (picked > 1 ? 's' : '') + ' after your shift', v: pickedFood } : null,
       dinnerV ? { text: 'Crew dinner', v: -dinnerV } : null,
       dry ? { text: 'Extra packs: no water to cook dried food', v: -dry } : null,
       shared ? { text: 'Shared with the town, which is short of food', v: -shared } : null
@@ -751,11 +797,11 @@
     rng32: rng32, newGame: newGame, startSol: startSol, env: env, weather: weather, shield: shield, warnLead: warnLead, stormPhase: stormPhase,
     tick: tick, takeCell: takeCell, plug: plug, feedIce: feedIce, addBag: addBag, plant: plant, harvest: harvest, storeCrate: storeCrate,
     coresLeft: coresLeft, drillCore: drillCore, submitCore: submitCore, deploy: deploy, photo: photo, trick: trick,
-    servicePanel: servicePanel, cleanAllPanels: cleanAllPanels, commInfo: commInfo, askEarth: askEarth, repairMiss: repairMiss, repairDone: repairDone,
+    servicePanel: servicePanel, cleanAllPanels: cleanAllPanels, devilClean: devilClean, commInfo: commInfo, askEarth: askEarth, repairMiss: repairMiss, repairDone: repairDone,
     endSol: endSol, finish: finish, rankFor: rankFor, badges: badges, hint: hint, didScience: didScience,
     dayMods: dayMods, airDrain: airDrain, dinner: dinner, dayInfo: dayInfo, harderList: harderList,
     dayGoalDone: dayGoalDone, dayGoalProgress: dayGoalProgress, setDayLength: setDayLength, machine: machine,
-    stale: stale, shade: shade, sunPower: sunPower, roverCap: roverCap, note: note, jam: jam, setSeed: setSeed, hintInfo: hintInfo, pickFacts: pickFacts,
+    stale: stale, shade: shade, sunPower: sunPower, perk: perk, airPerIce: airPerIce, waterPerIce: waterPerIce, bagBlock: bagBlock, drillHeat: drillHeat, roverCap: roverCap, note: note, jam: jam, setSeed: setSeed, hintInfo: hintInfo, pickFacts: pickFacts,
     built: built, rackMax: rackMax, waterCap: waterCap, extraCells: extraCells, rockYield: rockYield, breakRock: breakRock, addMat: addMat, canBuild: canBuild, build: build,
     townLoad: townLoad, townNight: townNight, townMorning: townMorning, crash: crash
   };

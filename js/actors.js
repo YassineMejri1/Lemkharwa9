@@ -271,27 +271,41 @@
       var g = new T.Group(), m = new T.MeshBasicMaterial({ color: 0xe2b98c, transparent: true, opacity: 0.22, side: T.DoubleSide, depthWrite: false, fog: false });
       for (var k = 0; k < 6; k++) { var c = add(g, new T.CylinderGeometry(1.2 + k * 0.75, 0.6 + k * 0.6, 3.4, 10, 1, true), m, 0, 1.7 + k * 3.3, 0, true); c.userData.k = k; }
       root.add(g);
-      A.devils.push({ group: g, pos: new T.Vector3(i ? 90 : -70, 0, i ? 60 : -40), dir: i * 2.5, target: new T.Vector3(), timer: 0, cool: 0, toBase: i === 0 });
+      A.devils.push({ group: g, pos: new T.Vector3(i ? 90 : -70, 0, i ? 60 : -40), dir: i * 2.5, target: new T.Vector3(), timer: 0, sent: 0 });
     }
   }
+  // Somewhere out on the plain, well away from the solar panels (the panels are only crossed when the mission
+  // rules send a devil there: see A.sendDevil and sim.planDevil).
+  function wanderTarget(d) {
+    for (var k = 0; k < 8; k++) {
+      var a = Math.random() * 6.28, r = 70 + Math.random() * 60;
+      d.target.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+      if (Math.hypot(d.target.x - Tn.L.solar[0], d.target.z - Tn.L.solar[1]) > 45) return;
+    }
+  }
+  // The mission rules say a dust devil will cross the solar panels in `lead` seconds: bring the nearer devil in
+  // from the open plain on a straight line through the panels, so the player sees it happen.
+  A.sendDevil = function (lead) {
+    if (!A.devils.length) return false;
+    var c = Tn.L.solar, d = A.devils[0], a = Math.random() * 6.28, run = Math.max(18, (lead || 9) * 6.5);
+    d.pos.set(c[0] + Math.sin(a) * run, 0, c[1] + Math.cos(a) * run);
+    d.target.set(c[0] - Math.sin(a) * 40, 0, c[1] - Math.cos(a) * 40);      // straight through the panels and out the other side
+    d.dir = Math.atan2(d.target.x - d.pos.x, d.target.z - d.pos.z);
+    d.timer = (run + 40) / 6.5; d.sent = d.timer;
+    return true;
+  };
   function updateDevils(dt) {
     for (var i = 0; i < A.devils.length; i++) {
       var d = A.devils[i];
-      d.timer -= dt; d.cool -= dt;
-      if (d.timer <= 0) {
-        d.timer = 16 + Math.random() * 14;
-        d.toBase = !d.toBase;
-        if (d.toBase) d.target.set(Tn.L.solar[0] + (Math.random() - 0.5) * 8, 0, Tn.L.solar[1] + (Math.random() - 0.5) * 8);
-        else { var a = Math.random() * 6.28; d.target.set(Math.cos(a) * 120, 0, Math.sin(a) * 120); }
-      }
+      d.timer -= dt; d.sent = Math.max(0, d.sent - dt);
+      if (d.timer <= 0) { d.timer = 16 + Math.random() * 14; wanderTarget(d); }
       var want = Math.atan2(d.target.x - d.pos.x, d.target.z - d.pos.z);
-      d.dir = angLerp(d.dir, want + Math.sin(W.time * 0.7 + i) * 0.8, Math.min(1, dt * 0.8));
+      d.dir = angLerp(d.dir, want + Math.sin(W.time * 0.7 + i) * (d.sent > 0 ? 0.08 : 0.8), Math.min(1, dt * (d.sent > 0 ? 3 : 0.8)));
       d.pos.x += Math.sin(d.dir) * 6.5 * dt; d.pos.z += Math.cos(d.dir) * 6.5 * dt;
       d.pos.y = Tn.height(d.pos.x, d.pos.z);
       d.group.position.copy(d.pos);
       d.group.children.forEach(function (c) { c.rotation.y += dt * (5 - c.userData.k * 0.5); c.position.x = Math.sin(W.time * 2 + c.userData.k) * 0.3 * c.userData.k; });
       if (Math.random() < dt * 20) W.emit(d.pos.x + (Math.random() - 0.5) * 2, d.pos.y + 0.3, d.pos.z + (Math.random() - 0.5) * 2, { vx: (Math.random() - 0.5) * 6, vy: 3 + Math.random() * 5, vz: (Math.random() - 0.5) * 6, life: 2, size: 0.7, grow: 2.5, color: 0xdba878, alpha: 0.4 });
-      if (d.cool <= 0 && Math.hypot(d.pos.x - Tn.L.solar[0], d.pos.z - Tn.L.solar[1]) < 9) { d.cool = 50; if (A.onDevil) A.onDevil('clean'); }
       if (astro.mode === 'walk' && Math.hypot(d.pos.x - astro.pos.x, d.pos.z - astro.pos.z) < 3) { astro.spin = 1.2; if (A.onDevil) A.onDevil('astro'); }
     }
   }
@@ -432,6 +446,15 @@
     var a = astro, ix = 0, iz = 0, jump = false, sprint = false;
     a.group.visible = a.mode !== 'hidden';
     if (a.mode === 'hidden') return;
+    if (a.mode === 'sit') {
+      // on the lookout rock (js/observe.js moves him and sets sitK / relaxK / look); while he walks up to the rock
+      // the normal walking body is used, so his feet step instead of sliding
+      a.group.position.copy(a.pos); a.group.rotation.set(0, a.yaw, 0);
+      a.drill.visible = false;
+      if (a.sitWalk) poseAstro(a, dt, a.sitWalk > 0.05, false, null); else poseRock(a, dt);
+      a.tip.material.emissiveIntensity = 1.2 + Math.sin(W.time * 6);
+      return;
+    }
     if (a.mode === 'drive') {
       roverLocal(0, 1.3, 0.25, a.pos); a.yaw = a.lastYaw = rover.yaw;
       a.group.position.copy(a.pos); a.group.rotation.set(0, a.yaw, 0);
@@ -656,6 +679,24 @@
     a.body.rotation.set(0.04, 0, 0);
     a.armL.rotation.set(-1.05, 0, 0.12); a.armR.rotation.set(-1.05, 0, -0.12);
     a.foreL.rotation.set(-0.45, 0, 0); a.foreR.rotation.set(-0.45, 0, 0); a.handL.rotation.set(-0.2, 0, 0); a.handR.rotation.set(-0.2, 0, 0);
+  }
+
+  // sitting on a rock: sitK 0 = standing, 1 = seated (thighs forward, shins hanging); relaxK leans him back on his
+  // hands; look (radians) turns his shoulders and helmet a little toward where the player is looking. He breathes.
+  function poseRock(a, dt) {
+    var k = a.sitK || 0, r = a.relaxK || 0, br = Math.sin(W.time * 1.45) * (0.4 + 0.6 * k), look = Math.max(-0.5, Math.min(0.5, a.look || 0));
+    a.headY = 0; a.air = 0; a.move = 0; a.bank = 0;
+    a.hips.position.set(0, RIG.hipY, 0); a.hips.rotation.set(0, 0, 0);
+    a.legL.rotation.set(lerp(0, -1.32, k), 0, -0.1 * k); a.legR.rotation.set(lerp(0, -1.26, k), 0, 0.12 * k);
+    a.shinL.rotation.set(lerp(0, 1.22, k), 0, 0); a.shinR.rotation.set(lerp(0, 1.08, k), 0, 0);
+    a.footL.rotation.set(0.12 * k, 0, 0.05 * k); a.footR.rotation.set(0.2 * k, 0, -0.05 * k);
+    a.body.rotation.set(lerp(0.06 * k, -0.15, r) + br * 0.012, look * 0.55, 0);
+    for (var i = 0; i < 2; i++) {
+      var out = i ? 1 : -1, arm = i ? a.armR : a.armL, fore = i ? a.foreR : a.foreL, hand = i ? a.handR : a.handL;
+      // standing: arms down; sitting: hands on the knees; relaxed: leaning back on the hands, palms on the rock
+      var ax = lerp(lerp(-0.06, -0.62, k), 0.62, r), el = lerp(lerp(-0.2, -0.55, k), -0.12, r), az = out * lerp(lerp(0.2, 0.12, k), 0.34, r);
+      arm.rotation.set(ax + br * 0.01, 0, az); fore.rotation.set(el, 0, 0); hand.rotation.set(lerp(-0.15, 0.7, r), 0, 0);
+    }
   }
 
   function updateRover(dt, input) {

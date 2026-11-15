@@ -20,7 +20,8 @@ window.JA = window.JA || {};
     apollo: { name: 'NASA Apollo program', url: 'https://www.nasa.gov/the-apollo-program/' },
     insight: { name: 'NASA InSight lander', url: 'https://science.nasa.gov/mission/insight/' },
     phoenix: { name: 'NASA Phoenix Mars lander', url: 'https://science.nasa.gov/mission/phoenix/' },
-    lro: { name: 'NASA Lunar Reconnaissance Orbiter', url: 'https://science.nasa.gov/mission/lro/' }
+    lro: { name: 'NASA Lunar Reconnaissance Orbiter', url: 'https://science.nasa.gov/mission/lro/' },
+    storm2024: { name: 'NASA Curiosity rover RAD and MAVEN: the solar storm of 20 May 2024 (NASA, June 2024)', url: 'https://science.nasa.gov/mission/msl-curiosity/' }
   };
 
   JA.SITES = {
@@ -67,19 +68,19 @@ window.JA = window.JA || {};
     cadet: {
       id: 'cadet', name: 'Cadet', ages: 'Ages 7–9', sols: 5, airDrain: 30, dinner: 14, cellBonus: 1,
       stormScale: 0.6, warnBonus: 12, ease: 1.5, glitchSols: [2], crisisSols: [3, 4], ramp: 0.6, doseScale: 0.7,
-      storms: [1, 4], stormsArchive: [3, 7],
+      storms: [1, 4], stormsArchive: [2, 5],
       blurb: 'A 5-day mission with extra power and longer storm warnings.'
     },
     commander: {
       id: 'commander', name: 'Commander', ages: 'Ages 10–12', sols: 8, airDrain: 36, dinner: 18, cellBonus: 0,
       stormScale: 1, warnBonus: 0, ease: 1, glitchSols: [2, 4, 6, 7], crisisSols: [3, 5, 7], ramp: 1, doseScale: 0.55,
-      storms: [3, 8], stormsArchive: [8, 14],
+      storms: [2, 6], stormsArchive: [5, 9],
       blurb: 'An 8-day mission. Every power cell matters, and every day is tougher.'
     },
     veteran: {
       id: 'veteran', name: 'Veteran', ages: 'Ages 12+', sols: 10, airDrain: 38, dinner: 19, cellBonus: 0,
       stormScale: 1, warnBonus: -4, ease: 0.9, glitchSols: [2, 4, 6, 7, 8, 9], crisisSols: [3, 5, 7, 9], ramp: 1.15, doseScale: 0.45,
-      storms: [4, 10], stormsArchive: [8, 15],
+      storms: [3, 8], stormsArchive: [7, 11],
       blurb: 'A 10-day expedition. Worn-out machines, thin supplies and four big decisions.'
     }
   };
@@ -102,7 +103,9 @@ window.JA = window.JA || {};
     bagsPerCell: 4, bagInterval: 2.2, shieldSlots: 16, wallBlock: 0.25, bagBlock: 0.035,
     labCharges: 3, analyzeTime: 8, labQueue: 4,
     roverPerCell: 100, roverMax: 200, roverBed: 4,
-    stormDuration: 28, warnDish: 45, warnNoDish: 12, radWarn: 10,
+    // warnNoDish: with the dish off, nobody on Earth can warn you; only the suit sensor notices, when the particles
+    // are already arriving (a few seconds to get moving). The Radiation Watcher catches the first, fastest particles.
+    stormDuration: 28, warnDish: 45, warnNoDish: 3, radWarn: 10,
     sprintAir: 1.5, lateAir: 6,
     // --- the CO2 filter: it fills as the crew breathes; a power cell at the Air Scrubber bakes it clean ---
     filterPerAir: 0.9,             // filter used up for each point of air breathed (so running fills it faster too)
@@ -117,7 +120,15 @@ window.JA = window.JA || {};
     jamWear: 0.08, jamWearMax: 0.4,                     // each drill jam makes the drill heat this much faster, for good
     flatWear: 0.1, flatWearMax: 0.3,                    // each time the rover battery runs flat it holds this much less
     scarPerLevel: 0.01, scarMax: 0.08,                  // solar power lost for good after a medium or big solar storm
+    // --- dust devils (Mars): most just wander past. REAL: now and then one crossed Spirit's or Opportunity's
+    //     panels and blew dust off — a rare gift, not a routine. GAME: at most once a mission, and only part of the dust.
+    devilChance: 0.65, devilClean: 0.35, devilLead: 9,
     whyGap: 18,                                         // seconds between two "why did that happen?" cards
+    // --- what the science teaches: the first core studied at each geology site unlocks one of these for good (GAME sizes)
+    perkAir: 4, perkWater: 10, perkBag: 0.01, perkDrill: 0.75,
+    // --- a gentler first day: the crew started two beds of seedlings on the way down, and packed one more dinner.
+    //     Food then depends on lamps, water and crop choices more than on how fast a young player can run.
+    seedlings: 2, seedlingGrowth: 0.4, extraFood: 10,
     // --- the ice drill: you start it, it works by itself, and the chunk pops out ---
     iceDrillTime: 7, iceDrillRest: 5,                   // seconds of drilling for one chunk, then seconds of cooling before the next
     // --- rover crashes ---
@@ -199,44 +210,44 @@ window.JA = window.JA || {};
   // ---------- Geology sites: two rock cores each, every core reveals a real finding ----------
   JA.GEO = {
     moon: [
-      { name: 'Boulder Field', icon: '🪨', finds: [
+      { name: 'Boulder Field', icon: '🪨', perk: { kind: 'bags', text: 'Useful! Crushed breccia packs tight, so the crew now fills soil bags with it: denser bags block a little more radiation.' }, finds: [
         { title: 'A piece of the first Moon crust', src: 'apollo',
           text: 'This pale rock is anorthosite, part of the Moon\'s very first crust. Apollo 15 astronauts found one about 4 billion years old and nicknamed it the Genesis Rock.' },
         { title: 'Smash-up rock', src: 'apollo',
           text: 'This is a breccia: broken bits of rock welded together by the heat of a meteorite crash. Many of the rocks Apollo brought home are breccias.' }] },
-      { name: 'Bead Patch', icon: '✨', finds: [
+      { name: 'Bead Patch', icon: '✨', perk: { kind: 'air', text: 'Useful! Moon soil is almost half oxygen, locked in minerals. These beads give theirs up more easily when heated, so the Air Maker now adds a scoop to each ice chunk: more air every time.' }, finds: [
         { title: 'Volcanic glass beads', src: 'apollo',
           text: 'Tiny orange beads of glass! Apollo 17 found soil like this. The beads sprayed out of fire fountains on the Moon more than 3 billion years ago.' },
         { title: 'Dust as sharp as glass', src: 'apollo',
           text: 'Moon dust is sharp like tiny bits of broken glass, because there is no wind or water to smooth it. It scratched the Apollo astronauts\' suits and visors.' }] },
-      { name: 'Crater Wall', icon: '🌑', finds: [
+      { name: 'Crater Wall', icon: '🌑', perk: { kind: 'drill', text: 'Useful! Now you know where the hard layers are, so the drill can start in softer rock: it heats up more slowly.' }, finds: [
         { title: 'Layers of crashes', src: 'moon',
           text: 'This wall shows layers of rock thrown out by older impacts. With no weather on the Moon, craters stay sharp for billions of years.' },
         { title: 'Bootprints that last', src: 'apollo',
           text: 'The bootprints you leave here could last for millions of years. There is no wind or rain on the Moon to wipe them away.' }] },
-      { name: 'Deep Freeze', icon: '🧊', finds: [
+      { name: 'Deep Freeze', icon: '🧊', perk: { kind: 'water', text: 'Useful! You mapped the ice-rich layer, so every ice chunk you dig now holds more water.' }, finds: [
         { title: 'Water ice in the soil', src: 'moon',
           text: 'Ice mixed into the soil! In 2009 NASA\'s LCROSS mission crashed a rocket stage into a dark polar crater and found water in the cloud it kicked up.' },
         { title: 'One of the coldest places known', src: 'lro',
           text: 'The floors of some polar craters never see the Sun. NASA\'s Lunar Reconnaissance Orbiter measured about −240°C there.' }] }
     ],
     mars: [
-      { name: 'Striped Mesa', icon: '🏜️', finds: [
+      { name: 'Striped Mesa', icon: '🏜️', perk: { kind: 'drill', text: 'Useful! The old lake mud is soft, layered rock. Now you know where it is, so the drill can start there: it heats up more slowly.' }, finds: [
         { title: 'Pebbles from a stream', src: 'msl',
           text: 'Smooth, rounded pebbles stuck in rock. In 2012 the Curiosity rover found ones like these — an ancient stream bed. Water once flowed on Mars!' },
         { title: 'Mud from a lake', src: 'msl',
           text: 'These thin layers are hardened mud, like the layers Curiosity drilled in Gale Crater, which held a lake billions of years ago.' }] },
-      { name: 'Blueberry Flats', icon: '🫐', finds: [
+      { name: 'Blueberry Flats', icon: '🫐', perk: { kind: 'bags', text: 'Useful! Hematite is a heavy iron mineral. Soil bags with it in are denser, so each one blocks a little more radiation.' }, finds: [
         { title: 'Martian "blueberries"', src: 'mer',
           text: 'Tiny grey balls! In 2004 the Opportunity rover found "blueberries" like these, made of a mineral called hematite that usually forms in water.' },
         { title: 'Rusty dust', src: 'mars',
           text: 'Mars looks red because its dust is full of iron that has rusted — a bit like an old bike left out in the rain.' }] },
-      { name: 'White Vein Rocks', icon: '🤍', finds: [
+      { name: 'White Vein Rocks', icon: '🤍', perk: { kind: 'water', text: 'Useful! Gypsum holds water inside its crystals: about a fifth of its weight. Warmed with the ice, it adds more water from every chunk.' }, finds: [
         { title: 'A vein left by water', src: 'mer',
           text: 'A bright white stripe in the rock. Opportunity found a vein like this in 2011: the mineral gypsum, left behind by water trickling through a crack.' },
         { title: 'Cooled lava', src: 'mars',
           text: 'This dark rock is basalt — cooled lava. Mars has the tallest volcano in the solar system, Olympus Mons, about two and a half times as high as Mount Everest.' }] },
-      { name: 'Ice Pit', icon: '🧊', finds: [
+      { name: 'Ice Pit', icon: '🧊', perk: { kind: 'air', text: 'Useful! This ice is very pure, with little dust or salt in it, so the Air Maker gets more oxygen out of every chunk.' }, finds: [
         { title: 'Ice under the soil', src: 'phoenix',
           text: 'Bright ice just under the soil! In 2008 NASA\'s Phoenix lander dug a small trench on Mars and found water ice like this.' },
         { title: 'Ice that vanishes', src: 'phoenix',
@@ -341,6 +352,8 @@ window.JA = window.JA || {};
     { id: 'regolith', site: 'any', tags: ['shield'], src: 'artemis', text: 'Loose space soil is called regolith. Engineers study piling regolith over habitats, because thick soil is a great radiation shield — and it is free!' },
     { id: 'lunarrover', site: 'moon', tags: ['rover'], src: 'apollo', text: 'Apollo 15, 16 and 17 each brought an electric Moon buggy. Apollo 17\'s crew drove theirs about 36 km in total.' },
     { id: 'flareclass', site: 'any', tags: ['storm'], src: 'donki', text: 'Scientists sort solar flares into classes: A, B, C, M and X. Each letter is 10 times stronger than the one before. X is the strongest.' },
+    { id: 'sepcme', site: 'any', tags: ['storm', 'dose'], src: 'donki', text: 'A big flare does not always mean danger. The radiation that hurts astronauts is fast protons, mostly pushed by the shock wave of a cloud of solar gas (a CME). They follow the Sun\'s magnetic field, so they only reach places linked to the eruption.' },
+    { id: 'mars2024', site: 'mars', tags: ['storm', 'dose'], src: 'storm2024', text: 'On 20 May 2024 a storm from the far side of the Sun, where Earth could not see it, hit Mars. NASA\'s Curiosity rover measured its biggest radiation surge in 12 years: like about 30 chest X-rays at once.' },
     { id: 'invisible', site: 'any', tags: ['storm', 'dose'], src: 'donki', text: 'You cannot see or feel space radiation. Astronauts carry small sensors called dosimeters that count it for them — like your radiation badge.' },
     { id: 'electro', site: 'any', tags: ['air', 'ice'], src: 'iss', text: 'Water is made of hydrogen and oxygen. The Space Station uses electricity to split water apart and give the crew oxygen to breathe.' },
     { id: 'water', site: 'any', tags: ['food', 'any'], src: 'iss', text: 'On the International Space Station, machines recycle about 98% of the water — even sweat and pee — back into clean drinking water.' },
@@ -393,7 +406,7 @@ window.JA = window.JA || {};
     { id: 'stormin', icon: '🏠', title: 'The storm you did not feel', holo: 'shield', src: 'donki', hint: 'Sit out a solar storm indoors.',
       text: 'You stayed indoors, so the walls and the soil on the dome took the hit for you. Mass between you and the Sun is the best protection there is.' },
     { id: 'warn', icon: '📡', title: 'Where the warning came from', holo: 'storm', src: 'donki', hint: 'Live through a solar storm.',
-      text: 'The light of a flare crosses space in minutes. The dangerous particles are slower. Telescopes see the flash first, and that gap is your time to run home. With the Radio Dish on, Earth tells you sooner.' },
+      text: 'A flare\'s light crosses space in minutes. The dangerous particles come after it, sped up by the shock wave of a cloud of solar gas (a CME). Forecasters on Earth watch both and warn you before most of the particles arrive. With the Radio Dish off, only your suit sensor notices, when the particles are already here.' },
     { id: 'scar', icon: '⚡', title: 'The storm scarred the solar panels', holo: 'storm', src: 'donki', hint: 'Live through a medium or big solar storm.',
       text: 'Storm particles knock tiny flaws into solar cells, and the flaws never heal. After big storms, real satellites make a little less power for the rest of their lives. So will your panels.' },
     { id: 'jam', icon: '🔩', title: 'The drill overheated', holo: 'drill', src: { moon: 'apollo', mars: 'msl' }, hint: 'Overheat the drill.',

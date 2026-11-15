@@ -5,6 +5,8 @@ var pass = 0, fail = 0;
 function ok(name, cond, extra) { if (cond) pass++; else fail++; console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra !== undefined ? '  [' + extra + ']' : '')); }
 function game(site, level, seed, D) { return sim.newGame({ site: site, level: level, seed: seed, weather: arch, dayLength: D || 300 }); }
 function quiet(s) { s.storm = null; s.glitch = null; s.crisis = null; }
+// an empty greenhouse (a new game starts with R.seedlings beds already growing), for the tests about planting
+function bare(s) { s.m.food.beds.forEach(function (b) { b.state = 'empty'; b.g = 0; }); }
 function run(s, secs, ctx) { var ev = [], end = Math.min(s.dayLength, s.t + secs); while (s.t < end && !s.dayDone) ev = ev.concat(sim.tick(s, 0.25, ctx || { outside: false })); return ev; }
 function whys(ev) { return ev.filter(function (e) { return e.type === 'why'; }).map(function (e) { return e.id; }); }
 
@@ -35,7 +37,7 @@ function whys(ev) { return ev.filter(function (e) { return e.type === 'why'; }).
   run(s, 300 - s.t - 1);
   var net = w0 - s.water, expect = R.crewWater * (1 - s.mods.recycle);
   ok('with no plants the crew only costs what the recycler loses', Math.abs(net - expect) < 0.3, net.toFixed(2) + ' vs ' + expect.toFixed(2));
-  var s2 = game('moon', 'commander', 6); quiet(s2);
+  var s2 = game('moon', 'commander', 6); quiet(s2); bare(s2);
   s2.water = 50; ok('ice adds waterPerIce', sim.feedIce(s2, 'food').ok && s2.water === 50 + R.waterPerIce);
   s2.water = 90; ok('a nearly full tank refuses ice', sim.feedIce(s2, 'food').ok === false);
   s2.water = 0; s2.m.food.lamp = 1; sim.plant(s2, 0); run(s2, 60);
@@ -53,7 +55,7 @@ function whys(ev) { return ev.filter(function (e) { return e.type === 'why'; }).
 
 // ---- two crops
 (function () {
-  var s = game('mars', 'commander', 7); quiet(s);
+  var s = game('mars', 'commander', 7); quiet(s); bare(s);
   s.m.food.lamp = 2; s.water = 100;
   ok('plant() uses the seeds in your pocket', sim.plant(s, 0) === 'lettuce' && s.m.food.beds[0].crop === 'lettuce');
   ok('and switches when a crop is named', sim.plant(s, 1, 'potato') === 'potato' && s.sow === 'potato' && typeof s.seed === 'number');

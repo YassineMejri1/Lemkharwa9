@@ -10,12 +10,14 @@
 <link rel="stylesheet" href="css/sunwatch.css">
 <link rel="stylesheet" href="css/keepsake.css">
 <link rel="stylesheet" href="css/hud.css">
+<link rel="stylesheet" href="css/observe.css">
 <link rel="stylesheet" href="css/colony.css">
 <link rel="stylesheet" href="css/panels.css">
 <link rel="stylesheet" href="css/learn.css">
 <link rel="stylesheet" href="css/holo.css">
 <link rel="stylesheet" href="css/windows.css">
 <link rel="stylesheet" href="css/map.css">
+<link rel="stylesheet" href="css/mission.css">
 <link rel="stylesheet" href="css/pioneer.css">
 </head>
 <body>
@@ -30,6 +32,17 @@
 <div id="fx-tag" class="hidden" aria-live="polite"></div>
 <div id="tags" aria-hidden="true"></div>
 <div id="toasts" aria-hidden="true"></div>
+<!-- Mission Control cutaway: shown while the camera moves to the habitat's workstation -->
+<div id="mc" class="hidden" role="status" aria-live="polite">
+  <div class="mc-band">
+    <small class="mc-from">📻 MISSION CONTROL — EARTH</small>
+    <b class="mc-title"></b>
+    <p class="mc-msg"></p>
+    <div class="mc-row"><span class="mc-dir"></span><span class="mc-delay"></span></div>
+    <div class="mc-prog"><i class="mc-fill"></i></div>
+    <div class="mc-row"><span class="mc-status"></span><span class="mc-hint">E · continue</span></div>
+  </div>
+</div>
 
 <!-- top bar -->
 <header id="hud" class="hidden">
@@ -114,7 +127,7 @@
 <!-- Mission Control on Earth, over the radio. The badge and the "Why?" chip open the wrist tablet's hologram. -->
 <div id="radio" class="hidden">
   <button id="radio-ask" class="radio-badge" aria-label="Wrist tablet: show a hologram that explains" title="Wrist tablet: show me why (T)">📡<i></i><i></i></button>
-  <p><small>Mission Control · Earth</small><span id="radio-text"></span></p>
+  <p><small id="radio-from">Mission Control · Earth</small><span id="radio-text"></span></p>
   <button id="radio-why" aria-label="Show me why: play the hologram on your wrist tablet">▶ Why? <kbd>T</kbd></button>
 </div>
 
@@ -213,11 +226,13 @@
 <script src="js/intro.js"></script>
 <!-- optional extras: the game runs without any of them -->
 <script src="js/pov.js"></script>
+<script src="js/mission.js"></script>
 <script src="js/skyfall.js"></script>
 <script src="js/music.js"></script>
 <script src="js/sunwatch.js"></script>
 <script src="js/keepsake.js"></script>
 <script src="js/interior.js"></script>
+<script src="js/observe.js"></script>
 <script src="js/colony.js"></script>
 <script src="js/pioneer.js"></script>
 <script src="js/journal.js"></script>
