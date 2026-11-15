@@ -521,6 +521,7 @@
       if (!s.photos[i]) offer(d2(p, sp.photo[i]), 2.6, { label: 'Take a postcard photo', run: function () { var f = sim.photo(s, i); if (f) { Au.play('photo'); if (JA.fx) JA.fx.snap(); U.fade(true); setTimeout(function () { U.fade(false); }, 140); findCard(f); } } });
     })(i);
     ext('sky', 'offer', s, p, offer, collectRock);
+    ext('observe', 'offer', s, p, offer, startObserve);
     return best;
   }
   function pickUp(it) {
@@ -893,7 +894,7 @@
   }
   function snapPostcard() {
     var s = G.s;
-    if (!s || (G.mode !== 'play' && G.mode !== 'inside') || !JA.keepsake || U.modalOpen() || infoOpen()) return;
+    if (!s || (G.mode !== 'play' && G.mode !== 'inside' && G.mode !== 'observe') || !JA.keepsake || U.modalOpen() || infoOpen()) return;
     W.update(0);                                   // draw a fresh picture, then copy it straight away
     var card = ext('keepsake', 'postcard', $('scene'), 'Greetings from ' + s.site.name + '!', dayWord() + ' ' + s.sol + ' \u00b7 ' + s.site.place + ' \u00b7 Astro Outpost');
     if (!card) return;
@@ -906,6 +907,7 @@
     if (Au.musicOn && Au.musicOn()) return 'off';             // a recorded piece is playing (title, night, film): the generated music waits
     if (G.mode === 'title' || G.mode === 'end') return 'title';
     if (G.mode === 'intro') return 'off';     // the landing film has its own sound
+    if (G.mode === 'observe') return 'night'; // the lookout: only the quietest music
     if (G.mode === 'vision') return 'launch';
     if (G.mode === 'night' || G.mode === 'brief') return 'night';
     if (G.mode === 'launch') return 'launch';
@@ -1026,6 +1028,7 @@
     stormFrame(true);
     // things Mission Control points out once, when they matter
     Au.breathe(dt, G.input.sprint && moving && !r.driver);
+    if (JA.observe && !s.lookout && !r.driver && JA.observe.near(a.pos) < 14) tip('lookout', 'That flat rock with the gold blanket is the lookout. Sit down for a moment and look at the sky.');
     if (s.leak > 0) tip('leak' + s.sol, 'Air leak! The tanks are losing air.');
     else if (s.stale > 1) tip('stale' + s.sol, 'The air is going stale. It is draining fast!');
     if (s.sol < s.totalSols && s.t > s.dayLength * 0.7 && s.food < sim.dinner(s)) tip('short' + s.sol, 'There is not enough food for tonight\'s dinner!');
@@ -1038,10 +1041,10 @@
   // =====================================================================
   var HUMS = { air: 'loop-air-maker', food: 'loop-greenhouse', rack: 'loop-solar-rack', bag: 'loop-soil-bagger', lab: 'loop-lab', comms: 'loop-radio-dish' };
   function soundFrame(dt, paused) {
-    var s = G.s, mode = G.mode, live = !!s && (mode === 'play' || mode === 'inside'), m = live ? s.m : null, on = {}, p = null, id;
+    var s = G.s, mode = G.mode, live = !!s && (mode === 'play' || mode === 'inside' || mode === 'observe'), m = live ? s.m : null, on = {}, p = null, id;
     if (mode !== 'intro') {                               // the landing film sets its own scene
       var ph = live ? sim.stormPhase(s) : '';
-      Au.scene({ place: mode === 'play' || mode === 'launch' ? 'out' : mode === 'inside' ? 'in' : 'menu', site: s ? s.site.id : '', dust: W.env.dust, storm: ph === 'active' ? 2 : ph === 'warning' ? 1 : 0 });
+      Au.scene({ place: mode === 'play' || mode === 'launch' || mode === 'observe' ? 'out' : mode === 'inside' ? 'in' : 'menu', site: s ? s.site.id : '', dust: W.env.dust, storm: ph === 'active' ? 2 : ph === 'warning' ? 1 : 0 });
     }
     Au.hush(paused && live);
     if (live) {
@@ -1129,6 +1132,32 @@
     if (sim.stormPhase(G.s) === 'active') say('Careful! The storm is still going.', true);
   }
   function enterHab() { goInside('hab'); }
+
+  // =====================================================================
+  //  THE LOOKOUT ROCK: sit down and watch the sky (js/observe.js)
+  // =====================================================================
+  // While you sit, the mission rules do not run: the clock waits, and nothing interrupts the view.
+  function startObserve() {
+    var s = G.s;
+    if (!s || G.mode !== 'play' || !JA.observe || JA.observe.active() || A.rover.driver || A.astro.carrying) return;
+    G.charge = null; G.mini = null; hideAim(); A.astro.aim = false; G.sayQ.length = 0;
+    var ok = JA.observe.start({ s: s, pov: !!G.pov, done: endObserve });
+    if (!ok) return;
+    G.mode = 'observe'; s.lookout = true;
+    U.prompt(null); U.hands(null); U.roverHud(0, false); U.banner(null); U.tags([]); U.marks([]); U.stormFx('');
+    touchUi(false);
+  }
+  function stepObserve(dt) {
+    JA.observe.step(dt, { x: G.input.x, z: G.input.z });
+    if (G.ePressed) standObserve();
+  }
+  function standObserve() { ext('observe', 'stand', !!G.pov); }
+  // he is standing again: back to the normal camera, facing the way he was looking
+  function endObserve(r) {
+    G.mode = 'play'; W.cam.mode = 'play'; W.cam.yaw = r.yaw + Math.PI; W.cam.pitch = 0.36; W.cam.fpPitch = 0.06; G.lookIdle = 0;
+    if (A.setFirstPerson) A.setFirstPerson(!!G.pov);
+    touchUi(true);
+  }
   function exitHab() { if (G.room) leaveRoom(); else { G.mode = 'play'; A.resetAstro(); W.cam.mode = 'play'; U.show($('inside'), false); touchUi(true); } }
   // What E does inside: each thing in the room has its own action and a real fact.
   function findRoomAction() {
@@ -1600,6 +1629,7 @@
     var ni = Object.keys(sp.inst).filter(function (id) { return s.inst[id]; }).length;
     var instItem = A.items.filter(function (it) { return it.type === 'inst' && it.state !== 'held'; })[0];
     add('Set up the science instruments (' + ni + '/3)', ni >= 3, has('inst') ? sp.inst[c.data.id] : instItem ? instItem.pos : null, '📦', true);
+    if (!s.lookout && JA.observe && s.sol >= 2) add('Optional: sit on the lookout rock and watch the sky', false, v2.set(Tn.L.seat[0], Tn.height(Tn.L.seat[0], Tn.L.seat[1]) + 1.2, Tn.L.seat[1]).clone(), '🌄', true);
     if (G.colonyVisit) add('Visit the new settlement: people from Earth!', false, v2.set(Tn.L.colony[0], Tn.height(Tn.L.colony[0], Tn.L.colony[1]), Tn.L.colony[1]).clone(), '🏘️', true);
     var rock = ext('sky', 'goal', s, v3);
     if (rock) add(rock.text, false, rock.target ? rock.target.clone() : null, '☄️', true);
@@ -1753,6 +1783,7 @@
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') G.keys.shift = true;
       if (e.code === 'KeyH') { if (G.mode === 'play' || G.mode === 'inside') howInfo(); }
       if (e.code === 'KeyV' && !e.repeat && (G.mode === 'play' || G.mode === 'inside')) setPov(!G.pov);
+      if (e.code === 'KeyV' && !e.repeat && G.mode === 'observe') ext('observe', 'toggleView');
       if (e.code === 'KeyC' && !e.repeat) snapPostcard();
       if (e.code === 'KeyT' && !e.repeat) askWhy();
       if (e.code === 'KeyJ' && !e.repeat && (G.mode === 'play' || G.mode === 'inside')) openJournal();
@@ -1760,7 +1791,7 @@
       if (e.code === 'KeyX' && !e.repeat && JA.fx && JA.fx.available()) { nextFx(); U.toast('Camera effects: ' + JA.fx.LEVELS[JA.fx.level].toLowerCase(), W.w / 2, W.h * 0.3, '#ffd23f'); }
       if (e.code === 'KeyM' && !e.repeat && (G.mode === 'play' || G.mode === 'inside')) { Au.play('tap'); toggleMap(); }
       if (e.code === 'KeyN' && !e.repeat && JA.music) { setMusic(!musicOn()); if (G.mode === 'play') say(musicOn() ? 'Music on.' : 'Music off.', true); }
-      if (e.code === 'Escape' || e.code === 'KeyP') { if (G.mode === 'intro') JA.intro.skip(); else pauseModal(); }
+      if (e.code === 'Escape' || e.code === 'KeyP') { if (G.mode === 'intro') JA.intro.skip(); else if (G.mode === 'observe') { if (e.code === 'Escape') standObserve(); } else pauseModal(); }
     });
     window.addEventListener('keyup', function (e) {
       var k = KEYMAP[e.code]; if (k) G.keys[k] = false;
@@ -1788,13 +1819,15 @@
     var canvas = $('scene'), drag = null;
     canvas.addEventListener('pointerdown', function (e) { drag = { id: e.pointerId, x: e.clientX, y: e.clientY }; try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ } });
     canvas.addEventListener('pointermove', function (e) {
-      if (!drag || drag.id !== e.pointerId || G.mode !== 'play') return;
+      if (!drag || drag.id !== e.pointerId) return;
+      if (G.mode === 'observe') { ext('observe', 'look', e.clientX - drag.x, e.clientY - drag.y); drag.x = e.clientX; drag.y = e.clientY; return; }
+      if (G.mode !== 'play') return;
       W.lookBy((e.clientX - drag.x) * 0.0055, (e.clientY - drag.y) * 0.004);
       drag.x = e.clientX; drag.y = e.clientY; G.lookIdle = 0;
     });
     function endDrag(e) { if (drag && drag.id === e.pointerId) drag = null; }
     canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
-    canvas.addEventListener('wheel', function (e) { G.zoom = clamp(G.zoom * (1 + (e.deltaY > 0 ? 0.1 : -0.1)), 6, 22); e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('wheel', function (e) { if (G.mode === 'observe') { ext('observe', 'zoom', e.deltaY); e.preventDefault(); return; } G.zoom = clamp(G.zoom * (1 + (e.deltaY > 0 ? 0.1 : -0.1)), 6, 22); e.preventDefault(); }, { passive: false });
     canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
     // touch controls
@@ -1914,6 +1947,7 @@
       if (G.mode === 'play') stepPlay(dt);
       else if (G.mode === 'inside') stepInside(dt);
       else if (G.mode === 'launch') stepLaunch(dt);
+      else if (G.mode === 'observe') stepObserve(dt);
       if (A.astro) A.update(dt, (G.mode === 'play' || G.mode === 'inside') && !G.mini && !G.cut ? G.input : null);
       if (G.s && (G.mode === 'play' || G.mode === 'inside')) { MCTX.s = G.s; MCTX.weather = G.weather; ext('mission', 'update', dt, MCTX); }
       if (G.mode === 'intro') JA.intro.step(dt);
@@ -1955,6 +1989,7 @@
     titleScene();
     W.snapCamera();
     W.cam.eye = A.eye;            // where the helmet view looks from
+    if (W.prewarmEarth) W.prewarmEarth();
     bind();
     requestAnimationFrame(frame);
   }

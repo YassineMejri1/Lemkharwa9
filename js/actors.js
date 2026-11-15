@@ -342,6 +342,15 @@
     var a = astro, ix = 0, iz = 0, jump = false, sprint = false;
     a.group.visible = a.mode !== 'hidden';
     if (a.mode === 'hidden') return;
+    if (a.mode === 'sit') {
+      // on the lookout rock (js/observe.js moves him and sets sitK / relaxK / look); while he walks up to the rock
+      // the normal walking body is used, so his feet step instead of sliding
+      a.group.position.copy(a.pos); a.group.rotation.set(0, a.yaw, 0);
+      a.drill.visible = false;
+      if (a.sitWalk) poseAstro(a, dt, a.sitWalk > 0.05, false, null); else poseRock(a, dt);
+      a.tip.material.emissiveIntensity = 1.2 + Math.sin(W.time * 6);
+      return;
+    }
     if (a.mode === 'drive') {
       roverLocal(0, 1.3, 0.25, a.pos); a.yaw = a.lastYaw = rover.yaw;
       a.group.position.copy(a.pos); a.group.rotation.set(0, a.yaw, 0);
@@ -565,6 +574,24 @@
     a.body.rotation.set(0.04, 0, 0);
     a.armL.rotation.set(-1.05, 0, 0.12); a.armR.rotation.set(-1.05, 0, -0.12);
     a.foreL.rotation.set(-0.45, 0, 0); a.foreR.rotation.set(-0.45, 0, 0); a.handL.rotation.set(-0.2, 0, 0); a.handR.rotation.set(-0.2, 0, 0);
+  }
+
+  // sitting on a rock: sitK 0 = standing, 1 = seated (thighs forward, shins hanging); relaxK leans him back on his
+  // hands; look (radians) turns his shoulders and helmet a little toward where the player is looking. He breathes.
+  function poseRock(a, dt) {
+    var k = a.sitK || 0, r = a.relaxK || 0, br = Math.sin(W.time * 1.45) * (0.4 + 0.6 * k), look = Math.max(-0.5, Math.min(0.5, a.look || 0));
+    a.headY = 0; a.air = 0; a.move = 0; a.bank = 0;
+    a.hips.position.set(0, RIG.hipY, 0); a.hips.rotation.set(0, 0, 0);
+    a.legL.rotation.set(lerp(0, -1.32, k), 0, -0.1 * k); a.legR.rotation.set(lerp(0, -1.26, k), 0, 0.12 * k);
+    a.shinL.rotation.set(lerp(0, 1.22, k), 0, 0); a.shinR.rotation.set(lerp(0, 1.08, k), 0, 0);
+    a.footL.rotation.set(0.12 * k, 0, 0.05 * k); a.footR.rotation.set(0.2 * k, 0, -0.05 * k);
+    a.body.rotation.set(lerp(0.06 * k, -0.15, r) + br * 0.012, look * 0.55, 0);
+    for (var i = 0; i < 2; i++) {
+      var out = i ? 1 : -1, arm = i ? a.armR : a.armL, fore = i ? a.foreR : a.foreL, hand = i ? a.handR : a.handL;
+      // standing: arms down; sitting: hands on the knees; relaxed: leaning back on the hands, palms on the rock
+      var ax = lerp(lerp(-0.06, -0.62, k), 0.62, r), el = lerp(lerp(-0.2, -0.55, k), -0.12, r), az = out * lerp(lerp(0.2, 0.12, k), 0.34, r);
+      arm.rotation.set(ax + br * 0.01, 0, az); fore.rotation.set(el, 0, 0); hand.rotation.set(lerp(-0.15, 0.7, r), 0, 0);
+    }
   }
 
   function updateRover(dt, input) {
