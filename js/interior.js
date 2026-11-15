@@ -36,7 +36,9 @@
     abort: 'NASA\'s Orion capsule sits under a launch abort tower. If the rocket fails, its powerful little motors pull the crew capsule away from danger in a few seconds.',
     life: 'A spacecraft carries tanks of oxygen and nitrogen and mixes them into air like Earth\'s: about one part oxygen to four parts nitrogen. A scrubber takes out the carbon dioxide the crew breathes out.',
     stow: 'Rock samples travel home sealed in metal boxes, so Earth\'s air and water cannot change them before scientists open them. The Apollo crews sealed their sample boxes while still on the Moon.',
-    plush: 'Crews often bring a small soft toy. When it starts to float, everyone knows they have reached space! It is called a zero-g indicator.'
+    plush: 'Crews often bring a small soft toy. When it starts to float, everyone knows they have reached space! It is called a zero-g indicator.',
+    scrubber: 'Every breath out is carbon dioxide. On the Space Station it is pulled out of the air by beds of zeolite that are baked clean and used again. When Apollo 13\'s scrubbers ran short, the crew built a new one from a sock, a hose and duct tape.',
+    console: 'Mission Control on Earth watches every reading you see here, but their advice travels at the speed of light. Out here, the first decision is always yours.'
   };
   I.fact = function (id) { var f = FACTS[id]; return !f ? '' : typeof f === 'string' ? f : f[site] || ''; };
 
@@ -118,12 +120,14 @@
     ctx.fillStyle = '#ffd23f'; ctx.font = '700 34px ' + FONT; ctx.textAlign = 'center';
     ctx.fillText('ASTRO OUTPOST', c, w * 0.8);
   }
-  function screen(parent, w, h, x, y, z, ry) {
-    var t = tex(512, 320, function () {}), m = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ map: t, toneMapped: false }));
+  function screen(parent, w, h, x, y, z, ry, tw, th) {
+    var t = tex(tw || 512, th || 320, function () {}), m = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ map: t, toneMapped: false }));
     m.position.set(x, y, z); m.rotation.y = ry || 0; parent.add(m);
-    add(parent, box(w + 0.08, h + 0.08, 0.04), std(0x232a3d), x - Math.sin(ry || 0) * 0.03, y, z - Math.cos(ry || 0) * 0.03).rotation.y = ry || 0;
+    add(parent, box(w + 0.08, h + 0.08, 0.04), std(0x1b2133, { metalness: 0.3, roughness: 0.5 }), x - Math.sin(ry || 0) * 0.03, y, z - Math.cos(ry || 0) * 0.03).rotation.y = ry || 0;
     return t;
   }
+  // which way an object at (x, z) must turn to face the middle of the room
+  function faceIn(x, z) { return Math.atan2(-x, -z); }
   function suit(parent, x, y, z, color) {
     var white = std(0xf2f3f7), g = new T.Group(); g.position.set(x, y, z); parent.add(g);
     add(g, new T.CapsuleGeometry(0.28, 0.5, 4, 10), white, 0, 0.75, 0);
@@ -154,7 +158,18 @@
     room.doorLight = add(g, box(0.9, 0.12, 0.08), W.glow(0x4dff9a, 2), 0, F + 2.3, 3.8);
     var sign = tex(256, 64, function (ctx, w, h) { ctx.fillStyle = '#1c2236'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#4dff9a'; ctx.font = '700 38px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('AIRLOCK', w / 2, h / 2 + 2); });
     var sg = add(g, new T.PlaneGeometry(0.9, 0.22), new T.MeshBasicMaterial({ map: sign, toneMapped: false }), 0, F + 2.55, 3.66); sg.rotation.y = Math.PI;
-    // ---- bunk beds (west)
+    // ---- structure: ribs across the dome, a cable tray ring, a pipe ring and ventilation ducts
+    var rib = std(0xb9c1d3, { metalness: 0.35, roughness: 0.5 }), k;
+    [0, 1, 2].forEach(function (i) { var r = add(g, new T.TorusGeometry(4.5, 0.06, 6, 48, Math.PI), rib, 0, F, 0); r.rotation.y = i * Math.PI / 3; });
+    add(g, new T.TorusGeometry(3.58, 0.035, 6, 72), std(0x6f7891, { metalness: 0.5, roughness: 0.4 }), 0, F + 2.75, 0).rotation.x = Math.PI / 2;   // cable tray
+    add(g, new T.TorusGeometry(4.42, 0.05, 8, 72), std(0x3d7dff, { metalness: 0.4, roughness: 0.35 }), 0, F + 0.3, 0).rotation.x = Math.PI / 2;     // water line
+    add(g, new T.TorusGeometry(4.36, 0.05, 8, 72), std(0x8fd6ff, { metalness: 0.4, roughness: 0.35 }), 0, F + 0.42, 0).rotation.x = Math.PI / 2;    // air line
+    [0.9, 2.1, 4.2, 5.4].forEach(function (a) {                                                    // vent ducts dropping from the tray
+      var x = Math.sin(a) * 3.55, z = Math.cos(a) * 3.55;
+      add(g, cyl(0.1, 0.1, 0.9, 10), std(0xaab2c4, { metalness: 0.4 }), x, F + 2.25, z);
+      add(g, box(0.32, 0.18, 0.32), std(0x8d96aa, { metalness: 0.4 }), x, F + 1.75, z);
+    });
+    // ---- bunk beds (west): the living area
     var frame = std(0xdfe3ec), mattress = std(0x5d6b8c), pillow = std(0xffffff);
     [[-0.55, 0xff8a3d], [0.55, 0x3dd6c4]].forEach(function (b, i) {
       [0.45, 1.55].forEach(function (y, j) {
@@ -166,36 +181,78 @@
     });
     [[-3.55, -1.05], [-2.55, -1.05], [-3.55, 1.05], [-2.55, 1.05]].forEach(function (p) { add(g, cyl(0.04, 0.04, 1.9, 6), frame, p[0], F + 0.95, p[1]); });
     add(g, box(0.12, 0.08, 0.12), W.glow(0xffe59a, 2), -2.6, F + 1.95, -0.9);       // a reading light
-    // ---- control console (north)
-    var desk = std(0x2e3650), top = std(0xdfe3ec);
-    add(g, box(2.5, 0.8, 0.7), desk, 0, F + 0.4, -3.6);
-    add(g, box(2.6, 0.06, 0.8), top, 0, F + 0.82, -3.55);
-    room.screens.push({ id: 'status', t: screen(g, 0.95, 0.6, -0.95, F + 1.35, -3.62, 0.32) });
-    room.screens.push({ id: 'earth', t: screen(g, 0.95, 0.6, 0, F + 1.42, -3.82, 0) });
-    room.screens.push({ id: 'sun', t: screen(g, 0.95, 0.6, 0.95, F + 1.35, -3.62, -0.32) });
-    var lights = std(0x1a2033), k;
-    add(g, box(2.2, 0.04, 0.3), lights, 0, F + 0.86, -3.35);
-    for (k = 0; k < 10; k++) add(g, box(0.09, 0.03, 0.06), W.glow([0x4dff9a, 0xffd23f, 0x4fd8ff, 0xff6fb1][k % 4], 1.6), -0.9 + k * 0.2, F + 0.89, -3.3);
-    var chair = new T.Group(); chair.position.set(0, F, -2.55); g.add(chair);
+    // a pinboard with photos from home
+    var pbY = faceIn(-3.3, 1.75);
+    add(g, box(0.9, 0.6, 0.03), std(0x8a6a4a, { roughness: 0.95 }), -3.3, F + 2.0, 1.75).rotation.y = pbY;
+    [[-0.28, 0.12, 0x9fd3ff], [0.02, 0.14, 0xffd9a8], [0.28, 0.08, 0xc9f0b5], [-0.1, -0.14, 0xffb3c7]].forEach(function (ph) {
+      var m = add(g, box(0.22, 0.17, 0.01), std(ph[2]), -3.3 + Math.cos(pbY) * ph[0] + Math.sin(pbY) * 0.02, F + 2.0 + ph[1], 1.75 - Math.sin(pbY) * ph[0] + Math.cos(pbY) * 0.02);
+      m.rotation.y = pbY;
+    });
+    // ---- Mission Control (north): a curved desk, the panoramic display, two side displays, a switch panel
+    var desk = std(0x2a3148, { roughness: 0.6 }), top = std(0xdfe3ec, { roughness: 0.5 });
+    add(g, box(2.4, 0.78, 0.7), desk, 0, F + 0.39, -3.55);
+    add(g, box(2.5, 0.06, 0.82), top, 0, F + 0.81, -3.5);
+    [[-1.95, -3.05, 0.52], [1.95, -3.05, -0.52]].forEach(function (wng) {
+      add(g, box(1.4, 0.78, 0.66), desk, wng[0], F + 0.39, wng[1]).rotation.y = wng[2];
+      add(g, box(1.5, 0.06, 0.78), top, wng[0], F + 0.81, wng[1]).rotation.y = wng[2];
+    });
+    add(g, box(4.6, 0.03, 0.05), W.glow(0x4fd8ff, 1.2), 0, F + 0.1, -3.2);            // the light strip under the desk front
+    room.screens.push({ id: 'main', t: screen(g, 2.3, 1.0, 0, F + 1.6, -3.88, 0, 1024, 448), every: 0.12 });
+    room.screens.push({ id: 'power', t: screen(g, 1.0, 0.62, -2.05, F + 1.36, -3.3, 0.55), every: 1 });
+    room.screens.push({ id: 'life', t: screen(g, 1.0, 0.62, 2.05, F + 1.36, -3.3, -0.55), every: 1 });
+    // the switch panel: a toggle and an indicator lamp for every machine on the outpost
+    add(g, box(1.3, 0.05, 0.36), std(0x1a2033), 0, F + 0.86, -3.3);
+    room.leds = [];
+    ['air', 'food', 'lab', 'bag', 'comms', 'rover'].forEach(function (id, i) {
+      var x = -0.5 + i * 0.2, c = parseInt(JA.MACHINES[id].color.slice(1), 16);
+      add(g, box(0.05, 0.08, 0.05), std(0xc9cfdc, { metalness: 0.5 }), x, F + 0.92, -3.22).rotation.x = 0.4;
+      room.leds.push({ id: id, m: add(g, cyl(0.025, 0.025, 0.02, 10), W.glow(c, 0.2), x, F + 0.89, -3.38) });
+    });
+    add(g, cyl(0.07, 0.07, 0.03, 16), W.glow(0xff3b4d, 0.9), 0.75, F + 0.9, -3.3);        // the big red call button
+    var hs = add(g, new T.TorusGeometry(0.11, 0.025, 8, 18), dark, -0.85, F + 0.86, -3.28); hs.rotation.x = Math.PI / 2; hs.rotation.z = 0.3;   // a headset
+    add(g, cyl(0.03, 0.03, 0.4, 6), steel, 0.45, F + 1.0, -3.45).rotation.z = 0.5; add(g, ball(0.035, 8, 6), W.glow(0x9fe8ff, 0.8), 0.6, F + 1.2, -3.45);   // gooseneck microphone
+    var chair = new T.Group(); chair.position.set(0, F, -2.5); g.add(chair);
     add(chair, cyl(0.05, 0.05, 0.45, 8), steel, 0, 0.22, 0);
     add(chair, cyl(0.3, 0.3, 0.08, 18), std(0x3d7dff), 0, 0.48, 0);
     add(chair, box(0.55, 0.55, 0.08), std(0x3d7dff), 0, 0.8, 0.27);
-    // ---- plants under grow lights (east)
-    var shelf = std(0xeceff5), pot = std(0xc77b4a), leaf = std(0x4fd15a), leaf2 = std(0x2fa84a);
+    room.alarm = add(g, cyl(0.07, 0.09, 0.16, 12), W.glow(0xff3b4d, 0.05), 0, F + 2.62, -3.3);     // the rotating alarm beacon over the station
+    add(g, cyl(0.1, 0.1, 0.04, 12), std(0x4c5468), 0, F + 2.52, -3.3);
+    // ---- science & environment station (north-east): a tall rack with its display, a drum recorder and sample tubes
+    var rackY = faceIn(3.2, -1.9), rk = new T.Group(); rk.position.set(3.2, F, -1.9); rk.rotation.y = rackY; g.add(rk);
+    add(rk, box(1.1, 2.1, 0.5), std(0xc9cfdc), 0, 1.05, 0);
+    add(rk, box(1.0, 0.04, 0.46), std(0x2a3148), 0, 0.85, 0.02);
+    room.screens.push({ id: 'env', t: screen(rk, 0.92, 0.58, 0, 1.6, 0.27, 0), every: 1 });
+    room.drum = add(rk, cyl(0.12, 0.12, 0.3, 14), std(0xf4f6fa), -0.25, 0.6, 0.18); room.drum.rotation.z = Math.PI / 2;
+    add(rk, box(0.02, 0.02, 0.16), std(0xff3b4d), -0.25, 0.73, 0.2);   // the pen
+    for (k = 0; k < 6; k++) add(rk, cyl(0.025, 0.025, 0.18, 8), std([0xd98a3a, 0x9fd3ff, 0xc77b4a, 0x8f8fa0, 0xffd23f, 0x7be36a][k], { roughness: 0.3 }), 0.15 + k * 0.07, 0.54, 0.2);
+    add(rk, box(0.5, 0.06, 0.2), dark, 0.32, 0.44, 0.2);
+    // ---- life-support wall (east): CO₂ scrubber cabinet with filter cartridges, oxygen tanks, the plant shelves, the water recycler
+    var scrY = faceIn(3.55, -0.45), sc = new T.Group(); sc.position.set(3.55, F, -0.45); sc.rotation.y = scrY; g.add(sc);
+    add(sc, box(0.9, 1.7, 0.55), std(0xdfe3ec), 0, 0.85, 0);
+    add(sc, box(0.8, 0.5, 0.04), std(0x2a3148), 0, 1.35, 0.28);
+    room.scrubLed = add(sc, cyl(0.03, 0.03, 0.02, 10), W.glow(0x4dff9a, 1.2), 0.3, 1.35, 0.31);
+    for (k = 0; k < 3; k++) { var cart = add(sc, cyl(0.1, 0.1, 0.6, 12), std(k ? 0x9fa8bd : 0xffb347, { metalness: 0.3 }), -0.26 + k * 0.26, 0.55, 0.26); cart.rotation.x = Math.PI / 2; cart.scale.z = 0.4; }
+    [[-0.62, 0x4dff9a], [-0.86, 0x4dff9a]].forEach(function (tk) { add(sc, cyl(0.12, 0.12, 1.2, 14), std(tk[1], { metalness: 0.4, roughness: 0.3 }), tk[0], 0.6, -0.05); add(sc, ball(0.12, 10, 8), std(tk[1], { metalness: 0.4, roughness: 0.3 }), tk[0], 1.2, -0.05); });
+    var shelf = std(0xeceff5), pot = std(0xc77b4a), leaf = std(0x4fd15a), leaf2 = std(0x2fa84a), PZ = 1.35;
     [0.5, 1.15, 1.8].forEach(function (y, row) {
-      add(g, box(0.45, 0.05, 2.1), shelf, 3.72, F + y, 0);
-      add(g, box(0.06, 0.03, 1.9), W.glow(0xff58d8, 1.8), 3.62, F + y + 0.55, 0);
+      add(g, box(0.45, 0.05, 2.0), shelf, 3.6, F + y, PZ);
+      add(g, box(0.06, 0.03, 1.8), W.glow(0xff58d8, 1.8), 3.5, F + y + 0.55, PZ);
       for (var p = 0; p < 4; p++) {
-        var z = -0.75 + p * 0.5;
-        add(g, cyl(0.13, 0.1, 0.18, 10), pot, 3.72, F + y + 0.12, z);
-        var bush = add(g, ball(0.17 + ((p + row) % 3) * 0.03, 8, 6), (p + row) % 2 ? leaf : leaf2, 3.72, F + y + 0.3, z);
+        var z = PZ - 0.72 + p * 0.48;
+        add(g, cyl(0.13, 0.1, 0.18, 10), pot, 3.6, F + y + 0.12, z);
+        var bush = add(g, ball(0.17 + ((p + row) % 3) * 0.03, 8, 6), (p + row) % 2 ? leaf : leaf2, 3.6, F + y + 0.3, z);
         bush.scale.y = 0.8; room.spin.push({ m: bush, k: p + row * 4 });
-        if ((p + row) % 3 === 0) add(g, ball(0.045, 6, 5), W.glow(0xff4a3a, 0.4), 3.62, F + y + 0.36, z + 0.08);
+        if ((p + row) % 3 === 0) add(g, ball(0.045, 6, 5), W.glow(0xff4a3a, 0.4), 3.5, F + y + 0.36, z + 0.08);
       }
     });
-    [-1.05, 1.05].forEach(function (z) { add(g, box(0.06, 1.9, 0.06), shelf, 3.72, F + 0.95, z); });
+    [PZ - 0.95, PZ + 0.95].forEach(function (z) { add(g, box(0.06, 1.9, 0.06), shelf, 3.6, F + 0.95, z); });
+    var tank = std(0x3d7dff, { metalness: 0.3, roughness: 0.35 });
+    add(g, cyl(0.42, 0.42, 1.9, 20), tank, 2.45, F + 0.95, 2.7);
+    add(g, cyl(0.07, 0.07, 1.4, 8), W.glow(0x4fd8ff, 1.4), 2.05, F + 0.9, 2.55);                    // the sight glass
+    add(g, cyl(0.05, 0.05, 1.6, 8), std(0x3d7dff, { metalness: 0.4 }), 3.1, F + 0.9, 2.0).rotation.z = Math.PI / 2 - 0.5;   // pipe to the plants
+    add(g, box(0.3, 0.25, 0.25), std(0x8d96aa, { metalness: 0.5 }), 2.45, F + 2.05, 2.7);          // the recycler pump on top
     // ---- exercise bike (south-east, by a window)
-    var bike = new T.Group(); bike.position.set(2.1, F, 2.05); bike.rotation.y = -Math.PI * 0.75; g.add(bike);
+    var bike = new T.Group(); bike.position.set(1.55, F, 2.85); bike.rotation.y = -Math.PI * 0.75; g.add(bike);
     add(bike, box(0.12, 0.08, 1.1), steel, 0, 0.1, 0);
     add(bike, box(0.08, 0.75, 0.08), steel, 0, 0.45, 0.35);
     add(bike, box(0.32, 0.08, 0.2), std(0x2b3147), 0, 0.85, 0.35);
@@ -203,46 +260,50 @@
     add(bike, box(0.5, 0.06, 0.06), std(0x2b3147), 0, 0.82, -0.38);
     var wheel = add(bike, new T.TorusGeometry(0.26, 0.05, 8, 20), std(0xff8a3d), 0, 0.32, -0.15); wheel.rotation.y = Math.PI / 2;
     room.wheel = wheel;
-    // ---- spare spacesuits and lockers (north-west)
+    // ---- the suit-up corner beside the airlock (south-west), lockers (north-west) and the food store
     var lockers = std(0xc9cfdc);
-    add(g, box(1.3, 1.9, 0.5), lockers, -2.85, F + 0.95, -2.05).rotation.y = -Math.PI / 4;
-    var s1 = suit(g, -1.85, F, -3.05, 0xff7a3d), s2 = suit(g, -1.1, F, -3.45, 0x3d9bff);
-    s1.rotation.y = 0.55; s2.rotation.y = 0.3;
-    // ---- water tank and food store (south-west)
-    var tank = std(0x3d7dff, { metalness: 0.3, roughness: 0.35 });
-    add(g, cyl(0.42, 0.42, 1.9, 20), tank, -2.55, F + 0.95, 2.35);
-    add(g, cyl(0.07, 0.07, 1.4, 8), W.glow(0x4fd8ff, 1.4), -2.2, F + 0.9, 2.1);
-    add(g, box(0.8, 1.1, 0.4), shelf, -1.6, F + 0.55, 3.15).rotation.y = 0.55;
-    for (k = 0; k < 6; k++) add(g, box(0.16, 0.22, 0.1), std([0xff8a3d, 0x7be36a, 0xffd23f][k % 3]), -1.82 + (k % 3) * 0.2, F + 0.55 + Math.floor(k / 3) * 0.4, 3.0 + (k % 3) * 0.1).rotation.y = 0.55;
-    // ---- galley table (north-east, by a window)
-    var tg = new T.Group(); tg.position.set(1.55, F, -1.35); g.add(tg);
+    add(g, box(1.3, 1.9, 0.5), lockers, -2.9, F + 0.95, -1.95).rotation.y = -Math.PI / 4;
+    var s1 = suit(g, -1.3, F, 3.2, 0xff7a3d), s2 = suit(g, -2.05, F, 2.75, 0x3d9bff);
+    s1.rotation.y = -0.35; s2.rotation.y = -0.1;
+    add(g, box(0.8, 1.1, 0.4), shelf, -2.85, F + 0.55, 1.85).rotation.y = 1.0;
+    for (k = 0; k < 6; k++) add(g, box(0.16, 0.22, 0.1), std([0xff8a3d, 0x7be36a, 0xffd23f][k % 3]), -2.95 + (k % 3) * 0.17, F + 0.55 + Math.floor(k / 3) * 0.4, 1.6 + (k % 3) * 0.14).rotation.y = 1.0;
+    // ---- galley table (west of centre)
+    var tg = new T.Group(); tg.position.set(-1.25, F, 0.95); g.add(tg);
     add(tg, cyl(0.65, 0.65, 0.06, 28), top, 0, 0.78, 0);
     add(tg, cyl(0.07, 0.12, 0.76, 10), steel, 0, 0.38, 0);
-    [0, 2.1, 4.2].forEach(function (a) {
+    [0.5, 2.6, 4.7].forEach(function (a) {
       add(tg, cyl(0.2, 0.2, 0.06, 14), std(0xff8a3d), Math.sin(a) * 0.95, 0.48, Math.cos(a) * 0.95);
       add(tg, cyl(0.04, 0.04, 0.45, 6), steel, Math.sin(a) * 0.95, 0.24, Math.cos(a) * 0.95);
       add(tg, box(0.26, 0.04, 0.2), std(0x8fd6ff), Math.sin(a) * 0.42, 0.83, Math.cos(a) * 0.42);       // food trays
     });
     add(tg, cyl(0.06, 0.05, 0.12, 10), std(0xffffff), 0.1, 0.87, 0.1);
-    // ---- a mission patch on the wall, and a little rug
-    var patch = add(g, new T.PlaneGeometry(0.85, 0.85), new T.MeshBasicMaterial({ map: tex(256, 256, patchTex), transparent: true }), -3.62, F + 2.1, -1.55);
-    patch.lookAt(parentG.position.x, parentG.position.y + F + 2.1, parentG.position.z - 1.55);
-    var rug = add(g, new T.CircleGeometry(1.0, 36), std(0x6a4fd8, { roughness: 0.95 }), 0, F + 0.02, 0.9); rug.rotation.x = -Math.PI / 2;
+    // ---- floor markings: a painted lane from the airlock to the console, the mission patch, a rug
+    var lane = add(g, new T.PlaneGeometry(0.9, 5.2), std(0xffd23f, { transparent: true, opacity: 0.16, roughness: 1 }), 0, F + 0.015, 0.6); lane.rotation.x = -Math.PI / 2;
+    var patch = add(g, new T.PlaneGeometry(0.85, 0.85), new T.MeshBasicMaterial({ map: tex(256, 256, patchTex), transparent: true }), -3.62, F + 2.1, -1.0);
+    patch.rotation.y = faceIn(-3.62, -1.0);
+    var rug = add(g, new T.CircleGeometry(0.9, 36), std(0x6a4fd8, { roughness: 0.95 }), -1.25, F + 0.02, 0.95); rug.rotation.x = -Math.PI / 2;
 
-    room.colliders = [[-3.05, -0.55, 0.62], [-3.05, 0.55, 0.62], [0, -3.6, 1.15], [0, -2.55, 0.33], [3.75, 0, 1.0],
-      [2.1, 2.05, 0.55], [-2.8, -2.1, 0.75], [-1.85, -3.05, 0.35], [-2.55, 2.35, 0.55], [-1.6, 3.15, 0.5], [1.55, -1.35, 0.75]];
+    room.colliders = [[-3.05, -0.55, 0.62], [-3.05, 0.55, 0.62], [0, -3.55, 1.2], [-1.95, -3.05, 0.75], [1.95, -3.05, 0.75], [0, -2.5, 0.33],
+      [3.2, -1.9, 0.65], [3.55, -0.45, 0.6], [3.6, 1.35, 0.95], [2.45, 2.7, 0.5], [1.55, 2.85, 0.55], [-2.9, -1.95, 0.75],
+      [-1.3, 3.2, 0.35], [-2.05, 2.75, 0.35], [-2.85, 1.85, 0.45], [-1.25, 0.95, 0.75]];
     room.spots = [
-      { id: 'door', label: 'Go outside', x: 0, z: 3.05, reach: 1.4 },
-      { id: 'bed', label: 'Go to sleep (end the day)', x: -2.2, z: 0, reach: 1.3 },
-      { id: 'console', label: 'Check the console and Sun Watch', x: 0, z: -2.2, reach: 1.3 },
-      { id: 'plants', label: 'Look at the plants', x: 2.8, z: 0, reach: 1.2 },
-      { id: 'bike', label: 'Ride the exercise bike', x: 1.45, z: 1.45, reach: 1.0 },
-      { id: 'suits', label: 'Look at the spare spacesuits', x: -1.75, z: -2.2, reach: 1.1 },
-      { id: 'water', label: 'Check the water tank', x: -1.9, z: 1.75, reach: 1.0 },
-      { id: 'table', label: 'Look at the space food', x: 0.75, z: -0.65, reach: 1.0 },
-      { id: 'window', label: 'Look up at the sky', x: 0, z: 0, reach: 1.1 }
+      { id: 'door', label: 'Go outside', x: 0, z: 3.05, reach: 1.3 },
+      { id: 'bed', label: 'Go to sleep (end the day)', x: -2.2, z: 0, reach: 1.1 },
+      { id: 'console', label: 'Mission Control · Earth link', x: 0, z: -2.2, reach: 1.15 },
+      { id: 'power', label: 'Power station', x: -1.45, z: -2.35, reach: 0.85 },
+      { id: 'life', label: 'Life-support station', x: 1.45, z: -2.35, reach: 0.85 },
+      { id: 'science', label: 'Science & environment station', x: 2.45, z: -1.45, reach: 0.95 },
+      { id: 'scrubber', label: 'Check the CO₂ scrubber', x: 2.85, z: -0.35, reach: 0.85 },
+      { id: 'plants', label: 'Look at the plants', x: 2.75, z: 1.35, reach: 1.0 },
+      { id: 'water', label: 'Check the water recycler', x: 1.85, z: 2.2, reach: 0.9 },
+      { id: 'bike', label: 'Ride the exercise bike', x: 1.0, z: 2.3, reach: 0.8 },
+      { id: 'suits', label: 'Look at the spacesuits', x: -1.4, z: 2.4, reach: 0.9 },
+      { id: 'table', label: 'Look at the space food', x: -0.45, z: 0.5, reach: 0.85 },
+      { id: 'window', label: 'Look up at the sky', x: 0.6, z: -0.4, reach: 0.9 }
     ];
     room.spawn = [0, 2.35]; room.face = Math.PI;      // just inside the airlock, facing north into the room
+    // where the cutaway camera stands and looks, in room coordinates: high over the right shoulder, so the displays fill the frame
+    room.view = { pos: [2.9, F + 3.0, 0.3], look: [-0.2, F + 1.3, -3.9] };
     return room;
   }
 
@@ -1024,6 +1085,12 @@
     if (id === 'plush' && room.plush) room.plushSpin = 2.5;
     used[id] = true;
   };
+  // The cutaway camera: where it stands and what it looks at, in world coordinates (habitat only).
+  I.consoleView = function () {
+    var room = I.current; if (!room || !room.view) return null;
+    var v = room.view;
+    return { pos: toWorld(room, v.pos[0], v.pos[1], v.pos[2], new T.Vector3()), look: toWorld(room, v.look[0], v.look[1], v.look[2], new T.Vector3()) };
+  };
 
   // ---------- the screens on the console ----------
   function drawStatus(ctx, w, h, s) {
@@ -1095,13 +1162,46 @@
     if (room.fan) room.fan.rotation.z += dt * 7;                               // the CO2 scrubber fan
     if (room.abort) room.abort.material.emissiveIntensity = 0.6 + Math.sin(clock * 2.5) * 0.2;
     if (room.caseMesh && s) room.caseMesh.visible = !!s.caseLoaded;          // the sample case, once it is on board
-    if (!s || clock < redrawAt) return;
+    if (room.drum) room.drum.rotation.x += dt * 0.6;
+    if (!s) return;
+    // ---- the habitat answers the state of the outpost: alarm beacon, light level and colour, switch-panel lamps, Mission Control screens
+    var Mc = JA.mission;
+    if (room.id === 'hab' && Mc) {
+      var al = Mc.alert(s), pw = Mc.power(s);
+      if (room.alarm) {
+        room.alarm.rotation.y += dt * (al.lvl === 2 ? 6 : 0);
+        room.alarm.material.emissiveIntensity = al.lvl === 2 ? 1.2 + Math.sin(clock * 9) * 1.0 : al.lvl === 1 ? 0.5 + Math.sin(clock * 2.5) * 0.3 : 0.05;
+      }
+      if (light) {
+        var want = 1.25 * (pw.low ? 0.55 : 1), lc = al.lvl === 2 ? 0xffb0a8 : al.lvl === 1 ? 0xfff0c8 : 0xfff1dd;
+        light.intensity += (want - light.intensity) * Math.min(1, dt * 2);
+        light.color.lerp(new T.Color(lc), Math.min(1, dt * 2));
+      }
+      if (clock >= (room.ledAt || 0)) {
+        room.ledAt = clock + 0.5;
+        (room.leds || []).forEach(function (L) {
+          var m = s.m, on = L.id === 'air' ? m.air.power > 0 : L.id === 'food' ? m.food.lamp > 0 : L.id === 'lab' ? m.lab.power > 0 : L.id === 'bag' ? m.bag.pending > 0 : L.id === 'comms' ? m.comms.on : m.rover.charge > 5;
+          L.m.material.emissiveIntensity = on ? 1.4 : 0.12;
+        });
+        if (room.scrubLed) { var stale = (JA.sim.stale ? JA.sim.stale(s) : s.stale) > 1; room.scrubLed.material.emissive.set(stale ? 0xff5468 : 0x4dff9a); room.scrubLed.material.color.set(stale ? 0xff5468 : 0x4dff9a); }
+      }
+      room.screens.forEach(function (sc) {
+        if (clock < (sc.nextAt || 0)) return;
+        sc.nextAt = clock + (sc.every || 1);
+        var u = sc.t.userData, c = u.canvas;
+        Mc.screen(sc.id, u.ctx, c.width, c.height, s, clock);
+        sc.t.needsUpdate = true;
+      });
+      return;
+    }
+    if (clock < redrawAt) return;
     redrawAt = clock + 1;
     var info = room.id === 'rocket' ? panelInfo(s) : null;
     room.screens.forEach(function (sc) {
       var u = sc.t.userData, c = u.canvas;
       if (RK_DRAW[sc.id]) RK_DRAW[sc.id](u.ctx, c.width, c.height, info);
-      else if (sc.id === 'status') drawStatus(u.ctx, c.width, c.height, s);
+      else if (sc.id === 'status' || sc.id === 'power' || sc.id === 'life') drawStatus(u.ctx, c.width, c.height, s);      // without js/mission.js the new screens show the plain status
+      else if (sc.id === 'main') drawEarth(u.ctx, c.width, c.height, s);
       else if (sc.id === 'earth') { if (sc.drawn === s.sol + (s.m.comms.on ? 0.5 : 0)) return; sc.drawn = s.sol + (s.m.comms.on ? 0.5 : 0); drawEarth(u.ctx, c.width, c.height, s); }
       else if (sc.id === 'cabin') drawCabin(u.ctx, c.width, c.height, s);
       else drawSun(u.ctx, c.width, c.height, s);

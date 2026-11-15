@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="css/holo.css">
 <link rel="stylesheet" href="css/windows.css">
 <link rel="stylesheet" href="css/map.css">
+<link rel="stylesheet" href="css/mission.css">
 </head>
 <body>
 <canvas id="scene" aria-label="3D view of your outpost"></canvas>
@@ -29,6 +30,17 @@
 <div id="fx-tag" class="hidden" aria-live="polite"></div>
 <div id="tags" aria-hidden="true"></div>
 <div id="toasts" aria-hidden="true"></div>
+<!-- Mission Control cutaway: shown while the camera moves to the habitat's workstation -->
+<div id="mc" class="hidden" role="status" aria-live="polite">
+  <div class="mc-band">
+    <small class="mc-from">📻 MISSION CONTROL — EARTH</small>
+    <b class="mc-title"></b>
+    <p class="mc-msg"></p>
+    <div class="mc-row"><span class="mc-dir"></span><span class="mc-delay"></span></div>
+    <div class="mc-prog"><i class="mc-fill"></i></div>
+    <div class="mc-row"><span class="mc-status"></span><span class="mc-hint">E · continue</span></div>
+  </div>
+</div>
 
 <!-- top bar -->
 <header id="hud" class="hidden">
@@ -206,6 +218,7 @@
 <script src="js/intro.js"></script>
 <!-- optional extras: the game runs without any of them -->
 <script src="js/pov.js"></script>
+<script src="js/mission.js"></script>
 <script src="js/skyfall.js"></script>
 <script src="js/music.js"></script>
 <script src="js/sunwatch.js"></script>

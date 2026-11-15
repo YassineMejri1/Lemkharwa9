@@ -1,0 +1,55 @@
+/* Astro Outpost — Mission Control: the cutaway overlay that js/game.js shows while the camera
+   moves to the habitat's workstation, and the station cards (js/mission.js).
+   Loaded after the other stylesheets, so these rules win over the older ones. */
+
+/* ---------- the cutaway overlay ---------- */
+#mc { position: fixed; inset: 0; z-index: 24; pointer-events: none; display: grid; align-content: end; justify-items: center; padding: 0 16px calc(26px + var(--safe-b)); }
+#mc .mc-band { width: min(640px, 100%); padding: 14px 18px 12px; border-radius: 18px; background: rgba(5, 10, 24, 0.86); color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px rgba(79, 216, 255, 0.45), 0 18px 50px rgba(0, 0, 0, 0.6); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  animation: mc-in 0.45s cubic-bezier(.2, 1.2, .4, 1); }
+#mc .mc-from { display: block; font: 700 0.68rem Consolas, Menlo, monospace; letter-spacing: 0.2em; color: var(--air); }
+#mc .mc-title { display: block; margin-top: 4px; font: 700 1.15rem Consolas, Menlo, monospace; letter-spacing: 0.06em; }
+#mc .mc-msg { margin: 6px 0 8px; font-size: 1rem; line-height: 1.4; color: #dfe5ff; }
+#mc .mc-row { display: flex; justify-content: space-between; gap: 12px; font: 600 0.74rem Consolas, Menlo, monospace; letter-spacing: 0.08em; color: var(--muted); }
+#mc .mc-prog { height: 6px; margin: 6px 0; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+#mc .mc-fill { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--air), #fff); transition: width 0.25s linear; }
+#mc .mc-status { color: var(--power); }
+#mc.kind-alert .mc-band { box-shadow: inset 0 0 0 2px var(--danger), 0 18px 50px rgba(0, 0, 0, 0.6); }
+#mc.kind-alert .mc-from, #mc.kind-alert .mc-title { color: #ffa3b1; }
+#mc.kind-fault .mc-band { box-shadow: inset 0 0 0 2px #ffb347, 0 18px 50px rgba(0, 0, 0, 0.6); }
+#mc.kind-fault .mc-title { color: #ffd9a8; }
+#mc.kind-reply .mc-title { color: var(--ok); }
+@keyframes mc-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+body.touch #mc .mc-hint { display: none; }
+/* during a cutaway the top bar steps back and the radio bubble gets out of the shot */
+body.in-cut #hud { opacity: 0.35; transition: opacity 0.4s; }
+body.in-cut #bolt { opacity: 0; transition: opacity 0.3s; }
+
+/* ---------- station cards ---------- */
+.mc-card .mc-head small { display: block; font: 700 0.7rem Consolas, Menlo, monospace; letter-spacing: 0.18em; text-transform: uppercase; color: var(--air); }
+.mc-card .mc-head h2 { margin-top: 2px; }
+.mc-orbit { display: block; width: 100%; max-width: 640px; height: auto; margin: 8px auto 4px; border-radius: 16px; background: radial-gradient(ellipse at center, #0c1630, #060a16 70%); box-shadow: inset 0 0 0 1.5px rgba(79, 216, 255, 0.25); }
+.mc-link { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 4px; }
+.mc-link > div { padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); }
+.mc-link small { display: block; font: 600 0.7rem Consolas, Menlo, monospace; letter-spacing: 0.1em; color: var(--muted); }
+.mc-link b { display: block; margin: 2px 0; font: 700 1.6rem Consolas, Menlo, monospace; }
+.mc-link span { display: block; margin: 4px 0; font: 700 0.86rem Consolas, Menlo, monospace; letter-spacing: 0.04em; }
+.mc-ok { color: var(--ok); } .mc-warn { color: var(--power); } .mc-bad { color: #ffa3b1; }
+.mc-actions { display: grid; gap: 8px; }
+.mc-actions .opt { text-align: left; width: 100%; padding: 10px 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1.5px var(--line); display: grid; gap: 2px; }
+.mc-actions .opt b { font-size: 1rem; } .mc-actions .opt span { font-size: 0.86rem; color: var(--muted); }
+.mc-actions .opt:hover:not([disabled]) { box-shadow: inset 0 0 0 2px var(--power); }
+.mc-actions .opt[disabled] { opacity: 0.45; cursor: not-allowed; }
+.mc-meter { display: grid; grid-template-columns: 9.5em 1fr auto; gap: 10px; align-items: center; margin: 6px 0; font-size: 0.92rem; }
+.mc-meter .mc-bar { height: 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.mc-meter .mc-bar i { display: block; height: 100%; border-radius: 999px; }
+.mc-meter b { font: 700 0.9rem Consolas, Menlo, monospace; min-width: 5em; text-align: right; }
+.mc-log { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; font-size: 0.9rem; }
+.mc-log li { display: grid; grid-template-columns: 4.2em 1fr; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); line-height: 1.35; }
+.mc-log li em { font: 600 0.74rem Consolas, Menlo, monospace; color: var(--muted); padding-top: 3px; }
+.mc-log li.l1 { box-shadow: inset 0 0 0 1.5px rgba(255, 179, 71, 0.4); } .mc-log li.l2 { box-shadow: inset 0 0 0 1.5px rgba(255, 84, 104, 0.5); }
+@media (max-width: 560px) { .mc-link { grid-template-columns: 1fr; } .mc-meter { grid-template-columns: 7em 1fr auto; } }
+
+@media (prefers-reduced-motion: reduce) {
+  #mc .mc-band { animation: none; }
+}

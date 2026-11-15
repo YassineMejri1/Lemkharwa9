@@ -246,7 +246,7 @@
     var s = G.s = sim.newGame({ site: G.opts.site, level: G.opts.level, weather: data, dayLength: G.opts.shift });
     G.tips = {}; G.tut = {}; G.tutStep = 0; G.mini = null; G.charge = null; G.ending = null; G.caseItem = null; G.fast = false; G.clock = 0; G.sayAt = 0; G.sayQ = []; G.sparkAt = 0;
     G.hintAt = 0; G.goalAt = 0; G.goal = null; G.lastWarn = -1; G.bannerUntil = 0; G.geiger = 0; G.crisisOpen = false;   // or a second mission inherits the first one's timers
-    G.topic = ''; G.topicAt = 0; G.pages = 0;
+    G.topic = ''; G.topicAt = 0; G.pages = 0; G.cut = null; G.cutCool = 0;
     buildZones(); buildAim();
     JA.INSTRUMENTS[s.site.id].forEach(function (def, i) { A.spawn('inst', B.spots.pallet[i], { id: def.id, name: def.name }, 'fixed'); });
     A.roverCharge = function () { return G.s ? G.s.m.rover.charge : 1; };
@@ -346,6 +346,7 @@
       if (!arrive) return;
       ext('colony', 'setStage', arrive, { arrive: true });
       G.colonyVisit = arrive;
+      ext('mission', 'milestone', s, '🌍', 'A ship from Earth has landed at the settlement.');
       setTimeout(function () { if (G.mode === 'play' || G.mode === 'inside') say('Look to the north-east! A ship from Earth is landing at the new settlement. Go and say hello!', true); }, 2500);
     }
     if (s.sol === 1) go(); else dayCard(landing);
@@ -723,6 +724,7 @@
         ask: function () {
           var r = sim.askEarth(s);
           if (!r.ok) { Au.play('deny'); return; }
+          ext('mission', 'repairSent', s);
           Au.play('page'); U.closeModal();
           say(s.site.id === 'moon' ? 'We got your question! The Moon is only 1.3 light-seconds from Earth, so our answer is on its way.'
             : 'Your question is on its way to Earth. It takes ' + r.info.oneWay + ' to get here, and our answer takes just as long to come back. Keep working — we will call you.', true, s.site.id === 'moon' ? 'dish-sent-moon' : 'dish-sent-mars');
@@ -742,6 +744,9 @@
     var s = G.s;
     for (var i = 0; i < ev.length; i++) {
       var e = ev[i];
+      // Mission Control logs the event; the big ones become a cutaway when the crew is at home
+      var cut = ext('mission', 'event', e, s);
+      if (cut) startCut(cut.kind, cut);
       if (e.type === 'cell') { syncRack(); Au.play('ding', { at: B.spots.rack }); }
       else if (e.type === 'air') { Au.play('air', { at: B.pos.air }); toastAt(B.pos.air, '+' + e.amount + ' 💨', '#4fd8ff'); if (s.sol === 1) tip('airIntro', 'This is our air. The crew breathes it all day, so keep the Air Maker busy.'); }
       else if (e.type === 'bag') spawnBag();
@@ -1105,6 +1110,7 @@
   // Back outside (or, with quiet, just forget the room: the day ended, the rocket launched...)
   function leaveRoom(quiet) {
     var id = G.room;
+    if (G.cut) endCut(true);
     ext('interior', 'leave');
     A.room = null; W.cam.room = null; G.room = null; document.body.classList.remove('in-room', 'in-rocket');
     if (G.povAuto) { G.povAuto = false; setPov(false, true); }
@@ -1142,7 +1148,13 @@
       if (id === 'door' || id === 'hatch') { leaveRoom(); return; }
       if (id === 'bed') { Au.play('tap'); sleepAsk(); return; }
       if (id === 'seat' && s.sol >= s.totalSols) { Au.play('tap'); boardModal(); return; }
-      if (id === 'console' && JA.sunwatch) { Au.play('tap'); ext('sunwatch', 'open', s, G.weather); return; }
+      if (id === 'console' || id === 'power' || id === 'life' || id === 'science') {
+        Au.play('tap');
+        if (!JA.mission) { if (JA.sunwatch) ext('sunwatch', 'open', s, G.weather); return; }
+        // the camera settles on the workstation first, then the station card opens over it
+        if (!startCut('console', { hold: true, then: function () { ext('mission', 'open', id, MCTX); } })) ext('mission', 'open', id, MCTX);
+        return;
+      }
       if (id === 'window') { if (G.pov) W.cam.fpPitch = -1.3; else W.cam.pitch = -0.5; G.lookIdle = 0; }
       Au.play(id === 'bike' ? 'jump' : 'page');
       // the water tank reads out the real numbers of this mission
@@ -1150,6 +1162,80 @@
       if (fact) { G.tips['room-' + id] = 1; say(fact, true, undefined, false, id === 'water' ? 'water' : id === 'plants' ? 'plant' : ''); }
     };
   }
+  // =====================================================================
+  //  THE MISSION CONTROL CUTAWAY: the camera glides to the workstation while the game keeps running
+  // =====================================================================
+  // Only inside the habitat, never over a card, never twice at once. data: { title, text, msg, dur, hold, then, kind }
+  function startCut(kind, data) {
+    var s = G.s;
+    if (!s || G.mode !== 'inside' || G.room !== 'hab') return false;
+    if (G.cut) {
+      // a station visit whose card has just closed is over; an alert may take over any other cutaway
+      if (G.cut.hold && G.cut.opened && !U.modalOpen() && !infoOpen() && !holoOpen()) endCut();
+      else if (!G.cut.hold && kind === 'alert' && G.cut.kind !== 'alert') return swapCut(kind, data);
+      else return false;
+    }
+    if (U.modalOpen() || infoOpen() || holoOpen()) return false;
+    var view = ext('interior', 'consoleView'); if (!view) return false;
+    data = data || {};
+    G.cut = { kind: kind, t: 0, dur: data.dur || 7, hold: !!data.hold, then: data.then || null, opened: false,
+      yaw: W.cam.yaw, pitch: W.cam.pitch, fpPitch: W.cam.fpPitch, fp: !!G.pov };
+    if (G.pov) A.setFirstPerson(false);                      // the body is ghosted in helmet view; the cutaway must see a whole astronaut
+    A.astro.vel.set(0, 0, 0);
+    W.cam.mode = 'fixed'; W.cam.fixed = { pos: view.pos, look: view.look };
+    ['prompt', 'hands', 'inside', 'goals', 'card'].forEach(function (id) { U.show($(id), false); });
+    document.body.classList.add('in-cut');
+    G.action = null;
+    if (!data.hold) {
+      ext('mission', 'overlay', { kind: data.kind || kind, title: data.title, text: data.text, msg: data.msg }, s);
+      Au.play(kind === 'alert' ? 'warn' : kind === 'fault' ? 'bad' : 'page');
+    }
+    return true;
+  }
+  function endCut(quiet) {
+    var c = G.cut; if (!c) return;
+    G.cut = null;
+    ext('mission', 'overlay', null);
+    document.body.classList.remove('in-cut');
+    if (c.fp) { A.setFirstPerson(true); }
+    if (quiet) return;
+    W.cam.mode = 'play'; W.cam.yaw = c.yaw; W.cam.pitch = c.pitch; W.cam.fpPitch = c.fpPitch;
+    if (G.mode === 'inside' && G.room) { U.show($('inside'), true); U.show($('goals'), true); }
+  }
+  // A station visit (a held cutaway) that turns into a transmission: keep the camera where it is and show the overlay.
+  function swapCut(kind, data) {
+    var c = G.cut;
+    if (!c) return startCut(kind, data);
+    c.hold = false; c.opened = false; c.kind = kind; c.t = 0; c.dur = data.dur || 7;
+    ext('mission', 'overlay', { kind: data.kind || kind, title: data.title, text: data.text, msg: data.msg }, G.s);
+    Au.play(kind === 'alert' ? 'warn' : 'page');
+    return true;
+  }
+  function stepCut(dt) {
+    var c = G.cut, s = G.s; if (!c) return;
+    c.t += dt;
+    ext('mission', 'overlayFrame', s);
+    if (c.hold) {
+      // a station visit: once the camera has settled, open the card; when the card closes, come back
+      if (!c.opened && c.t > 0.75) { c.opened = true; if (c.then) c.then(); }
+      else if (c.opened && !U.modalOpen() && !infoOpen() && !holoOpen()) endCut();
+      return;
+    }
+    if (c.t > c.dur || G.ePressed) { endCut(); G.cutCool = G.clock + 0.8; }     // the same E must not reopen the station you are standing at
+  }
+  // the radio context the Mission Control module works with
+  var MCTX = { s: null, weather: null,
+    onSend: function (r) {
+      var s = G.s, mdl = JA.mission.model(s);
+      say(s.site.id === 'moon' ? 'We got your message! The Moon is only 1.3 light-seconds from Earth, so our answer is on its way.'
+        : 'Your message is on its way to Earth. It takes ' + mdl.info.oneWay + ' to get here, and our answer takes just as long to come back. Keep working — we will call you.', true, s.site.id === 'moon' ? 'dish-sent-moon' : 'dish-sent-mars');
+      swapCut('send', { kind: 'send', title: 'SIGNAL TRANSMITTED', text: 'OUTPOST-01: ' + (r.msg ? r.msg.text : ''), msg: r.msg, dur: 7 });
+    },
+    onReply: function (m) {
+      say(m.text, true, null);
+      Au.play('page');
+      startCut('reply', { kind: 'reply', title: 'EARTH REPLY RECEIVED', text: 'HOUSTON: ' + m.text, msg: m, dur: 8 });
+    } };
   function stepInside(dt) {
     var s = G.s;
     var ev = sim.tick(s, dt * (G.fast ? 8 : 1), { outside: false, calm: s.sol === 1 && G.tutStep < 4, fast: G.fast ? 8 : 1 });
@@ -1158,10 +1244,13 @@
     if (G.mode !== 'inside') return;
     if (G.room) {
       G.lookIdle += dt;
-      if (G.lookIdle > 0.7 && !G.pov) W.cam.yaw -= G.input.x * 1.0 * dt;
-      W.cam.dist += (Math.min(G.zoom, G.room === 'rocket' ? 2.2 : 4.6) - W.cam.dist) * Math.min(1, dt * 3);
-      G.action = findRoomAction();
-      if (G.ePressed && G.action && G.action.run) G.action.run();
+      if (G.cut) stepCut(dt);
+      else {
+        if (G.lookIdle > 0.7 && !G.pov) W.cam.yaw -= G.input.x * 1.0 * dt;
+        W.cam.dist += (Math.min(G.zoom, G.room === 'rocket' ? 2.2 : 4.6) - W.cam.dist) * Math.min(1, dt * 3);
+        G.action = findRoomAction();
+        if (G.ePressed && G.action && G.action.run && !(G.cutCool > G.clock)) G.action.run();
+      }
       ROOM.s = s; ROOM.astro = A.astro;
       ext('interior', 'update', dt, ROOM);
     }
@@ -1825,7 +1914,8 @@
       if (G.mode === 'play') stepPlay(dt);
       else if (G.mode === 'inside') stepInside(dt);
       else if (G.mode === 'launch') stepLaunch(dt);
-      if (A.astro) A.update(dt, (G.mode === 'play' || G.mode === 'inside') && !G.mini ? G.input : null);
+      if (A.astro) A.update(dt, (G.mode === 'play' || G.mode === 'inside') && !G.mini && !G.cut ? G.input : null);
+      if (G.s && (G.mode === 'play' || G.mode === 'inside')) { MCTX.s = G.s; MCTX.weather = G.weather; ext('mission', 'update', dt, MCTX); }
       if (G.mode === 'intro') JA.intro.step(dt);
       if (G.s && (G.mode === 'play' || G.mode === 'inside')) {
         checkZones();
@@ -1841,7 +1931,7 @@
     W.update(dt);
     if (!paused) { hudFrame(); if (G.s && (G.mode === 'play' || G.mode === 'inside')) sayNext(); }
     soundFrame(dt, paused);
-    var povOn = !!G.pov && (G.mode === 'play' || G.mode === 'inside') && !!G.s;
+    var povOn = !!G.pov && (G.mode === 'play' || G.mode === 'inside') && !!G.s && !G.cut;
     if (povOn) {
       POV.yaw = W.cam.yaw; POV.pos = me(); POV.home = B.spots.door; POV.goal = G.goal && G.goal.target; POV.goalIcon = G.goal ? G.goal.icon : '';
       POV.air = G.s.air; POV.moving = Math.hypot(G.input.x, G.input.z) > 0.2; POV.effort = POV.moving && G.input.sprint;

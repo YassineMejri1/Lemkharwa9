@@ -113,24 +113,40 @@
     return days.slice(pick.i, pick.i + nSols);
   }
 
-  // Estimated one-way radio delay Earth <-> Mars, in minutes, for a real date.
-  // Uses the planets' mean orbits plus a first-order correction for their oval shape.
-  // Good to a few percent — always shown to players as "about".
-  function marsDelayMin(dateStr) {
-    var d = (Date.parse(dateStr + 'T12:00:00Z') - Date.UTC(2000, 0, 1, 12)) / DAY;
-    function planet(L0, rate, peri, a, e) {
-      var L = (L0 + rate * d) * Math.PI / 180;
-      var M = L - peri * Math.PI / 180;
-      var v = M + 2 * e * Math.sin(M);
-      var r = a * (1 - e * e) / (1 + e * Math.cos(v));
-      var lon = v + peri * Math.PI / 180;
-      return { x: r * Math.cos(lon), y: r * Math.sin(lon) };
-    }
-    var E = planet(100.46, 0.98564736, 102.94, 1.0, 0.0167);
-    var Mx = planet(355.45, 0.52402075, 336.04, 1.5237, 0.0934);
-    var au = Math.hypot(E.x - Mx.x, E.y - Mx.y);
-    return au * 8.3167;
+  // Where Earth and Mars are on a real date, in AU, seen from above the Sun (x toward the
+  // vernal equinox). Mean orbits plus a first-order correction for their oval shape: good to a
+  // few percent, so everything built on it is shown to players as "about". The same model gives
+  // the radio delay and the orbit picture on the habitat's Mission Control screen (js/mission.js),
+  // so the number and the picture can never disagree.
+  var ORBITS = {
+    earth: { L0: 100.46, rate: 0.98564736, peri: 102.94, a: 1.0, e: 0.0167, period: 365.25 },
+    mars: { L0: 355.45, rate: 0.52402075, peri: 336.04, a: 1.5237, e: 0.0934, period: 686.98 }
+  };
+  var LIGHT_MIN_PER_AU = 8.3167, KM_PER_AU = 149597870.7;
+  function planetAt(o, days) {
+    var L = (o.L0 + o.rate * days) * Math.PI / 180;
+    var M = L - o.peri * Math.PI / 180;
+    var v = M + 2 * o.e * Math.sin(M);
+    var r = o.a * (1 - o.e * o.e) / (1 + o.e * Math.cos(v));
+    var lon = v + o.peri * Math.PI / 180;
+    return { x: r * Math.cos(lon), y: r * Math.sin(lon), r: r, lon: lon };
   }
+  function daysSince2000(dateStr) { return (Date.parse(dateStr + 'T12:00:00Z') - Date.UTC(2000, 0, 1, 12)) / DAY; }
+  function planets(dateStr) {
+    var d = daysSince2000(dateStr), E = planetAt(ORBITS.earth, d), Mx = planetAt(ORBITS.mars, d);
+    var au = Math.hypot(E.x - Mx.x, E.y - Mx.y);
+    // the angle at the Sun between the two planets: 0 = Mars close behind Earth (opposition), 180 = far side (conjunction)
+    var sep = Math.abs(((Mx.lon - E.lon) * 180 / Math.PI + 540) % 360 - 180);
+    return { date: dateStr, days: d, earth: E, mars: Mx, au: au, km: au * KM_PER_AU, minutes: au * LIGHT_MIN_PER_AU, sep: sep, orbits: ORBITS };
+  }
+  // the whole path of a planet, as n points, for drawing (same formula, so the dot sits on the line)
+  function orbitPath(name, n) {
+    var o = ORBITS[name], out = [];
+    for (var i = 0; i <= n; i++) out.push(planetAt(o, i / n * o.period));
+    return out;
+  }
+  // Estimated one-way radio delay Earth <-> Mars, in minutes, for a real date.
+  function marsDelayMin(dateStr) { return planets(dateStr).minutes; }
 
   function prettyDate(dateStr) {
     var m = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -138,5 +154,5 @@
     return parseInt(p[2], 10) + ' ' + m[parseInt(p[1], 10) - 1] + ' ' + p[0];
   }
 
-  JA.weather = { load: load, pickWindow: pickWindow, classify: classify, marsDelayMin: marsDelayMin, prettyDate: prettyDate, byDay: byDay };
+  JA.weather = { load: load, pickWindow: pickWindow, classify: classify, marsDelayMin: marsDelayMin, planets: planets, orbitPath: orbitPath, prettyDate: prettyDate, byDay: byDay };
 })(window.JA);
