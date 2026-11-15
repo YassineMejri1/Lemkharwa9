@@ -592,15 +592,15 @@
   //  MARS · a real solar storm, from the mission's NASA DONKI record
   // =====================================================================
   function startStorm(ahead) {
-    var s = G.s, w = F.flare, MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    var s = G.s, w = F.flare;
     if (!w) {
-      (s.weather || []).forEach(function (x) { if (x && x.level > 0 && (!w || x.strength > w.strength)) w = x; });      // the strongest flare in this mission's record
-      if (!w) throw new Error('this mission has no storm on record');
+      (s.weather || []).forEach(function (x) { if (x && x.level > 0 && (!w || x.strength > w.strength)) w = x; });      // the strongest storm day in this mission's record
+      // A flare is only the flash: the storm is the particles that really reached this world that day (js/spaceweather.js).
+      if (w) DATA.line = 'NASA DONKI data · real radiation storm · ' + (JA.weather.prettyDate ? JA.weather.prettyDate(w.date) : w.date);
+      else { w = { level: 2, cls: '', cause: 'sep', strength: JA.weather.STRENGTH ? JA.weather.STRENGTH[2] || 12 : 12 }; DATA.line = 'Real storms from NASA DONKI space-weather data'; }
       F.flare = w;
-      var dm = /^(\d{4})-(\d\d)-(\d\d)$/.exec(w.date || '');
-      DATA.line = 'NASA DONKI data · ' + w.cls + ' solar flare' + (dm ? ' · ' + (+dm[3]) + ' ' + MONTHS[+dm[2] - 1] + ' ' + dm[1] : '');
     }
-    s.storm = { start: s.t + ahead, end: s.t + 120, level: w.level, cls: w.cls, warned: true, active: false, over: false, strength: w.strength * 3 * s.site.stormMult * s.level.stormScale };
+    s.storm = { start: s.t + ahead, end: s.t + 120, level: w.level, cls: w.cls, cause: w.cause || 'sep', warned: true, active: false, over: false, strength: w.strength * 3 * s.site.stormMult * s.level.stormScale };
   }
   shot({ id: 'alarm', look: GOLD, frames: 30, world: 'mars', hand: 0.04,
     begin: async function () {
