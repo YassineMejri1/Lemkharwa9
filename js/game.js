@@ -1572,7 +1572,9 @@
     if (t > 9.5 && G.ending) {
       var e = G.ending; G.ending = null; G.mode = 'end';
       U.fade(true);
-      setTimeout(function () { if (e.win) winModal(); else failModal(e.fail); }, 700);
+      // A win goes straight from the launch to the future of the outpost (js/colony.js), and the results follow it.
+      // Without the colony add-on, or after a failed mission, the results come at once.
+      setTimeout(function () { if (!e.win) failModal(e.fail); else if (JA.colony) playVision(true); else winModal(); }, 700);
     }
   }
 
@@ -1595,7 +1597,7 @@
     return s.decisions.length ? '<h3>🧭 Your big decisions (' + s.decisions.length + ')</h3>' + s.decisions.map(function (d) { return decisionHtml(d, false); }).join('') : '';
   }
   function endButtons(win) {
-    return '<div class="modal-actions">' + (win && JA.colony ? '<button class="btn primary" data-act="future">🔭 See the future</button>' : '') + (win && JA.keepsake ? '<button class="btn ghost" data-act="cert">🎓 Certificate</button>' : '') +
+    return '<div class="modal-actions">' + (win && JA.colony ? '<button class="btn ghost" data-act="future">🔭 See the future again</button>' : '') + (win && JA.keepsake ? '<button class="btn ghost" data-act="cert">🎓 Certificate</button>' : '') +
       (JA.sunwatch ? '<button class="btn ghost" data-act="sun">☀️ Sun Watch</button>' : '') + (JA.journal ? '<button class="btn ghost" data-act="journal">📓 Field Journal</button>' : '') + '<button class="btn ghost" data-act="science">📚 The real science</button><button class="btn ghost" data-act="change">Change mission</button><button class="btn primary" data-act="again">Play again ▶</button></div>';
   }
   function endActions() {
@@ -1607,10 +1609,12 @@
       change: function () { Au.play('tap'); U.closeModal(); titleScene(); U.show($('title'), false); setupModal(); },
       again: function () { U.fade(false); launch(); } };
   }
-  // The outpost decades from now: a flyover made by js/colony.js. Then back to the results.
-  function playVision() {
+  // The outpost decades from now: a flyover made by js/colony.js. Then the results.
+  // It plays by itself right after a winning launch (first = true), and again from the button on the results.
+  function playVision(first) {
     var s = G.s;
     hideHud(); U.fade(false); G.mode = 'vision';
+    if (first) Au.music('title');      // the theme carries the crew's flight home into the future
     var ok = ext('colony', 'vision', s, function () {
       if (G.mode !== 'vision') return;
       G.mode = 'end'; W.cam.mode = 'title'; winModal();
