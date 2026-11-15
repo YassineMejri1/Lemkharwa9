@@ -3,14 +3,17 @@
    An energetic trailer cue at 120 beats a minute in A minor, 29.9 seconds long, written for the cut in
    director.js: every section change and every big hit falls on a cut. Change one, change the other.
 
-     node tools/film/score.js <out.wav>
+     node tools/film/score.js <out.wav>                       the trailer's score (29.9 s)
+     node tools/film/score.js <out.wav> --plan <sound-meta.json>   a score for the gameplay film, following its chapters
 
    The instruments: detuned saw pads and "braam" hits, a plucked arpeggio with a ping-pong echo, a driving
    bass, bells, and drums made from sine sweeps and noise. Pads, bass and arpeggio duck under the kick.
    A hall reverb glues it together. The result is peak-normalised; build.js sets the final loudness. */
 'use strict';
 const fs = require('fs');
-const SR = 48000, LEN = 29.9, N = Math.ceil(LEN * SR);
+const SR = 48000;
+const PLAN = (function () { const i = process.argv.indexOf('--plan'); return i > 0 ? JSON.parse(fs.readFileSync(process.argv[i + 1], 'utf8')).plan : null; })();
+const LEN = PLAN ? PLAN.len : 29.9, N = Math.ceil(LEN * SR);
 
 // ---------------------------------------------------------------- building blocks
 let seed = 1977;
@@ -212,11 +215,12 @@ const CH = {
   Dm: { b: 38, p: [57, 62, 65, 69], a: [69, 74, 77, 81], low: [26, 38, 45, 50, 53] },
   Bb: { b: 34, p: [58, 62, 65, 70], a: [70, 74, 77, 82], low: [34, 46, 53, 58, 62] }
 };
-const PROG = [[0, 4, 'Am'], [4, 6, 'Am'], [6, 7, 'F'], [7, 8, 'G'], [8, 9, 'Am'], [9, 10, 'F'], [10, 11, 'C'], [11, 12, 'G'], [12, 13, 'Am'],
+let PROG = [[0, 4, 'Am'], [4, 6, 'Am'], [6, 7, 'F'], [7, 8, 'G'], [8, 9, 'Am'], [9, 10, 'F'], [10, 11, 'C'], [11, 12, 'G'], [12, 13, 'Am'],
   [13, 14, 'Am'], [14, 15, 'Bb'], [15, 15.5, 'Am'], [15.5, 16.5, 'Dm'], [16.5, 17.25, 'F'], [17.25, 18, 'G'], [18, 19, 'F'], [19, 20, 'G'],
   [20, 21, 'Am'], [21, 22, 'C'], [22, 23, 'F'], [23, 24, 'G'], [24, 25, 'Am'], [25, 26, 'F'], [26, 29.9, 'C']];
 const chordAt = (t) => { for (const p of PROG) if (t >= p[0] && t < p[1]) return CH[p[2]]; return CH.C; };
 
+function trailer() {
 // ---- the pads, darker or brighter by section; a short hole just before the big drop at 24
 function padCut(T) {
   if (T < 4) return 260 + 500 * T / 4;
@@ -311,6 +315,67 @@ arp(16.5, 18, 0.25, 0.6, 1); arp(19, 20, 0.25, 0.6, 0.9); arp(20, 23.86, 0.125, 
 [[19, 76], [20, 79], [21, 84], [22, 88]].forEach((b) => bell(b[0], b[1], 0.75, 0));
 [[26.5, 84], [27.0, 79], [27.5, 76], [28.0, 72], [28.5, 67]].forEach((b, i) => bell(b[0], b[1], 0.75 - i * 0.08, i % 2 ? 0.4 : -0.4));
 
+}
+
+// ---------------------------------------------------------------- the gameplay film's arrangement
+// plan.sections: [{ at, mood }] with mood intro | land | build | groove | storm | calm | finale | end.
+// Chords change every second while it drives (groove, build, storm, finale), every two seconds when it rests.
+function gameplay(plan) {
+  const S = plan.sections.slice().sort((a, b) => a.at - b.at), L = plan.len;
+  const moodAt = (t) => { let m = S[0].mood; for (const x of S) if (t >= x.at - 1e-6) m = x.mood; return m; };
+  const busy = (m) => m === 'groove' || m === 'build' || m === 'storm' || m === 'finale';
+  const CYC = ['Am', 'F', 'C', 'G'], DARK = ['Am', 'Bb'];
+  PROG = [];
+  for (let t = 0; t < L - 1e-6; t += 0.5) {
+    const m = moodAt(t), step = busy(m) ? 1 : 2, list = m === 'storm' ? DARK : m === 'land' ? ['Am'] : m === 'end' ? ['C'] : CYC;
+    const name = list[Math.floor(t / step) % list.length], last = PROG[PROG.length - 1];
+    if (last && last[2] === name && last[1] === t) last[1] = Math.min(L, t + 0.5); else PROG.push([t, Math.min(L, t + 0.5), name]);
+  }
+  const G = { intro: [0.75, 1300], land: [0.5, 500], build: [0.9, 2200], groove: [0.95, 2600], storm: [0.9, 1700], calm: [0.8, 1900], finale: [1.1, 3400], end: [1.0, 2400] };
+  PROG.forEach((p) => { const m = moodAt(p[0]); pad(p[0], p[1], CH[p[2]].p, { cut: () => G[m][1], gain: (T) => G[m][0] * Math.min(1, (L - T) / 1.5), att: 0.04 }); });
+  // a low drone under the landing
+  S.forEach((x, i) => {
+    const end = i + 1 < S.length ? S[i + 1].at : L;
+    if (x.mood === 'land') { const o = saw(), f = svf(), len = end - x.at; voice(BUS.pad, x.at, len, 0, (t) => f.run(o(mtof(33)), 180 + 220 * t / len, 0.9) * 0.22 * Math.min(1, t / 0.4) * Math.min(1, (len - t) / 0.2)); }
+  });
+  // beat by beat
+  for (let t = 0; t < L - 0.01; t += 0.5) {
+    const m = moodAt(t), odd = Math.round(t * 2) % 2 === 1, c = chordAt(t);
+    if (m === 'groove' || m === 'build' || m === 'finale') {
+      kick(t, 0.95); if (odd) { snare(t, 0.85); clap(t, 0.4, 0.1); }
+      for (let k = 0; k < 4; k++) { const tt = t + k * 0.125; hat(tt, k === 2 ? 0.17 : 0.09, k === 2, 0.3); bass(tt, 0.11, c.b + [0, 12, 0, 12][k], [1, 0.55, 0.75, 0.6][k], 1400); pluck(tt, c.a[[0, 1, 2, 3, 2, 1, 2, 3][(Math.round(t * 8) + k) % 8]], 0.75 * (k === 0 ? 1 : 0.7), k % 2 ? 0.45 : -0.45, 1); }
+    } else if (m === 'storm') {
+      kick(t, 0.85); taiko(t + 0.25, 0.12, odd ? 0.3 : -0.3); if (odd) snare(t, 0.8);
+      for (let k = 0; k < 4; k++) { const tt = t + k * 0.125; hat(tt, 0.07, false, 0.35); bass(tt, 0.11, c.b, k === 0 ? 0.6 : 0.32, 900); pluck(tt, c.a[k % 4], 0.6, k % 2 ? 0.4 : -0.4, 0.7); }
+    } else if (m === 'intro') {
+      if (Math.round(t * 2) % 4 === 0) kick(t, 0.6);
+      hat(t, 0.06, false, 0.3); hat(t + 0.25, 0.08, false, -0.3);
+      pluck(t, c.a[Math.round(t * 2) % 4], 0.55, odd ? 0.4 : -0.4, 0.8); pluck(t + 0.25, c.a[(Math.round(t * 2) + 2) % 4], 0.45, odd ? -0.4 : 0.4, 0.8);
+      if (!odd) bass(t, 0.4, c.b, 0.6, 700);
+    } else if (m === 'land') {
+      if (Math.round(t * 2) % 4 === 0) { heart(t, 0.8); heart(t + 0.2, 0.55); }
+    } else if (m === 'calm') {
+      hat(t, 0.045, false, 0.3);
+      if (Math.round(t * 2) % 4 === 0) { bass(t, 1.6, c.b, 0.55, 500); bell(t, c.a[3] + 12, 0.55, 0); }
+      pluck(t, c.a[Math.round(t * 2) % 4], 0.4, odd ? 0.4 : -0.4, 0.75);
+    }
+  }
+  // every chapter arrives with a hit; the busy ones with a riser into them
+  S.forEach((x, i) => {
+    if (i === 0 || x.at >= L - 0.2) return;
+    const c = chordAt(x.at + 0.01);
+    if (busy(x.mood)) riser(Math.max(0, x.at - 1.5), x.at, 0.55);
+    if (x.mood === 'finale') { braam(x.at, c.low, 2.2, 1.0); boom(x.at, 1); crash(x.at, 1); swell(x.at, 1.2, 0.9); }
+    else if (x.mood === 'end') { braam(x.at, CH.C.low, Math.min(3.5, L - x.at), 1.0); crash(x.at, 0.9, 3); [0.5, 1.0, 1.5, 2.0].forEach((d, k) => { if (x.at + d < L - 0.3) bell(x.at + d, [84, 79, 76, 72][k], 0.7, k % 2 ? 0.4 : -0.4); }); }
+    else if (x.mood === 'storm') { braam(x.at, c.low, 1.2, 0.75); boom(x.at, 0.8); crash(x.at, 0.8); }
+    else if (x.mood === 'land') { boom(x.at, 0.6); swell(x.at, 1.0, 0.6); }
+    else if (x.mood === 'calm') { swell(x.at, 0.8, 0.5); bell(x.at, c.a[3] + 12, 0.7, 0); }
+    else { crash(x.at, 0.75); boom(x.at, 0.45); stab(x.at, c.p, 0.75); }
+  });
+}
+if (PLAN) gameplay(PLAN); else trailer();
+const CAL = (function () { if (!PLAN) return [8, 12]; const g = PLAN.sections.find((x) => x.mood === 'groove'); return g ? [g.at + 0.5, Math.min(PLAN.len, g.at + 4.5)] : [0, Math.min(PLAN.len, 4)]; })();
+
 // ---------------------------------------------------------------- mixing
 function rms(bus, t0, t1) { let s = 0, n = 0; for (let i = Math.round(t0 * SR); i < Math.round(t1 * SR); i++) { s += bus.L[i] * bus.L[i] + bus.R[i] * bus.R[i]; n += 2; } return Math.sqrt(s / Math.max(1, n)); }
 function peak(bus) { let p = 0; for (let i = 0; i < N; i++) p = Math.max(p, Math.abs(bus.L[i]), Math.abs(bus.R[i])); return p; }
@@ -319,7 +384,7 @@ function scale(bus, k) { for (let i = 0; i < N; i++) { bus.L[i] *= k; bus.R[i] *
 const LEVEL = { kick: ['rms', -15], drums: ['rms', -19], cym: ['rms', -28.5], bass: ['rms', -18], pad: ['rms', -20.5], arp: ['rms', -22], bell: ['peak', -11], braam: ['peak', -4.5], fx: ['peak', -6] };
 const report = [];
 Object.keys(LEVEL).forEach((k) => {
-  const [how, want] = LEVEL[k], now = how === 'rms' ? rms(BUS[k], 8, 12) : peak(BUS[k]);
+  const [how, want] = LEVEL[k], now = how === 'rms' ? rms(BUS[k], CAL[0], CAL[1]) : peak(BUS[k]);
   scale(BUS[k], dB(want) / (now || 1));
   report.push(k + ' ' + how + ' ' + (20 * Math.log10(now || 1e-9)).toFixed(1) + ' → ' + want);
 });
@@ -366,7 +431,7 @@ for (let i = 0; i < N; i++) {
   for (const k in BUS) { l += BUS[k].L[i]; r += BUS[k].R[i]; }
   L[i] = Math.tanh(l * 1.15); R[i] = Math.tanh(r * 1.15); pk = Math.max(pk, Math.abs(L[i]), Math.abs(R[i]));
 }
-const out = process.argv[2] || 'score.wav', k = dB(-1) / (pk || 1), buf = Buffer.alloc(44 + N * 4);
+const out = process.argv[2] && process.argv[2] !== '--plan' ? process.argv[2] : 'score.wav', k = dB(-1) / (pk || 1), buf = Buffer.alloc(44 + N * 4);
 buf.write('RIFF', 0); buf.writeUInt32LE(36 + N * 4, 4); buf.write('WAVEfmt ', 8); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22);
 buf.writeUInt32LE(SR, 24); buf.writeUInt32LE(SR * 4, 28); buf.writeUInt16LE(4, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(N * 4, 40);
 for (let i = 0; i < N; i++) { buf.writeInt16LE(Math.round(clamp(L[i] * k, -1, 1) * 32767), 44 + i * 4); buf.writeInt16LE(Math.round(clamp(R[i] * k, -1, 1) * 32767), 46 + i * 4); }

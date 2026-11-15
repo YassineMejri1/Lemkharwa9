@@ -9,6 +9,8 @@
 
      node tools/film/gamesound.js --frames <folder> --out <film.mp4>
      node tools/film/gamesound.js --frames <folder> --out <sound.wav> --sound-only
+     --score            lay a score made by score.js under it, following the film's chapters (the game's own music is left out)
+     --score-db <n>     how far the score sits under the game's sounds (default 1 dB)
 
    Needs Node 22 or newer and ffmpeg on the PATH. */
 'use strict';
@@ -33,7 +35,7 @@ function decode(file) {        // the whole file as 48 kHz stereo floats
 function lowpassCoef(fc) { return fc > 0 ? 1 - Math.exp(-2 * Math.PI * fc / SR) : 1; }
 
 function main() {
-  const frames = arg('frames', null), out = arg('out', null), soundOnly = !!arg('sound-only', false);
+  const frames = arg('frames', null), out = arg('out', null), soundOnly = !!arg('sound-only', false), withScore = !!arg('score', false), scoreDb = +arg('score-db', 1);
   if (!frames || !out) throw new Error('Use: --frames <folder> --out <file>');
   const meta = JSON.parse(fs.readFileSync(path.join(frames, 'sound-meta.json'), 'utf8'));
   const LEN = meta.len, N = Math.ceil(LEN * SR), NF = Math.ceil(LEN * FPS);
@@ -101,6 +103,7 @@ function main() {
   // ---- continuous sounds, from the loudness written down for every picture
   Object.keys(samples).forEach((name) => {
     const isMusic = name.indexOf('music:') === 0, id = isMusic ? name.slice(6) : name;
+    if (isMusic && withScore) return;            // the score takes the music's place
     const file = isMusic ? path.join(ROOT, 'audio', 'music', id + '.mp3') : path.join(ROOT, 'audio', 'sfx', id + '.mp3');
     const clip = decode(file); if (!clip) { skipped[name] = 'no file'; return; }
     const gain = new Float32Array(NF), cut = new Float32Array(NF);
@@ -137,6 +140,23 @@ function main() {
   const fadeIn = 0.4 * SR, fadeOut = 0.6 * SR;
   for (let i = 0; i < N; i++) { const e = Math.min(1, i / fadeIn, (N - i) / fadeOut); mixL[i] *= e; mixR[i] *= e; }
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astro-gamesound-')), raw = path.join(tmp, 'mix.f32'), mixFile = path.join(tmp, 'mix.wav');
+  const lufs = (file) => { const m = /Integrated loudness:\s+I:\s+(-?[\d.]+) LUFS/.exec(ffmpeg(['-i', file, '-af', 'ebur128', '-f', 'null', '-'], 'measuring')); return m ? parseFloat(m[1]) : null; };
+  if (withScore) {
+    // the score sits a little under the game's own sound, and dips under the voices like the game's music does
+    const scoreFile = path.join(tmp, 'score.wav'), gameFile = path.join(tmp, 'game.wav');
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'score.js'), scoreFile, '--plan', path.join(frames, 'sound-meta.json')], { encoding: 'utf8' });
+    if (r.status !== 0) throw new Error('the score failed: ' + r.stderr);
+    const g2 = new Float32Array(N * 2); for (let i = 0; i < N; i++) { g2[i * 2] = mixL[i]; g2[i * 2 + 1] = mixR[i]; }
+    fs.writeFileSync(raw, Buffer.from(g2.buffer)); ffmpeg(['-f', 'f32le', '-ar', String(SR), '-ac', '2', '-i', raw, '-c:a', 'pcm_f32le', gameFile], 'writing the game sound');
+    const sc = decode(scoreFile), lg = lufs(gameFile), ls = lufs(scoreFile), gs = Math.pow(10, ((lg - scoreDb) - ls) / 20);
+    console.log('score: game sound ' + lg + ' LUFS, score ' + ls + ' LUFS → score gain ' + (20 * Math.log10(gs)).toFixed(1) + ' dB');
+    let v2 = 0;
+    for (let i = 0; i < N && i < sc.n; i++) {
+      const want = talk[Math.min(NF - 1, Math.floor(i * FPS / SR))];
+      v2 += (want - v2) * (want > v2 ? 1 / (0.08 * SR) : 1 / (0.4 * SR));
+      const d = (1 - 0.5 * v2) * gs; mixL[i] += sc.L[i] * d; mixR[i] += sc.R[i] * d;
+    }
+  }
   const inter = new Float32Array(N * 2); for (let i = 0; i < N; i++) { inter[i * 2] = mixL[i]; inter[i * 2 + 1] = mixR[i]; }
   fs.writeFileSync(raw, Buffer.from(inter.buffer));
   console.log('sound: ' + used + ' effects, ' + vstarts.filter((x) => !x.hush).length + ' voice lines, ' + Object.keys(samples).length + ' continuous sounds; peak ' + (20 * Math.log10(pk || 1e-9)).toFixed(1) + ' dB');
