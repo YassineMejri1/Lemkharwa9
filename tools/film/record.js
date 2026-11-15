@@ -7,6 +7,7 @@
      node tools/film/record.js --out <folder> --every 15         one frame in 15 (a quick look at the whole film)
      node tools/film/record.js --out <folder> --size 960         smaller pictures, faster
      node tools/film/record.js --out <folder> --blur 2           two slices per frame, blended by build.js into motion blur
+     node tools/film/record.js --film gameplay --out <folder>    the 80-second gameplay film (tools/film/gameplay.js)
      node tools/film/record.js --list                            print the shot list and stop
 
    Needs Node 22 or newer (for its built-in WebSocket) and Chrome. Nothing is installed.
@@ -39,6 +40,8 @@ function serve() {
 async function main() {
   const out = arg('out', null), only = arg('shots', null), every = +arg('every', 1), width = +arg('size', 1920), listOnly = !!arg('list', false);
   const soft = !!arg('soft', false), from = +arg('from', 0), jpeg = +arg('quality', 95), subs = Math.max(1, +arg('blur', 1));
+  const film = String(arg('film', 'director')).replace(/[^a-z0-9_-]/gi, ''), script = path.join(__dirname, film + '.js');
+  if (!fs.existsSync(script)) throw new Error('no film script ' + script);
   if (!out && !listOnly) throw new Error('Say where the pictures go: --out <folder>');
   const chromePath = findChrome();
   if (!chromePath) throw new Error('Chrome not found. Set the CHROME environment variable to its path.');
@@ -88,11 +91,12 @@ async function main() {
         try { ready = await run('(function(){ if (!window.__clock || window.__film) return false; __clock.tick(1000 / 60); return !!(window.JA && JA.game && JA.game.advance && JA.world && JA.world.ready && JA.actors && JA.actors.astro); })()'); } catch (e) { /* the page is still changing */ }
       }
       if (!ready) throw new Error('The game did not start. ' + errors.join(' | '));
-      await run(fs.readFileSync(path.join(__dirname, 'director.js'), 'utf8') + '\n;true');
+      await run(fs.readFileSync(script, 'utf8') + '\n;true');
     };
     await load();
     let world = null;
     const info = await run('__film.info()');
+    if (out && await run('!!(window.__film && __film.soundMeta)')) fs.writeFileSync(path.join(out, 'sound-meta.json'), JSON.stringify(await run('__film.soundMeta()')));
     console.log('graphics: ' + info.gl);
     const shots = info.shots;
     let at = 0; shots.forEach((s) => { s.first = at; at += s.frames; });
@@ -121,6 +125,8 @@ async function main() {
         }
       }
       const note = await run('__film.finish(' + JSON.stringify(s.id) + ')');
+      // the gameplay film writes down the game's own sounds, shot by shot (mixed by gamesound.js)
+      if (await run('!!__film.sound')) fs.writeFileSync(path.join(out, 'sound-' + s.id + '.json'), JSON.stringify(await run('__film.sound(' + JSON.stringify(s.id) + ')')));
       console.log('shot ' + s.id + ': ' + ((Date.now() - tb) / 1000).toFixed(1) + ' s  ' + note);
     }
     const pageErrors = await run('__clock.errors.slice(0, 20)');

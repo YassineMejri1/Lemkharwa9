@@ -11,7 +11,32 @@ photographed one frame at a time, so every picture in it is something the game r
 | `score.js` | The music, made entirely in code: a 120 beats-a-minute trailer cue cut to the film |
 | `build.js` | Blends the slices into motion blur, grades the colour, lays the score, the game's sounds and Mission Control under it, and writes the mp4 |
 
-## Making the film
+## Two films
+
+| Film | Script | Length | What it is |
+| --- | --- | --- | --- |
+| The trailer | `director.js` | 29.9 s | Fast cuts on the beat, no game interface, a score made in code (`score.js`) |
+| The gameplay film for judges | `gameplay.js` | 79.5 s | Every phase of a mission in the order a player meets it, with the game's own screen and the game's own sound |
+
+The gameplay film's sound is the game's own. While it is recorded, every sound effect, Mission Control and crew
+line, landing voice, machine hum, background bed and music change the game asks for is written down with its film
+time and loudness (`sound-<shot>.json`). `gamesound.js` plays them back from `audio/` and mixes them the way
+`js/audio.js` does (voices on top, everything else steps back while someone speaks). The only sounds missing are the
+ones the game makes live (the descent rumble, the throw-aim tone, the mood music), so a quiet bed of the title theme
+plays under the gameplay instead.
+
+```
+node tools/film/record.js --film gameplay --out ../gameplay-frames
+node tools/film/gamesound.js --frames ../gameplay-frames --out ../astro-outpost-gameplay.mp4
+```
+
+The gameplay film's 15 chapters: mission setup, the landing, your mission, power, ice, the rover, food and
+shielding, real science, real solar storms, no checklist, night and morning, the lookout, Pioneer mode, a town grows,
+going home. Staged there: where each shot starts, a ripe greenhouse, materials in the Pioneer bag, the Radio Dish
+powered before the storm, a clear sky at the lookout and over the town, the crisis and the storm on cue, and the
+town's ships at ten times speed.
+
+## Making the trailer
 
 ```
 node tools/film/record.js --out ../film-frames --blur 2
