@@ -117,7 +117,55 @@ window.JA = window.JA || {};
     jamWear: 0.08, jamWearMax: 0.4,                     // each drill jam makes the drill heat this much faster, for good
     flatWear: 0.1, flatWearMax: 0.3,                    // each time the rover battery runs flat it holds this much less
     scarPerLevel: 0.01, scarMax: 0.08,                  // solar power lost for good after a medium or big solar storm
-    whyGap: 18                                          // seconds between two "why did that happen?" cards
+    whyGap: 18,                                         // seconds between two "why did that happen?" cards
+    // --- the ice drill: you start it, it works by itself, and the chunk pops out ---
+    iceDrillTime: 7, iceDrillRest: 5,                   // seconds of drilling for one chunk, then seconds of cooling before the next
+    // --- rover crashes ---
+    crashSoft: 3.5, crashHard: 8,                       // metres a second into an obstacle: a bump, and a real crash
+    crashCharge: 12,                                    // seconds of battery shaken out of a connector by a real crash
+    // --- the town that grows beside the outpost (js/colony.js draws it) ---
+    townDays: [0, 2, 3, 4, 6, 8],                       // self-sustaining days that bring each stage
+    townPeople: [0, 0, 4, 12, 30, 80],                  // inhabitants at each stage
+    townAir: 0.03,                                      // extra breathing for each stage with people in it: they share your air plant
+    spiritStart: 60, spiritUp: 12, spiritDown: 18,      // town spirit: up after a self-sustaining day, down after a day that was not
+    spiritHelp: 60, spiritGift: 80, spiritLow: 35, townDinner: 3,
+    // --- Pioneer mode: fewer supplies, but you can break rocks and build ---
+    pioneerCells: 1, pioneerAir: 10, pioneerFood: 8, pioneerWater: 8
+  };
+
+  // ---------- Pioneer mode: what rock gives, and what you can build with it ----------
+  // Real idea: "in-situ resource use". Moon and Mars rock is mostly oxygen, silicon, iron and aluminium.
+  // All costs and effects are GAME numbers.
+  JA.MATS = {
+    rock: { name: 'rubble', icon: '🪨' },
+    metal: { name: 'metal', icon: '🔩' },
+    glass: { name: 'glass sand', icon: '💎' }
+  };
+  JA.BUILDS = {
+    panel: { name: 'Solar panel', icon: '☀️', cost: { metal: 2, glass: 3 }, max: 3, src: 'artemis',
+      text: 'One more panel for the Solar Rack: about 0.7 more power cells every day.',
+      why: 'Solar cells are made of silicon, the most common element in Moon and Mars soil after oxygen.' },
+    battery: { name: 'Battery bank', icon: '🔋', cost: { metal: 3, rock: 1 }, max: 2, src: 'artemis',
+      text: 'The Solar Rack can hold 2 more power cells.',
+      why: 'Saved power is what carries a crew through a dust storm or a day without Sun.' },
+    cistern: { name: 'Water cistern', icon: '💧', cost: { rock: 3, metal: 1 }, max: 2, src: 'iss',
+      text: 'The water tank holds half as much again.',
+      why: 'Stored water is a reserve for dry days. A wall of water is also good shielding against radiation.' },
+    berm: { name: 'Brick wall', icon: '🧱', cost: { rock: 5 }, max: 4, src: 'artemis',
+      text: 'A wall of baked-soil bricks: 5% more shield for the home, and it covers no skylight.',
+      why: 'Engineers have baked copies of Moon soil into hard bricks using nothing but heat. No water, no cement.' },
+    rig: { name: 'Ice drill rig', icon: '🧊', cost: { metal: 3, glass: 1 }, max: 2, where: 'ice', src: 'artemis',
+      text: 'Built on the ice field, it digs out an ice chunk all by itself every little while.',
+      why: 'NASA built a one-metre drill called TRIDENT to look for ice under the soil at the Moon\'s south pole.' },
+    turbine: { name: 'Wind turbine', icon: '🌀', cost: { metal: 4, glass: 1 }, max: 1, site: 'mars', src: 'mars',
+      text: 'On dusty and stormy days it adds about 1 power cell: the wind blows when the Sun is hidden.',
+      why: 'Mars air is very thin, but studies show its winds could still turn a light turbine when dust hides the Sun.' },
+    mirror: { name: 'Sun mirror', icon: '🪞', cost: { metal: 2, glass: 4 }, max: 1, site: 'moon', src: 'artemis',
+      text: 'A mirror on a tall mast bounces sunlight onto the panels: about 1 more power cell on shadow days, and more in the long dark.',
+      why: 'At the Moon\'s south pole, high ground stays sunlit while low ground is dark. A mirror up high can share the light.' },
+    filter: { name: 'Spare filter bed', icon: '🫧', cost: { metal: 1, glass: 2 }, max: 1, src: 'iss',
+      text: 'A second CO₂ filter beside the first: together they fill a third more slowly.',
+      why: 'The Space Station works the same way: one bed soaks up carbon dioxide while the other is baked clean.' }
   };
 
   // Two crops with different trade-offs. growSols: days of light and water until ripe. food: what one crate
@@ -361,6 +409,17 @@ window.JA = window.JA || {};
     { id: 'throw', icon: '🎯', title: 'Why that throw flew so far', holo: 'gravity', src: { moon: 'moon', mars: 'mars' }, hint: 'Land a long throw.',
       text: { moon: 'The Moon pulls with one-sixth of Earth\'s gravity. The same throw stays in the air much longer, so it lands about six times farther away.',
         mars: 'Mars pulls with about 38% of Earth\'s gravity. The same throw stays in the air longer, so it lands more than twice as far away.' } },
+    { id: 'crash', icon: '💥', title: 'Light, but just as hard to stop', holo: 'gravity', src: { moon: 'moon', mars: 'mars' }, hint: 'Drive the rover into something.',
+      text: { moon: 'Here the rover weighs one-sixth of what it would on Earth, but it has exactly the same mass. So it hits a rock just as hard, and with less grip it needs much longer to stop.',
+        mars: 'Here the rover weighs about a third of what it would on Earth, but it has exactly the same mass. So it hits a rock just as hard, and with less grip it needs longer to stop.' } },
+    { id: 'icedrill', icon: '🧊', title: 'Why the ice drill is warm', src: { moon: 'lro', mars: 'phoenix' }, hint: 'Start an ice drill.',
+      text: 'The ice here is frozen into the soil, as hard as concrete. A warm drill loosens it, and the cold outside freezes the chunk solid again the moment it comes out.' },
+    { id: 'town', icon: '🏘️', title: 'More people, more of everything', src: 'artemis', hint: 'Keep the outpost going until settlers arrive.',
+      text: 'Every new person breathes, drinks and eats, so they share your air plant. But more hands can also do more work. Keeping that balance decides how fast a real settlement can grow.' },
+    { id: 'isru', icon: '⛏️', title: 'Treasure inside plain rock', src: 'artemis', hint: 'Break a rock in Pioneer mode.',
+      text: 'Moon and Mars rock is almost half oxygen, with silicon, iron and aluminium locked inside. Using what is already there, instead of shipping it from Earth, is the only way a big outpost can ever be built.' },
+    { id: 'built', icon: '🏗️', title: 'Built from the ground you stand on', src: 'artemis', hint: 'Build something in Pioneer mode.',
+      text: 'Launching one kilogram from Earth costs a fortune. Engineers call building with local material "in-situ resource use", and every plan for a lasting base depends on it.' },
     { id: 'longdark', site: 'moon', icon: '🌚', title: 'The long dark is coming', holo: 'longdark', src: 'lro', hint: 'Stay on the Moon long enough to meet a day with no Sun.',
       text: 'On most of the Moon, night lasts two weeks. Your crater rim almost always sees the Sun: that is why the outpost is here. But soon a mountain will hide it for a whole day. Save power cells on the rack before then.' }
   ];

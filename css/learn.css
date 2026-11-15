@@ -9,7 +9,8 @@
 @media (hover: hover) { #hud .meter:hover { filter: brightness(1.14); } }
 #hud .meter[data-res=filter] { --c: #8fe8d0; --c-deep: #1f6f60; --c-hi: #d9fff5; --c-glow: rgba(143, 232, 208, 0.5); }
 #hud .meter[data-res=water] { --c: #5aa8ff; --c-deep: #1b4f9a; --c-hi: #cfe6ff; --c-glow: rgba(90, 168, 255, 0.5); }
-#hud .meter[data-res=filter] .m-val::after { content: '%'; }
+#hud .meter[data-res=town] { --c: #ffb84d; --c-deep: #8a5a12; --c-hi: #ffe7bd; --c-glow: rgba(255, 184, 77, 0.5); }
+#hud .meter[data-res=filter] .m-val::after, #hud .meter[data-res=town] .m-val::after { content: '%'; }
 /* the helpers are narrower, with the icon up beside the number */
 #hud .meter.mini { flex: 0.72 1 0; max-width: 150px; grid-template-columns: 26px minmax(0, 1fr); grid-template-areas: "ic top" "bar bar" "note note"; gap: 0 6px; padding: 6px 10px 6px 8px; }
 #hud .meter.mini .m-icon { width: 26px; height: 26px; font-size: 0.88rem; box-shadow: inset 0 0 0 1.5px var(--c), 0 0 8px var(--c-glow); }
@@ -34,7 +35,7 @@
 @media (max-width: 1100px) {
   #hud .meter.mini { padding: 5px 8px 5px 6px; }
   #hud .meter.mini .m-val { font-size: 1rem; }
-  #hud .meter[data-res=filter] .m-val::after { content: none; }
+  #hud .meter[data-res=filter] .m-val::after, #hud .meter[data-res=town] .m-val::after { content: none; }
   #hud .hud-right { gap: 4px; }
 }
 /* small phones on their side: everything tightens */

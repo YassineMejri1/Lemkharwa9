@@ -93,7 +93,7 @@
     var keep = [[0, 0, 70], [L.ice[0], L.ice[1], Tn.iceR + 16], [L.hill[0], L.hill[1], 34], [L.mesa[0], L.mesa[1], 30],
       [L.rocket[0], L.rocket[1], 24], [-96, -112, 30], [L.photo[1][0], L.photo[1][1], 12]];
     L.geo.forEach(function (g) { keep.push([g[0], g[1], 16]); });
-    keep.push([L.colony[0], L.colony[1], 36]);
+    keep.push([L.colony[0], L.colony[1], 48]);
     Object.keys(L.inst).forEach(function (k) { keep.push([L.inst[k][0], L.inst[k][1], 14]); });
     function free(x, z, pad) {
       for (var i = 0; i < keep.length; i++) if (Math.hypot(x - keep[i][0], z - keep[i][1]) < keep[i][2] + pad) return false;
@@ -111,7 +111,7 @@
 
     // level pads so machines, the rocket and work sites sit flat
     function flat(p, r0, r1) { flats.push({ x: p[0], z: p[1], r0: r0, r1: r1, h: raw(p[0], p[1]) }); }
-    flat(L.rocket, 11, 20); flat(L.pallet, 4, 9); flat(L.colony, 24, 36);
+    flat(L.rocket, 11, 20); flat(L.pallet, 4, 9); flat(L.colony, 36, 48);
     L.geo.forEach(function (g) { flat(g, 3.5, 8); });
     Object.keys(L.inst).forEach(function (k) { if (k !== 'beam') flat(L.inst[k], 3, 7); });
 

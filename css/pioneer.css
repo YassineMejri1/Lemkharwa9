@@ -1,0 +1,81 @@
+/* Astro Outpost — Pioneer mode (js/pioneer.js): the bag chip, the timing ring on a boulder,
+   and the cards of the build menu. Same see-through dark blue as the other panels (css/panels.css).
+   Load after style.css and panels.css: it reuses their colours and the .btn and .modal rules. */
+
+/* ---------- the bag chip: what you carry, and the Build button ---------- */
+#pio-chip { position: fixed; right: calc(14px + var(--safe-r, 0px)); bottom: calc(16px + var(--safe-b, 0px)); z-index: 19; display: flex; align-items: center; gap: 12px;
+  padding: 7px 8px 7px 15px; border-radius: 999px; color: var(--ink, #f5f7ff); font-family: var(--font);
+  background: var(--panel-fill, rgba(6, 20, 60, 0.68)); background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 48%);
+  box-shadow: var(--panel-drop, 0 8px 22px rgba(2, 4, 14, 0.3)); }
+#pio-chip.in { bottom: auto; top: 54%; }      /* inside the habitat the room's own panel sits in that corner */
+.pio-mats { display: flex; align-items: center; gap: 12px; }
+.pio-mat { display: flex; align-items: center; gap: 5px; }
+.pio-mat i { font-style: normal; font-size: 1.25rem; line-height: 1; }
+.pio-mat b { min-width: 1.15em; font: 700 1.12rem var(--font-display); font-variant-numeric: tabular-nums; }
+.pio-mat.bump { animation: pio-bump 0.4s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes pio-bump { 0% { transform: scale(1); } 35% { transform: scale(1.45); color: var(--power); } 100% { transform: scale(1); } }
+.pio-btn { display: inline-flex; align-items: center; gap: 7px; padding: 0.5em 0.85em; border-radius: 999px; white-space: nowrap;
+  font: 700 0.95rem var(--font-display); color: #2a1c00; background: var(--power); box-shadow: 0 4px 0 #b98a00; transition: transform 0.08s, filter 0.15s; }
+.pio-btn:hover { filter: brightness(1.07); }
+.pio-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #b98a00; }
+.pio-btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.pio-btn kbd { min-width: 22px; height: 22px; padding: 0 5px; border-radius: 6px; font-size: 0.78rem; color: var(--power); background: #2a1c00; box-shadow: none; }
+.pio-btn.ready { animation: pio-ready 1.3s ease-in-out infinite; }      /* you can afford something */
+@keyframes pio-ready { 0%, 100% { box-shadow: 0 4px 0 #b98a00, 0 0 0 0 rgba(255, 210, 63, 0.7); } 50% { box-shadow: 0 4px 0 #b98a00, 0 0 0 9px rgba(255, 210, 63, 0); } }
+.pio-btn.placing { color: #fff; background: rgba(255, 255, 255, 0.12); box-shadow: inset 0 0 0 2px var(--danger); }
+.pio-btn.placing kbd { display: none; }
+
+/* a narrow window: what you carry and the E prompt need the bottom row, so the chip moves up above them */
+@media (max-width: 900px) { #pio-chip { bottom: calc(150px + var(--safe-b, 0px)); } }
+
+/* touch screens: the round buttons own the bottom right corner, so the chip sits just above them (mid-right) */
+body.touch #pio-chip, body.touch #pio-chip.in { top: auto; bottom: calc(246px + var(--safe-b, 0px)); right: calc(18px + var(--safe-r, 0px)); gap: 9px; padding: 5px 6px 5px 12px; }
+body.touch .pio-mats { gap: 9px; }
+body.touch .pio-btn kbd { display: none; }
+/* a phone held sideways is too short for that: there the chip goes bottom centre, between the stick and the buttons */
+@media (max-height: 520px) and (min-width: 560px) {
+  body.touch #pio-chip, body.touch #pio-chip.in { right: auto; left: 50%; bottom: calc(10px + var(--safe-b, 0px)); transform: translateX(-50%); padding: 4px 5px 4px 11px; }
+  body.touch .pio-mat i { font-size: 1.05rem; } body.touch .pio-mat b { font-size: 1rem; } body.touch .pio-btn { font-size: 0.86rem; }
+}
+body.cine #pio-chip, body.cine #pio-ring { display: none; }
+
+/* ---------- the timing ring on the boulder in front of you ---------- */
+#pio-ring { position: fixed; left: 0; top: 0; z-index: 9; pointer-events: none; will-change: transform; }
+#pio-ring i { position: absolute; left: -42px; top: -42px; width: 84px; height: 84px; border-radius: 50%; }
+#pio-ring .pio-aim { box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.5), 0 0 0 1.5px rgba(6, 20, 60, 0.45); }
+#pio-ring .pio-pulse { box-shadow: inset 0 0 0 4px #fff, 0 0 12px rgba(255, 255, 255, 0.45); will-change: transform; }
+#pio-ring.sweet .pio-aim { box-shadow: inset 0 0 0 3px var(--power), 0 0 0 1.5px rgba(6, 20, 60, 0.45); }
+#pio-ring.sweet .pio-pulse { box-shadow: inset 0 0 0 7px var(--power), 0 0 20px rgba(255, 210, 63, 0.95); }
+.pio-pips { position: absolute; left: 0; top: 58px; transform: translateX(-50%); display: flex; gap: 5px; padding: 5px 9px; border-radius: 999px;
+  background: var(--panel-fill, rgba(6, 20, 60, 0.68)); box-shadow: var(--panel-drop, 0 8px 22px rgba(2, 4, 14, 0.3)); }
+.pio-pips b { width: 11px; height: 11px; border-radius: 3px; background: rgba(255, 255, 255, 0.25); }
+.pio-pips b.on { background: var(--power); box-shadow: 0 0 8px rgba(255, 210, 63, 0.8); }
+
+/* ---------- the build menu ---------- */
+.pio-menu { text-align: left; }
+.pio-bag { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 12px; }
+.pio-bag em { font-style: normal; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--power); margin-right: 2px; }
+.pio-bag span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1.5px var(--line); }
+.pio-bag b { font: 700 1.05rem var(--font-display); }
+.pio-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pio-card { display: grid; grid-template-columns: 40px minmax(0, 1fr); grid-template-rows: 1fr auto; gap: 8px 10px; padding: 11px 12px; border-radius: 16px;
+  background: rgba(92, 160, 255, 0.08); box-shadow: inset 0 0 0 1.5px var(--line); }
+.pio-card.can { box-shadow: inset 0 0 0 2px rgba(77, 255, 154, 0.7); }
+.pio-card > em { font-style: normal; font-size: 1.9rem; line-height: 1.1; text-align: center; }
+.pio-info { min-width: 0; }
+.pio-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pio-head b { font: 600 1.05rem var(--font-display); }
+.pio-head span { flex: none; font-size: 0.74rem; font-weight: 600; color: var(--muted); }
+.pio-text { display: block; margin-top: 2px; font-size: 0.86rem; line-height: 1.35; color: #e6ebff; }
+.pio-why { display: block; margin-top: 4px; font-size: 0.74rem; line-height: 1.35; color: var(--muted); }
+.pio-why i { display: block; font-style: normal; opacity: 0.8; }
+.pio-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+.pio-cost { display: flex; flex-wrap: wrap; gap: 6px; margin-right: auto; }
+.pio-cost span { padding: 2px 9px; border-radius: 999px; font-size: 0.86rem; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums;
+  background: rgba(77, 255, 154, 0.12); box-shadow: inset 0 0 0 1.5px rgba(77, 255, 154, 0.5); }
+.pio-cost span.short { color: #ffb3bd; background: rgba(255, 84, 104, 0.12); box-shadow: inset 0 0 0 1.5px var(--danger); }
+.pio-no { flex: 1 1 0; min-width: 0; text-align: right; font-size: 0.76rem; line-height: 1.25; color: #ffb3bd; }
+.pio-go { flex: none; font-size: 0.92rem; padding: 0.5em 1.15em; }
+@media (max-width: 700px) { .pio-list { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .pio-btn.ready, .pio-mat.bump { animation: none; } }

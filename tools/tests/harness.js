@@ -14,7 +14,7 @@ module.exports.arch=arch;
 // bot: one action every `gap` seconds. opts.bags = target bags, opts.shelter = go inside on warning
 function run(site,level,seed,o){
   o=o||{}; var gap=o.gap||10, D=o.D||300;
-  var s=sim.newGame({site:site,level:level,seed:seed,weather:arch,dayLength:D});
+  var s=sim.newGame({site:site,level:level,seed:seed,weather:arch,dayLength:D,pioneer:!!o.pioneer});
   var hand=0, bagsReady=0, coresHeld=[], crates=0, log=[];
   while(!s.over){
     var next=0, fail=null;

@@ -1,9 +1,14 @@
 /* Astro Outpost — the outpost grows into a settlement.
    Keep the outpost going and Earth sends ships. On the flat plain north-east of the habitat
-   (Tn.L.colony) a settlement grows in three stages:
+   (Tn.L.colony) a settlement grows in five stages, each one further out from the middle:
      1. a cargo lander from Earth, crates, a pressurised garage and a rover
      2. the first settlers: an inflatable home, a pink greenhouse dome, people walking about
      3. a small town: linked modules, a solar farm, a landing pad with a shuttle, a welcome sign
+     4. a growing town (18 to 31 m out): a passenger ferry, three more homes, a school, a farm of
+        greenhouse tunnels, water and oxygen tanks, a comms mast, lit streets and parked rovers
+     5. the first city (24 to 35 m out): a spaceport with a launch tower, a park under a clear dome,
+        a tower of homes, a town square, more solar panels and a ring road with a little tram
+   The side that faces the outpost (colony +z) stays open, so you can always walk or drive in.
    After a win, JA.colony.vision() flies the camera over an imagined future of the same place,
    10, 30 and 100 years later. The captions stick to real science and say that the future is imagined.
    Parts are baked into a few meshes per building and repeated parts use InstancedMesh, so the
@@ -13,13 +18,15 @@
   var T = window.THREE, W = JA.world, Tn = JA.terrain;
   var K = JA.colony = {
     build: function () {}, setStage: function () {}, stage: function () { return 0; },
-    update: function () {}, info: function () { return null; }, vision: function () { return false; }
+    update: function () {}, info: function () { return null; }, vision: function () { return false; }, people: function () { return 0; }
   };
   if (!T) return;
 
   var TOWN = { moon: 'Rimlight', mars: 'New Arcadia' };
+  var LAST = 5, PEOPLE = [0, 0, 4, 12, 30, 80];      // the last stage, and how many people live there at each stage
   var site = 'mars', grp = null, h0 = 0, CX = 40, CZ = -62, ROT = 0, cosR = 1, sinR = 0;
-  var M = null, G = null, units = [], stageNow = 0, arr = null, tm = 0, men = null, panels = null, fx = null, warned = false;
+  var M = null, G = null, units = [], stageNow = 0, arr = null, tm = 0, men = null, fields = [], fx = null, warned = false;
+  var tram = null, signT = null, popNow = PEOPLE[3];
   var v1 = new T.Vector3(), p1 = new T.Vector3(), s1 = new T.Vector3(), q1 = new T.Quaternion(), e1 = new T.Euler(), cTmp = new T.Color();
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -66,8 +73,10 @@
     g.computeBoundingSphere();
     return g;
   }
-  function Kit() { this.by = {}; }
+  function Kit() { this.by = {}; this.base = null; }
+  // base: an optional placement for a whole group of parts (a lamp post, a parked rover)
   Kit.prototype.put = function (kind, geo, m, color) {
+    if (this.base) m = this.base.clone().multiply(m);
     (this.by[kind] || (this.by[kind] = [])).push({ g: geo, m: m, c: color == null ? 0xffffff : color });
     return this;
   };
@@ -102,7 +111,11 @@
       cyl6: new T.CylinderGeometry(1, 1, 1, 6), ball: new T.SphereGeometry(1, 14, 10), lump: new T.SphereGeometry(1, 7, 5),
       dome: new T.SphereGeometry(1, 26, 12, 0, Math.PI * 2, 0, Math.PI / 2), facet: new T.SphereGeometry(1, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2),
       cone: new T.ConeGeometry(1, 1, 18), cone6: new T.ConeGeometry(1, 1, 6), bell: new T.CylinderGeometry(0.42, 1, 1, 18, 1, true),
-      ring: new T.TorusGeometry(1, 0.06, 6, 30), arch: new T.TorusGeometry(1, 0.05, 6, 20, Math.PI), flame: new T.ConeGeometry(1, 1, 14, 1, true)
+      ring: new T.TorusGeometry(1, 0.06, 6, 30), arch: new T.TorusGeometry(1, 0.05, 6, 20, Math.PI), flame: new T.ConeGeometry(1, 1, 14, 1, true),
+      hoop: new T.TorusGeometry(1, 0.02, 5, 40), rib: new T.TorusGeometry(1, 0.02, 5, 26, Math.PI),        // thin ones, for a big dome
+      dot: new T.SphereGeometry(1, 12, 6), band: new T.TorusGeometry(1, 0.06, 4, 20),                      // cheap ones, for the many small windows, lights and hoops
+      disc: new T.CylinderGeometry(1, 1, 1, 40),                                                           // a rounder one, for wide floors
+      tunnel: new T.CylinderGeometry(1, 1, 1, 14, 1, true, 0, Math.PI)                                     // half a pipe: a greenhouse roof
     };
   }
   function makeMats() {
@@ -127,11 +140,15 @@
       amber: glowMat(0xffb84d, 1.6), ring: glowMat(0xffd23f, 1.2), blink: glowMat(0xff4a4a, 2), blink2: glowMat(0x46ff8a, 2),
       glass: new T.MeshStandardMaterial({ color: 0xffd6f4, transparent: true, opacity: 0.3, roughness: 0.08, metalness: 0.1, emissive: 0xff5fd0, emissiveIntensity: 0.3, depthWrite: false, side: T.DoubleSide }),
       haze: addMat(0xff4fc8, 0.2),
+      // the park dome: clear, a little blue, like a shell of ice
+      ice: new T.MeshStandardMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.24, roughness: 0.05, metalness: 0.2, emissive: 0x7fc4ff, emissiveIntensity: 0.22, depthWrite: false, side: T.DoubleSide }),
+      water: glowMat(0x3aa0ff, 0.6),
       solar: new T.MeshStandardMaterial({ map: solarTex, roughness: 0.25, metalness: 0.5, emissive: 0x1b3f96, emissiveIntensity: 0.3 }),
       groundGlow: new T.MeshBasicMaterial({ map: glowTex, color: 0xffa040, transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false, fog: false })
     };
-    m.glass.userData.noShadow = true; m.groundGlow.userData.noShadow = true;
+    m.glass.userData.noShadow = true; m.ice.userData.noShadow = true; m.groundGlow.userData.noShadow = true;
     m.soil = site === 'mars' ? 0xa9582f : 0x7b7c87; m.soil2 = site === 'mars' ? 0x8e4524 : 0x666772;
+    m.road = site === 'mars' ? 0x5a3a2a : 0x3d3f4a;      // packed, baked soil: the streets and the ring road
     return m;
   }
 
@@ -143,10 +160,13 @@
     units.push(u);
     return u;
   }
-  function col(u, x, z, r) {
+  // a collider: a circle on the ground that stops walking, driving and thrown things. h: how tall it is (3.4 m if left out)
+  function col(u, x, z, r, h) {
     var c = Math.cos(u.g.rotation.y), s = Math.sin(u.g.rotation.y);
-    var gx = u.g.position.x + x * c + z * s, gz = u.g.position.z - x * s + z * c;
-    u.cols.push({ x: wx(gx, gz), z: wz(gx, gz), r: r });
+    var gx = u.g.position.x + x * c + z * s, gz = u.g.position.z - x * s + z * c, o = { x: wx(gx, gz), z: wz(gx, gz), r: r };
+    if (h) o.h = h;
+    u.cols.push(o);
+    return o;
   }
   function bake(u) { u.meshes = u.kit.bake(u.g); return u; }
   // four landing legs from the body out to round feet
@@ -188,7 +208,7 @@
     k.put('blink', G.ball, mx(2.2, 4.75, 0.9, 0, 0, 0, 0.11)); k.put('blink2', G.ball, mx(-2.2, 4.75, -0.9, 0, 0, 0, 0.11));
     k.put('amber', G.box, mx(0, 3.5, 2.24, 0, 0, 0, 1.0, 0.16, 0.06));
     bake(u); flame(u, 0.8, 1.2, 6);
-    col(u, 0, 0, 3.5);
+    col(u, 0, 0, 3.5, 6);
   }
   function crates(u) {
     var k = u.kit, list = [[-1.7, 0, -1.0, 0xf2f3f7, 0], [0, 0, -1.0, 0xff8a3d, 0.05], [1.7, 0, -1.05, 0xf2f3f7, -0.04], [-1.7, 0, 1.0, 0x3d7dff, 0.03], [0.05, 0, 1.0, 0xf2f3f7, -0.06], [-1.7, 1.18, -1.0, 0xffd23f, 0.1]];
@@ -205,7 +225,7 @@
       k.put('soft', G.box, mx(p[0], 0.12, p[1], 0, 0, 0, 1.6, 0.24, 0.7), 0x3a3e4c);
     });
     bake(u);
-    col(u, -1.1, 0, 1.9); col(u, 1.0, -0.6, 1.5); col(u, 1.9, 1.6, 1.3);
+    col(u, -1.1, 0, 1.9, 2.4); col(u, 1.0, -0.6, 1.5, 1.3); col(u, 1.9, 1.6, 1.3, 1.2);
   }
   // a pressurised tent: half buried, it holds air like a balloon, with a garage door at the front
   function garage(u) {
@@ -218,12 +238,11 @@
     k.put('green', G.box, mx(0, 2.05, 4.43, 0, 0, 0, 1.4, 0.16, 0.08));
     [-1.2, 1.2].forEach(function (z) { [-1, 1].forEach(function (s) { k.put('cyan', G.ball, mx(s * 1.86, 1.35, z, 0, s * 0.62, 0, 0.36, 0.3, 0.1)); }); });
     bake(u);
-    col(u, 0, -2.1, 2.4); col(u, 0, 0.4, 2.4); col(u, 0, 3.5, 1.5);
+    col(u, 0, -2.1, 2.4, 2.4); col(u, 0, 0.4, 2.4, 2.4); col(u, 0, 3.5, 1.5, 2.5);
   }
-  function rover(u) {
-    var k = u.kit;
+  function roverParts(k, trim) {
     k.put('soft', new T.CapsuleGeometry(0.95, 2.3, 5, 14), mx(0, 1.4, 0, Math.PI / 2, 0, 0), 0xf2f3f7);
-    k.put('soft', G.box, mx(0, 1.15, 0, 0, 0, 0, 2.0, 0.3, 3.8), 0xff8a3d);
+    k.put('soft', G.box, mx(0, 1.15, 0, 0, 0, 0, 2.0, 0.3, 3.8), trim || 0xff8a3d);
     k.put('cyan', G.box, mx(0, 1.75, 1.95, -0.5, 0, 0, 1.3, 0.45, 0.1));
     [-1, 1].forEach(function (s) { k.put('cyan', G.box, mx(s * 0.92, 1.65, 0.2, 0, 0, 0, 0.06, 0.32, 1.5)); });
     [-1.2, 0, 1.2].forEach(function (z) { [-1.02, 1.02].forEach(function (x) {
@@ -233,8 +252,16 @@
     k.put('soft', G.cyl, mx(0.5, 2.7, -0.9, 0, 0, 0, 0.03, 1.0, 0.03), 0xdfe2ea);
     k.put('blink', G.ball, mx(0.5, 3.25, -0.9, 0, 0, 0, 0.08));
     k.put('win', G.ball, mx(-0.6, 1.2, 2.3, 0, 0, 0, 0.16)); k.put('win', G.ball, mx(0.6, 1.2, 2.3, 0, 0, 0, 0.16));
+  }
+  function rover(u) {
+    roverParts(u.kit);
     bake(u);
-    col(u, 0, -0.9, 1.3); col(u, 0, 0.9, 1.3);
+    col(u, 0, -0.9, 1.3, 2.4); col(u, 0, 0.9, 1.3, 2.4);
+  }
+  // one more rover, parked somewhere inside a bigger unit
+  function parkRover(u, x, z, yaw, trim) {
+    u.kit.base = mx(x, 0, z, 0, yaw, 0); roverParts(u.kit, trim); u.kit.base = null;
+    col(u, x - Math.sin(yaw) * 0.9, z - Math.cos(yaw) * 0.9, 1.3, 2.4); col(u, x + Math.sin(yaw) * 0.9, z + Math.cos(yaw) * 0.9, 1.3, 2.4);
   }
   function pathLights(u) {
     var k = u.kit;
@@ -260,7 +287,7 @@
     k.put('blink', G.ball, mx(0, 9.05, 0, 0, 0, 0, 0.14));
     k.put('soft', G.box, mx(-1.95, 4.6, 0, 0, 0, 0, 0.12, 2.2, 0.9), 0x3d7dff); k.put('soft', G.box, mx(1.95, 4.6, 0, 0, 0, 0, 0.12, 2.2, 0.9), 0x3d7dff);
     bake(u); flame(u, 0.75, 1.0, 5);
-    col(u, 0, 0, 2.9);
+    col(u, 0, 0, 2.9, 9);
   }
   function hab2(u) {
     var k = u.kit, i, a;
@@ -282,7 +309,7 @@
     [4.1, 5.1, 6.1].forEach(function (z) { k.put('soft', G.ring, mx(0, 1.0, z, 0, 0, 0, 0.88), 0x3d7dff); });
     k.put('cyan', G.box, mx(0, 1.86, 5.1, 0, 0, 0, 0.12, 0.05, 2.8));
     bake(u);
-    col(u, 0, -2.6, 2.6); col(u, 0, 0, 2.6); col(u, 0, 2.6, 2.6); col(u, -2.95, 1.5, 0.95); col(u, 0, 4.6, 1.0); col(u, 0, 6.0, 1.0);
+    col(u, 0, -2.6, 2.6, 5.2); col(u, 0, 0, 2.6, 5.2); col(u, 0, 2.6, 2.6, 5.2); col(u, -2.95, 1.5, 0.95, 2.2); col(u, 0, 4.6, 1.0, 1.9); col(u, 0, 6.0, 1.0, 1.9);
   }
   function greenhouse(u) {
     var k = u.kit, i;
@@ -301,7 +328,7 @@
     k.put('soft', G.box, mx(-3.62, 0.9, 0, 0, 0, 0, 0.06, 1.6, 0.9), 0x2b3147);
     k.put('pink', G.box, mx(-3.63, 1.95, 0, 0, 0, 0, 0.06, 0.14, 1.0));
     bake(u);
-    col(u, 0, 0, 3.25); col(u, -3.1, 0, 0.85);
+    col(u, 0, 0, 3.25, 3.3); col(u, -3.1, 0, 0.85, 2);
   }
 
   // stage 3: a two-storey hub, a shielded dome, tubes, a landing pad, a shuttle, a solar farm, a sign
@@ -325,7 +352,7 @@
     k.put('soft', G.dome, mx(1.3, 9.0, -0.4, -1.0, 0.4, 0, 0.8, 0.3, 0.8), 0xf4f5f9);
     k.put('win', G.cyl, mx(0, 9.42, 0, 0, 0, 0, 0.9, 0.05, 0.9));
     bake(u);
-    col(u, 0, 0, 3.35); col(u, 0, 3.3, 1.0);
+    col(u, 0, 0, 3.35, 9.5); col(u, 0, 3.3, 1.0, 2.5);
   }
   function shieldDome(u) {
     var k = u.kit, rings = [[0.22, 13], [0.68, 10], [1.1, 6]], n = 0;
@@ -344,7 +371,7 @@
     k.put('green', G.box, mx(0, 1.95, 4.5, 0, 0, 0, 0.9, 0.12, 0.1));
     k.put('win', G.cyl, mx(0, 3.32, 0, 0, 0, 0, 0.75, 0.06, 0.75));
     bake(u);
-    col(u, 0, 0, 3.55); col(u, 0, 3.7, 1.1);
+    col(u, 0, 0, 3.55, 3.3); col(u, 0, 3.7, 1.1, 2.1);
   }
   function tube(k, cols, ax, az, bx, bz) {
     var dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz), mxx = (ax + bx) / 2, mzz = (az + bz) / 2;
@@ -358,15 +385,16 @@
     tube(u.kit, cols, 1.9, -6.0, 7.0, -6.0);
     tube(u.kit, cols, -3.05, -3.95, -5.7, -1.3);
     bake(u);
-    cols.forEach(function (c) { col(u, c[0], c[1], c[2]); });
+    cols.forEach(function (c) { col(u, c[0], c[1], c[2], 1.8); });
   }
-  function pad(u) {
-    var k = u.kit, i;
-    k.put('soft', G.cyl, mx(0, 0.12, 0, 0, 0, 0, 4.1, 0.24, 4.1), 0x4a4f63);
-    k.put('ring', G.ring, mx(0, 0.26, 0, Math.PI / 2, 0, 0, 3.4, 3.4, 1.4));
-    for (i = 0; i < 8; i++) k.put('amber', G.ball, mx(Math.sin(i * Math.PI / 4) * 3.9, 0.3, Math.cos(i * Math.PI / 4) * 3.9, 0, 0, 0, 0.13));
-    [-0.75, 0.75].forEach(function (x) { k.put('soft', G.box, mx(x, 0.25, 0, 0, 0, 0, 0.32, 0.03, 2.1), 0xf2f3f7); });
-    k.put('soft', G.box, mx(0, 0.25, 0, 0, 0, 0, 1.5, 0.03, 0.32), 0xf2f3f7);
+  // a hard landing pad. r: how big (the first one is 4.1 m)
+  function pad(u, r) {
+    var k = u.kit, i, s = (r || 4.1) / 4.1;
+    k.put('soft', G.cyl, mx(0, 0.12, 0, 0, 0, 0, 4.1 * s, 0.24, 4.1 * s), 0x4a4f63);
+    k.put('ring', G.ring, mx(0, 0.26, 0, Math.PI / 2, 0, 0, 3.4 * s, 3.4 * s, 1.4));
+    for (i = 0; i < 8; i++) k.put('amber', G.dot, mx(Math.sin(i * Math.PI / 4) * 3.9 * s, 0.3, Math.cos(i * Math.PI / 4) * 3.9 * s, 0, 0, 0, 0.13));
+    [-0.75, 0.75].forEach(function (x) { k.put('soft', G.box, mx(x * s, 0.25, 0, 0, 0, 0, 0.32 * s, 0.03, 2.1 * s), 0xf2f3f7); });
+    k.put('soft', G.box, mx(0, 0.25, 0, 0, 0, 0, 1.5 * s, 0.03, 0.32 * s), 0xf2f3f7);
     bake(u);
   }
   function shuttle(u) {
@@ -388,39 +416,50 @@
     k.put('soft', G.box, mx(0, 1.25, 2.1, -0.32, 0, 0, 0.8, 2.6, 0.08), 0x8a8fa0);
     k.put('blink2', G.ball, mx(0, 8.5, 0, 0, 0, 0, 0.12));
     bake(u); flame(u, 0.6, 0.95, 4.6);
-    col(u, 0, 0, 2.7);
+    col(u, 0, 0, 2.7, 8.5);
   }
-  function solarFarm(u) {
-    var k = u.kit, moon = site === 'moon', list = [], i, im, fr;
-    [15.5, 19.0].forEach(function (x) { [-5, -2, 1, 4, 7].forEach(function (z) { list.push([x, z]); }); });
+  // a field of solar panels on poles. list: where the poles stand. The panels are two instanced meshes.
+  function panelField(u, list) {
+    var k = u.kit, moon = site === 'moon', im, fr;
     list.forEach(function (p) {
       k.put('soft', G.cyl, mx(p[0], moon ? 1.6 : 0.7, p[1], 0, 0, 0, 0.09, moon ? 3.2 : 1.4, 0.09), 0xdfe2ea);
       k.put('soft', G.cyl, mx(p[0], 0.1, p[1], 0, 0, 0, 0.4, 0.2, 0.4), 0x8a8fa0);
-      col(u, p[0], p[1], moon ? 0.55 : 1.0);
+      col(u, p[0], p[1], moon ? 0.55 : 1.0, moon ? 4.7 : 2.3);
     });
-    k.put('soft', G.box, mx(13.9, 0.6, -7.6, 0, 0.3, 0, 1.6, 1.2, 1.0), 0xc3c7d2);
-    k.put('green', G.box, mx(13.9, 0.9, -7.08, 0, 0.3, 0, 0.9, 0.12, 0.05));
-    bake(u);
     im = new T.InstancedMesh(G.box, M.solar, list.length); im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false;
     fr = new T.InstancedMesh(G.box, M.white, list.length); fr.castShadow = true; fr.frustumCulled = false;
     u.g.add(im); u.g.add(fr);
-    panels = { im: im, fr: fr, list: list, yaw: null, moon: moon };
-    col(u, 13.9, -7.6, 1.0);
+    fields.push({ im: im, fr: fr, list: list, yaw: null, moon: moon });
+  }
+  function solarFarm(u) {
+    var k = u.kit, list = [];
+    [15.5, 19.0].forEach(function (x) { [-5, -2, 1, 4, 7].forEach(function (z) { list.push([x, z]); }); });
+    panelField(u, list);
+    k.put('soft', G.box, mx(13.9, 0.6, -7.6, 0, 0.3, 0, 1.6, 1.2, 1.0), 0xc3c7d2);
+    k.put('green', G.box, mx(13.9, 0.9, -7.08, 0, 0.3, 0, 0.9, 0.12, 0.05));
+    bake(u);
+    col(u, 13.9, -7.6, 1.0, 1.2);
   }
   function aimPanels(force) {
-    if (!panels) return;
-    var sd = W.sunDir, yaw, pitch;
-    if (panels.moon) { yaw = Math.atan2(sd.x, sd.z) - ROT; pitch = clamp(Math.asin(clamp(sd.y, -1, 1)), 0.05, 0.4); }
-    else { yaw = -ROT; pitch = 0.9; }
-    if (!force && panels.yaw != null && Math.abs(yaw - panels.yaw) < 0.004) return;
-    panels.yaw = yaw;
-    for (var i = 0; i < panels.list.length; i++) {
-      var p = panels.list[i], y = panels.moon ? 3.3 : 1.55;
-      var w = panels.moon ? 2.0 : 2.8, h = panels.moon ? 2.8 : 1.7;
-      panels.im.setMatrixAt(i, mx(p[0], y, p[1], -pitch, yaw, 0, w, h, 0.07));
-      panels.fr.setMatrixAt(i, mx(p[0] - Math.sin(yaw) * 0.06, y, p[1] - Math.cos(yaw) * 0.06, -pitch, yaw, 0, w + 0.14, h + 0.14, 0.05));
+    var sd = W.sunDir, yaw, pitch, f, n, i;
+    for (n = 0; n < fields.length; n++) {
+      f = fields[n];
+      if (f.moon) { yaw = Math.atan2(sd.x, sd.z) - ROT; pitch = clamp(Math.asin(clamp(sd.y, -1, 1)), 0.05, 0.4); }
+      else { yaw = -ROT; pitch = 0.9; }
+      if (!force && f.yaw != null && Math.abs(yaw - f.yaw) < 0.004) continue;
+      f.yaw = yaw;
+      for (i = 0; i < f.list.length; i++) {
+        var p = f.list[i], y = f.moon ? 3.3 : 1.55;
+        var w = f.moon ? 2.0 : 2.8, h = f.moon ? 2.8 : 1.7;
+        f.im.setMatrixAt(i, mx(p[0], y, p[1], -pitch, yaw, 0, w, h, 0.07));
+        f.fr.setMatrixAt(i, mx(p[0] - Math.sin(yaw) * 0.06, y, p[1] - Math.cos(yaw) * 0.06, -pitch, yaw, 0, w + 0.14, h + 0.14, 0.05));
+      }
+      f.im.instanceMatrix.needsUpdate = true; f.fr.instanceMatrix.needsUpdate = true;
     }
-    panels.im.instanceMatrix.needsUpdate = true; panels.fr.instanceMatrix.needsUpdate = true;
+  }
+  // draw a sign again once the web fonts have loaded
+  function fontsThen(tex) {
+    try { if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { try { tex.userData.redraw(); } catch (e) { /* ignore */ } }); } catch (e) { /* ignore */ }
   }
   function signTex() {
     return canvasTex(512, 192, function (ctx, w, h) {
@@ -437,19 +476,19 @@
       ctx.fillStyle = '#ffffff'; ctx.font = '700 ' + (name.length > 9 ? 58 : 66) + 'px "Exo 2", Lexend, "Trebuchet MS", sans-serif';
       ctx.fillText(name, w / 2, 96);
       ctx.fillStyle = '#9fe8ff'; ctx.font = '500 26px "Exo 2", Lexend, "Trebuchet MS", sans-serif';
-      ctx.fillText('·  population 12  ·', w / 2, 152);
+      ctx.fillText('·  population ' + popNow + '  ·', w / 2, 152);
     });
   }
   function sign(u) {
-    var k = u.kit, tex = signTex();
+    var k = u.kit, tex = signT = signTex();
     [-2.15, 2.15].forEach(function (x) { k.put('soft', G.cyl, mx(x, 1.35, 0, 0, 0, 0, 0.09, 2.7, 0.09), 0x8a8fa0); });
     k.put('soft', G.box, mx(0, 2.15, -0.02, 0, 0, 0, 4.7, 1.8, 0.12), 0xf2f3f7);
     k.put('amber', G.box, mx(0, 3.13, 0.02, 0, 0, 0, 3.6, 0.1, 0.14));
     bake(u);
     var face = new T.Mesh(new T.PlaneGeometry(4.5, 1.69), new T.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.5, transparent: true }));
     face.position.set(0, 2.15, 0.05); u.g.add(face);
-    try { if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { try { tex.userData.redraw(); } catch (e) { /* ignore */ } }); } catch (e) { /* ignore */ }
-    col(u, -2.15, 0, 0.3); col(u, 2.15, 0, 0.3);
+    fontsThen(tex);
+    col(u, -2.15, 0, 0.3, 3.1); col(u, 2.15, 0, 0.3, 3.1);
   }
   function plaza(u) {
     var k = u.kit;
@@ -462,7 +501,428 @@
     });
     k.put('win', G.ball, mx(0, 4.9, 0, 0, 0, 0, 0.1));
     bake(u);
-    col(u, 0, 0, 0.25);
+    col(u, 0, 0, 0.25, 4.9);
+  }
+
+  // ---------- stage 4: a growing town ----------
+  // a wide ferry with two decks of windows: it brings whole families
+  function ferry(u) {
+    var k = u.kit, r, i, a;
+    legs(k, 2.7, 2.3, 3.4, 2.7, 'soft', 0xb8bcc8);
+    k.put('metal', G.bell, mx(0, 1.5, 0, 0, 0, 0, 1.15, 1.5, 1.15), 0x3a3e4c);
+    k.put('soft', G.cyl, mx(0, 4.0, 0, 0, 0, 0, 2.6, 3.4, 2.6), 0xf4f5f9);
+    k.put('soft', G.dome, mx(0, 5.7, 0, 0, 0, 0, 2.6, 1.7, 2.6), 0xf4f5f9);
+    k.put('soft', G.cyl, mx(0, 2.3, 0, 0, 0, 0, 2.66, 0.16, 2.66), 0x2b3147);
+    k.put('soft', G.cyl, mx(0, 5.5, 0, 0, 0, 0, 2.64, 0.3, 2.64), 0xff8a3d);
+    k.put('soft', G.band, mx(0, 2.8, 0, Math.PI / 2, 0, 0, 2.63), 0x3d7dff);
+    k.put('soft', G.cyl, mx(0, 7.45, 0, 0, 0, 0, 0.7, 0.4, 0.7), 0xc3c7d2);
+    for (r = 0; r < 2; r++) for (i = 0; i < 10; i++) {
+      a = (i + r * 0.5) * Math.PI / 5;
+      if (r === 0 && i === 0) continue;                             // the door is here
+      k.put('win', G.dot, mx(Math.sin(a) * 2.57, r ? 4.7 : 3.4, Math.cos(a) * 2.57, 0, a, 0, 0.32, 0.32, 0.1));
+    }
+    k.put('soft', G.box, mx(0, 3.35, 2.58, 0, 0, 0, 1.0, 1.5, 0.1), 0x2b3147);
+    k.put('soft', G.box, mx(0, 1.32, 4.1, 0.704, 0, 0, 1.1, 0.1, 3.94), 0x8a8fa0);              // the ramp
+    [-1, 1].forEach(function (s) { k.put('soft', G.box, mx(s * 2.68, 4.0, 0, 0, 0, 0, 0.12, 2.0, 1.3), 0x3d7dff); });
+    k.put('blink', G.dot, mx(0, 7.8, 0, 0, 0, 0, 0.14));
+    bake(u); flame(u, 0.8, 1.2, 5.5);
+    col(u, 0, 0, 3.6, 7.6);
+  }
+  // one round home under soil bags. ra: which way its door looks
+  function pod(u, x, z, ra) {
+    var k = u.kit, n = 0, i, a;
+    k.base = mx(x, 0, z, 0, ra, 0);
+    k.put('soft', G.cyl, mx(0, 0.15, 0, 0, 0, 0, 2.8, 0.3, 2.8), 0xd7dae3);
+    k.put('soft', G.cyl, mx(0, 1.5, 0, 0, 0, 0, 2.6, 2.4, 2.6), 0xf4f5f9);
+    k.put('soft', G.dome, mx(0, 2.7, 0, 0, 0, 0, 2.6, 1.5, 2.6), 0xf4f5f9);
+    k.put('soft', G.band, mx(0, 2.7, 0, Math.PI / 2, 0, 0, 2.63), 0x3d7dff);
+    [[0.3, 9], [0.85, 6]].forEach(function (r) {
+      for (i = 0; i < r[1]; i++) {
+        a = (i + (r[0] > 0.5 ? 0.5 : 0)) / r[1] * Math.PI * 2;
+        k.put('rough', G.lump, mx(Math.sin(a) * Math.cos(r[0]) * 2.6, 2.7 + Math.sin(r[0]) * 1.5, Math.cos(a) * Math.cos(r[0]) * 2.6, Math.PI / 2 - r[0] * 1.25, a, 0, 0.85, 0.36, 0.62), n++ % 2 ? M.soil : M.soil2);
+      }
+    });
+    k.put('rough', G.lump, mx(0, 4.18, 0, 0, 0.4, 0, 0.85, 0.34, 0.85), M.soil);
+    [-2.4, -0.75, 0.75, 2.4].forEach(function (w) { k.put('win', G.dot, mx(Math.sin(w) * 2.57, 1.6, Math.cos(w) * 2.57, 0, w, 0, 0.36, 0.36, 0.1)); });
+    k.put('soft', G.box, mx(0, 1.0, 2.75, 0, 0, 0, 1.3, 2.0, 1.1), 0xc3c7d2);
+    k.put('soft', G.box, mx(0, 2.08, 2.75, 0, 0, 0, 1.46, 0.16, 1.26), 0xff8a3d);
+    k.put('soft', G.box, mx(0, 0.9, 3.32, 0, 0, 0, 0.9, 1.6, 0.06), 0x2b3147);
+    k.put('cyan', G.box, mx(0, 1.85, 3.33, 0, 0, 0, 1.0, 0.13, 0.06));
+    k.base = null;
+    col(u, x, z, 2.85, 4.3); col(u, x + Math.sin(ra) * 2.9, z + Math.cos(ra) * 2.9, 0.7, 2.2);
+  }
+  // three more homes in a row, joined by tubes
+  function homes(u) {
+    var cols = [], P = [[0.5, 7.5, Math.PI / 2], [0, 0, Math.PI / 2], [1.8, -7.3, 1.0]];
+    P.forEach(function (p) { pod(u, p[0], p[1], p[2]); });
+    [[0, 1], [1, 2]].forEach(function (l) {
+      var a = P[l[0]], b = P[l[1]], d = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / d, uz = (b[1] - a[1]) / d;
+      tube(u.kit, cols, a[0] + ux * 2.5, a[1] + uz * 2.5, b[0] - ux * 2.5, b[1] - uz * 2.5);
+    });
+    bake(u);
+    cols.forEach(function (c) { col(u, c[0], c[1], c[2], 1.8); });
+  }
+  // tall tanks of water and round tanks of oxygen, both made from ice
+  function tankFarm(u) {
+    var k = u.kit;
+    [-2.7, 0, 2.7].forEach(function (x, i) {
+      k.put('soft', G.cyl, mx(x, 0.3, -0.6, 0, 0, 0, 1.3, 0.6, 1.3), 0x3a3e4c);
+      k.put('soft', G.cyl, mx(x, 3.6, -0.6, 0, 0, 0, 1.15, 6.0, 1.15), 0xf4f5f9);
+      k.put('soft', G.dome, mx(x, 6.6, -0.6, 0, 0, 0, 1.15, 0.9, 1.15), 0xf4f5f9);
+      [1.6, 5.6].forEach(function (y) { k.put('soft', G.band, mx(x, y, -0.6, Math.PI / 2, 0, 0, 1.17), 0x3d7dff); });
+      k.put('cyan', G.box, mx(x, 3.5 - i * 0.3, 0.56, 0, 0, 0, 0.14, 2.8 - i * 0.6, 0.06));       // a glowing gauge: how full the tank is
+      col(u, x, -0.6, 1.3, 7.5);
+    });
+    k.put('soft', G.box, mx(0, 6.3, 0.85, 0, 0, 0, 6.9, 0.08, 0.6), 0x8a8fa0);                    // a walkway with a rail and a ladder
+    k.put('soft', G.box, mx(0, 7.2, 1.12, 0, 0, 0, 6.9, 0.05, 0.05), 0x8a8fa0);
+    [-3.4, -1.35, 1.35, 3.4].forEach(function (x) { k.put('soft', G.box, mx(x, 6.75, 1.12, 0, 0, 0, 0.05, 0.9, 0.05), 0x8a8fa0); });
+    k.put('soft', G.box, mx(3.75, 3.15, 0.95, 0, 0, 0, 0.45, 6.3, 0.07), 0x8a8fa0);
+    [-1.5, 1.5].forEach(function (x) {
+      k.put('soft', G.cyl8, mx(x, 0.3, 2.6, 0, 0, 0, 0.8, 0.6, 0.8), 0x3a3e4c);
+      k.put('soft', G.ball, mx(x, 1.6, 2.6, 0, 0, 0, 1.15), 0xf4f5f9);
+      k.put('soft', G.band, mx(x, 1.6, 2.6, Math.PI / 2, 0, 0, 1.17), 0x46e0c0);
+      k.put('cyan', G.dot, mx(x, 1.6, 3.74, 0, 0, 0, 0.14, 0.14, 0.06));
+      col(u, x, 2.6, 1.25, 2.8);
+    });
+    k.put('soft', G.cyl8, mx(0, 0.75, 1.0, 0, 0, Math.PI / 2, 0.11, 6.4, 0.11), 0x8a8fa0);         // pipes
+    k.put('soft', G.cyl8, mx(0, 0.75, 2.3, Math.PI / 2, 0, 0, 0.11, 2.6, 0.11), 0x8a8fa0);
+    k.put('soft', G.box, mx(0, 0.5, 3.7, 0, 0, 0, 0.8, 0.8, 0.7), 0xff8a3d);
+    k.put('blink', G.dot, mx(0, 7.68, -0.6, 0, 0, 0, 0.13));
+    bake(u);
+    col(u, 0, 3.7, 0.55, 1); col(u, 3.75, 0.95, 0.35, 6.3);
+  }
+  // a comms mast with a dish that looks up at Earth
+  function mast(u) {
+    var k = u.kit, H = 12, phi = Math.atan2(0.85, H), len = Math.hypot(0.85, H), i, a;
+    k.put('soft', G.cyl8, mx(0, 0.2, 0, 0, 0, 0, 1.4, 0.4, 1.4), 0x8a8fa0);
+    for (i = 0; i < 3; i++) {
+      a = i * Math.PI * 2 / 3;
+      k.put('soft', G.box, mx(Math.sin(a) * 0.675, 0.4 + H / 2, Math.cos(a) * 0.675, -phi, a, 0, 0.13, len, 0.13), 0xf4f5f9);
+    }
+    [2.4, 4.8, 7.2, 9.6].forEach(function (y, n) { var r = 1.14 - 0.85 * y / H; k.put('soft', G.band, mx(0, 0.4 + y, 0, Math.PI / 2, 0, 0, r, r, 1.2), n % 2 ? 0xf4f5f9 : 0xff8a3d); });
+    k.put('soft', G.cyl8, mx(0, 12.46, 0, 0, 0, 0, 0.5, 0.12, 0.5), 0x8a8fa0);
+    k.put('soft', G.cyl6, mx(0, 13.7, 0, 0, 0, 0, 0.04, 2.4, 0.04), 0xdfe2ea);
+    k.put('blink', G.dot, mx(0, 14.95, 0, 0, 0, 0, 0.15));
+    k.put('soft', G.dome, mx(0, 10.2, 1.45, -2.44, 0, 0, 1.3, 0.45, 1.3), 0xdfe2ea);             // the big dish: its back, and its face
+    k.put('soft', G.cyl, mx(0, 10.2, 1.45, 0.698, 0, 0, 1.3, 0.05, 1.3), 0xf4f5f9);
+    k.put('soft', G.box, mx(0, 9.86, 0.78, 0, 0, 0, 0.12, 0.12, 0.8), 0x8a8fa0);
+    k.put('soft', G.cyl6, mx(0, 10.35, 1.58, 0.698, 0, 0, 0.03, 0.9, 0.03), 0x8a8fa0);
+    k.put('soft', G.dome, mx(1.05, 6.6, -0.77, -2.44, 2.2, 0, 0.7, 0.25, 0.7), 0xdfe2ea);        // a small one
+    k.put('soft', G.cyl, mx(1.05, 6.6, -0.77, 0.698, 2.2, 0, 0.7, 0.04, 0.7), 0xf4f5f9);
+    k.put('soft', G.box, mx(2.0, 0.7, 0.5, 0, 0, 0, 1.7, 1.4, 1.3), 0xc3c7d2);                   // the radio hut
+    k.put('soft', G.box, mx(2.0, 1.45, 0.5, 0, 0, 0, 1.85, 0.14, 1.45), 0xff8a3d);
+    k.put('blink', G.dot, mx(2.0, 1.0, 1.17, 0, 0, 0, 0.1));
+    bake(u);
+    col(u, 0, 0, 1.3, 12.5); col(u, 2.0, 0.5, 1.0, 1.5);
+  }
+  function labelTex(text) {
+    return canvasTex(256, 64, function (ctx, w, h) {
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#1c3270'; ctx.fillRect(0, 0, w, h);
+      ctx.lineWidth = 5; ctx.strokeStyle = '#ffd23f'; ctx.strokeRect(3, 3, w - 6, h - 6);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff';
+      ctx.font = '700 40px "Exo 2", Lexend, "Trebuchet MS", sans-serif';
+      ctx.fillText(text, w / 2, h / 2 + 2);
+    });
+  }
+  // a school in a long hall with a round roof. The door, the sign and the flag are at the +x end.
+  function school(u) {
+    var k = u.kit, tex = labelTex('SCHOOL'), face;
+    k.put('soft', G.box, mx(0, 0.85, 0, 0, 0, 0, 8, 1.7, 4.2), 0xf4f5f9);
+    k.put('soft', G.cyl, mx(0, 1.7, 0, 0, 0, Math.PI / 2, 2.1, 8, 2.1), 0xf4f5f9);
+    k.put('soft', G.box, mx(0, 1.7, 0, 0, 0, 0, 8.1, 0.2, 4.3), 0xffd23f);
+    [-2.7, 0, 2.7].forEach(function (x) { k.put('soft', G.arch, mx(x, 1.7, 0, 0, Math.PI / 2, 0, 2.14), 0xffd23f); });
+    [-3, -1.5, 0, 1.5, 3].forEach(function (x) { [-1, 1].forEach(function (s) { k.put('win', G.dot, mx(x, 0.95, s * 2.11, 0, 0, 0, 0.42, 0.42, 0.08)); }); });
+    k.put('soft', G.box, mx(4.45, 1.05, 0, 0, 0, 0, 0.9, 2.1, 1.7), 0xc3c7d2);
+    k.put('soft', G.box, mx(4.5, 2.2, 0, 0, 0, 0, 1.2, 0.18, 2.0), 0xffd23f);
+    k.put('soft', G.box, mx(4.92, 0.95, 0, 0, 0, 0, 0.06, 1.7, 1.1), 0x2b3147);
+    k.put('green', G.box, mx(4.93, 2.0, 0, 0, 0, 0, 0.06, 0.14, 1.2));
+    k.put('soft', G.box, mx(4.05, 3.0, 0, 0, 0, 0, 0.1, 0.72, 2.7), 0xf2f3f7);
+    k.put('soft', G.cyl6, mx(5.0, 2.5, 2.6, 0, 0, 0, 0.06, 5, 0.06), 0xf2f3f7);                   // the flag
+    k.put('soft', G.box, mx(5.0, 4.5, 3.3, 0, 0, 0, 0.04, 0.8, 1.3), 0x3d7dff);
+    k.put('soft', G.box, mx(5.0, 4.5, 3.3, 0, 0, 0, 0.06, 0.26, 1.3), 0xffd23f);
+    k.put('win', G.dot, mx(5.0, 5.08, 2.6, 0, 0, 0, 0.1));
+    bake(u);
+    face = new T.Mesh(new T.PlaneGeometry(2.5, 0.6), new T.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.5 }));
+    face.position.set(4.11, 3.0, 0); face.rotation.y = Math.PI / 2; u.g.add(face);
+    fontsThen(tex);
+    [-2.3, -0.77, 0.77, 2.3].forEach(function (x) { col(u, x, 0, 2.2, 3.8); });
+    col(u, 4.55, 0, 0.85, 2.3); col(u, 5.0, 2.6, 0.2, 5);
+  }
+  // a farm: two long greenhouse tunnels side by side, with a hall and a water tank on the town side (-z)
+  function farm(u) {
+    var k = u.kit, L = 9;
+    k.put('soft', G.box, mx(0, 0.15, 0, 0, 0, 0, L + 0.5, 0.3, 7.7), 0xd7dae3);
+    [-1.9, 1.9].forEach(function (z, r) {
+      k.put('soft', G.box, mx(0, 0.52, z, 0, 0, 0, L - 0.8, 0.45, 2.0), 0xf4f5f9);
+      k.put('rough', G.box, mx(0, 0.77, z, 0, 0, 0, L - 1.0, 0.06, 1.8), 0x4a3324);
+      for (var i = 0; i < 9; i++) [-0.45, 0.45].forEach(function (o, c) {
+        k.put('soft', G.cone, mx((i - 4) * 0.9 + o * 0.3, 1.08, z + o, 0, i + r, 0, 0.24, 0.6, 0.24), (i + c + r) % 2 ? 0x2fa64a : 0x1f8a3a);
+      });
+      k.put('pink', G.box, mx(0, 1.72, z, 0, 0, 0, L - 0.6, 0.07, 0.12));
+      k.put('glass', G.tunnel, mx(0, 0.3, z, 0, 0, Math.PI / 2, 1.75, L, 1.75));
+      k.put('haze', G.tunnel, mx(0, 0.3, z, 0, 0, Math.PI / 2, 1.5, L - 0.4, 1.5));
+      [-L / 2, L / 2].forEach(function (x) {
+        k.put('soft', G.cyl, mx(x, 0.3, z, 0, 0, Math.PI / 2, 1.78, 0.12, 1.78), 0xf4f5f9);
+        k.put('pink', G.dot, mx(x * 1.014, 1.1, z, 0, 0, 0, 0.06, 0.4, 0.4));
+      });
+      [-3, -1.5, 0, 1.5, 3].forEach(function (x) { k.put('soft', G.arch, mx(x, 0.3, z, 0, Math.PI / 2, 0, 1.77), 0xf4f5f9); });
+      [-3.3, -1.1, 1.1, 3.3].forEach(function (x) { col(u, x, z, 2.0, 2.2); });
+    });
+    k.put('soft', G.box, mx(0, 1.05, -4.5, 0, 0, 0, 2.4, 2.1, 1.7), 0xc3c7d2);                   // the hall
+    k.put('soft', G.box, mx(0, 2.18, -4.5, 0, 0, 0, 2.6, 0.18, 1.9), 0xf4f5f9);
+    k.put('soft', G.box, mx(0, 0.95, -5.37, 0, 0, 0, 1.1, 1.7, 0.06), 0x2b3147);
+    k.put('pink', G.box, mx(0, 2.0, -5.38, 0, 0, 0, 1.2, 0.14, 0.06));
+    k.put('soft', G.cyl, mx(-3.4, 1.25, -4.6, 0, 0, 0, 0.8, 1.9, 0.8), 0xf4f5f9);                // water for the plants
+    k.put('soft', G.dome, mx(-3.4, 2.2, -4.6, 0, 0, 0, 0.8, 0.4, 0.8), 0xf4f5f9);
+    k.put('soft', G.band, mx(-3.4, 1.4, -4.6, Math.PI / 2, 0, 0, 0.82), 0x3d7dff);
+    bake(u);
+    col(u, 0, -4.6, 1.2, 2.3); col(u, -3.4, -4.6, 0.9, 2.6);
+  }
+  // one street lamp. yaw: which way its arm points
+  function lamp(k, x, z, yaw) {
+    k.base = mx(x, 0, z, 0, yaw, 0);
+    k.put('soft', G.cyl6, mx(0, 0.1, 0, 0, 0, 0, 0.16, 0.2, 0.16), 0x3a3e4c);
+    k.put('soft', G.cyl6, mx(0, 1.6, 0, 0, 0, 0, 0.055, 3.2, 0.055), 0x8a8fa0);
+    k.put('soft', G.box, mx(0, 3.2, 0.3, 0, 0, 0, 0.08, 0.08, 0.7), 0x8a8fa0);
+    k.put('win', G.dot, mx(0, 3.1, 0.6, 0, 0, 0, 0.2, 0.12, 0.2));
+    k.base = null;
+  }
+  // lit streets of packed soil and two parked crew rovers. The lamp posts are thin: you can walk past them.
+  function streets(u) {
+    var k = u.kit, h = Math.PI / 2;
+    function strip(ax, az, bx, bz, w) {
+      var dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz), n = Math.max(1, Math.round(len / 3)), i, t;
+      var ox = Math.cos(yaw) * (w / 2 - 0.12), oz = -Math.sin(yaw) * (w / 2 - 0.12);
+      k.put('rough', G.box, mx((ax + bx) / 2, 0.035, (az + bz) / 2, 0, yaw, 0, w, 0.07, len), M.road);
+      for (i = 0; i < n; i++) {
+        t = (i + 0.5) / n;
+        k.put('cyan', G.box, mx(ax + dx * t + ox, 0.075, az + dz * t + oz, 0, yaw, 0, 0.08, 0.03, 0.9));
+        k.put('cyan', G.box, mx(ax + dx * t - ox, 0.075, az + dz * t - oz, 0, yaw, 0, 0.08, 0.03, 0.9));
+      }
+    }
+    strip(-20.9, 8.4, 13.5, 8.4, 2.4);            // the main street, across the way in
+    strip(13.5, 8.8, 20.9, 8.8, 1.6);             // a footpath on to the school
+    strip(-19.7, 7.2, -19.7, -6.5, 2.4);          // past the new homes
+    strip(22.1, 9.6, 22.1, -8.5, 2.4);            // past the school
+    [[-16.8, 6.95, 0], [-11.5, 6.95, 0], [-6, 6.95, 0], [6.2, 6.95, 0], [12.6, 6.95, 0], [-14.5, 9.85, 2 * h], [9.5, 9.85, 2 * h], [17.2, 9.85, 2 * h],
+      [-18.25, 4, -h], [-18.25, -5.5, -h], [-21.15, 1.4, h], [-21.15, -5.9, h],
+      [20.65, 5.5, h], [20.65, -0.5, h], [20.65, -6.6, h], [23.55, 2.5, -h], [23.55, -7.5, -h]].forEach(function (l) { lamp(k, l[0], l[1], l[2]); });
+    parkRover(u, 26, -4.4, 0, 0x3d7dff);
+    parkRover(u, -22.5, -15.8, 0.5, 0xffd23f);
+    bake(u);
+  }
+
+  // ---------- stage 5: the first city ----------
+  // a tall ship with three decks: the first liner to the new city
+  function liner(u) {
+    var k = u.kit, r, i, a;
+    legs(k, 2.4, 1.5, 3.2, 2.4, 'soft', 0xb8bcc8);
+    k.put('metal', G.bell, mx(0, 1.35, 0, 0, 0, 0, 1.05, 1.3, 1.05), 0x3a3e4c);
+    k.put('soft', G.cyl, mx(0, 6.2, 0, 0, 0, 0, 1.7, 8.4, 1.7), 0xf4f5f9);
+    k.put('soft', G.cone, mx(0, 12.1, 0, 0, 0, 0, 1.7, 3.4, 1.7), 0xf4f5f9);
+    k.put('soft', G.cone, mx(0, 13.46, 0, 0, 0, 0, 0.42, 0.8, 0.42), 0xff8a3d);
+    k.put('soft', G.cyl, mx(0, 2.1, 0, 0, 0, 0, 1.75, 0.3, 1.75), 0x2b3147);
+    k.put('soft', G.cyl, mx(0, 9.2, 0, 0, 0, 0, 1.73, 0.35, 1.73), 0xff8a3d);
+    [3.1, 9.75].forEach(function (y) { k.put('soft', G.band, mx(0, y, 0, Math.PI / 2, 0, 0, 1.73), 0x3d7dff); });
+    for (i = 0; i < 4; i++) { a = Math.PI / 4 + i * Math.PI / 2; k.put('soft', G.box, mx(Math.sin(a) * 2.05, 3.6, Math.cos(a) * 2.05, 0, a, 0, 0.14, 2.6, 0.9), 0x3d7dff); }
+    for (r = 0; r < 3; r++) for (i = 0; i < 8; i++) {
+      a = (i + r * 0.5) * Math.PI / 4;
+      k.put('win', G.dot, mx(Math.sin(a) * 1.68, 5.2 + r * 1.3, Math.cos(a) * 1.68, 0, a, 0, 0.26, 0.3, 0.09));
+    }
+    k.put('win', G.box, mx(0, 11.2, 1.28, -0.4636, 0, 0, 1.0, 0.4, 0.08));                       // the pilots' window
+    k.put('soft', G.box, mx(0, 3.5, 1.72, 0, 0, 0, 0.95, 1.5, 0.1), 0x2b3147);
+    k.put('soft', G.box, mx(0, 1.35, 2.3, -0.338, 0, 0, 0.8, 2.86, 0.08), 0x8a8fa0);
+    k.put('blink2', G.dot, mx(0, 13.95, 0, 0, 0, 0, 0.12));
+    bake(u); flame(u, 0.7, 1.05, 6);
+    col(u, 0, 0, 3.2, 13);
+  }
+  // the launch tower beside the pad: a frame of struts, a covered bridge to the ship (+z) and a control hut
+  function gantry(u) {
+    var k = u.kit, H = 14, bay = H / 6, tilt = Math.atan2(1.5, bay), len = Math.hypot(1.5, bay), i, y, s;
+    k.put('soft', G.box, mx(0, 0.2, 0, 0, 0, 0, 2.4, 0.4, 2.4), 0x4a4f63);
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (c) { k.put('soft', G.box, mx(c[0] * 0.75, 0.4 + H / 2, c[1] * 0.75, 0, 0, 0, 0.16, H, 0.16), 0xff8a3d); });
+    for (i = 0; i <= 6; i++) k.put('soft', G.box, mx(0, 0.4 + i * bay, 0, 0, 0, 0, 1.75, 0.1, 1.75), 0xdfe2ea);
+    for (i = 0; i < 6; i++) {
+      y = 0.4 + (i + 0.5) * bay; s = i % 2 ? 1 : -1;
+      k.put('soft', G.box, mx(0, y, 0.75, 0, 0, s * tilt, 0.08, len, 0.08), 0xf4f5f9); k.put('soft', G.box, mx(0, y, -0.75, 0, 0, -s * tilt, 0.08, len, 0.08), 0xf4f5f9);
+      k.put('soft', G.box, mx(0.75, y, 0, s * tilt, 0, 0, 0.08, len, 0.08), 0xf4f5f9); k.put('soft', G.box, mx(-0.75, y, 0, -s * tilt, 0, 0, 0.08, len, 0.08), 0xf4f5f9);
+    }
+    k.put('soft', G.box, mx(0, 8.25, 2.18, 0, 0, 0, 0.9, 1.5, 2.85), 0xf4f5f9);                  // the bridge
+    k.put('soft', G.box, mx(0, 8.25, 3.52, 0, 0, 0, 1.1, 1.7, 0.18), 0xff8a3d);
+    [-1, 1].forEach(function (e) { k.put('win', G.box, mx(e * 0.46, 8.4, 2.18, 0, 0, 0, 0.04, 0.5, 2.2)); });
+    k.put('soft', G.cyl6, mx(0, 15.6, 0, 0, 0, 0, 0.05, 2.4, 0.05), 0xdfe2ea);
+    k.put('blink', G.dot, mx(0, 16.9, 0, 0, 0, 0, 0.16));
+    [-0.6, 0.6].forEach(function (x) { k.put('win', G.dot, mx(x, 14.25, 0.9, 0, 0, 0, 0.2)); });           // floodlights
+    k.put('soft', G.box, mx(-2.5, 0.8, 0, 0, 0, 0, 2.2, 1.6, 1.7), 0xc3c7d2);                    // the control hut
+    k.put('soft', G.box, mx(-2.5, 1.68, 0, 0, 0, 0, 2.4, 0.16, 1.9), 0x3d7dff);
+    k.put('win', G.box, mx(-2.5, 1.05, 0.86, 0, 0, 0, 1.4, 0.4, 0.05));
+    bake(u);
+    col(u, 0, 0, 1.3, 14.5); col(u, -2.5, 0, 1.25, 1.8);
+  }
+  // the landmark: a park with trees and a pond under a clear dome. The door is at +z.
+  function biodome(u) {
+    var k = u.kit, R = 6.2, greens = [0x2fa64a, 0x4fd15a, 0x3bb85a], i, a;
+    function tree(x, z, h, n) {
+      k.put('soft', G.cyl8, mx(x, 0.45 + h * 0.2, z, 0, 0, 0, 0.11, h * 0.4, 0.11), 0x7a5230);
+      k.put('rough', G.lump, mx(x, 0.45 + h * 0.6, z, 0, n, 0, h * 0.27, h * 0.34, h * 0.27), greens[n % 3]);
+      k.put('rough', G.lump, mx(x + 0.1, 0.45 + h * 0.88, z - 0.08, 0, n * 2, 0, h * 0.19, h * 0.22, h * 0.19), greens[(n + 1) % 3]);
+    }
+    k.put('soft', G.disc, mx(0, 0.18, 0, 0, 0, 0, R + 0.3, 0.36, R + 0.3), 0xd7dae3);
+    k.put('soft', G.disc, mx(0, 0.4, 0, 0, 0, 0, R - 0.25, 0.1, R - 0.25), 0x5fbf5a);              // grass
+    k.put('soft', G.disc, mx(0, 0.42, 0, 0, 0, 0, 4.3, 0.1, 4.3), 0xe6ddc8);                     // a sandy path in a ring
+    k.put('soft', G.disc, mx(0, 0.44, 0, 0, 0, 0, 3.4, 0.1, 3.4), 0x6fcf62);
+    k.put('water', G.cyl, mx(0.5, 0.47, -0.3, 0, 0.4, 0, 2.1, 0.08, 1.45));                      // the pond
+    [50, 95, 140, 185, 230, 275, 318].forEach(function (d, n) { a = d * Math.PI / 180; tree(Math.sin(a) * 4.75, Math.cos(a) * 4.75, 2.6 + (n % 3) * 0.15, n); });
+    tree(-2.3, 1.2, 4.4, 7); tree(2.7, 1.6, 4.0, 8); tree(-0.9, -2.9, 3.6, 9);
+    [[2.2, -2.3, 0.9], [-1.6, -1.6, -0.8]].forEach(function (b) { k.put('soft', G.box, mx(b[0], 0.69, b[1], 0, b[2], 0, 1.2, 0.4, 0.42), 0xf4f5f9); });     // benches
+    [22, 72, 162, 252].forEach(function (d) {
+      a = d * Math.PI / 180;
+      k.put('soft', G.cyl6, mx(Math.sin(a) * 4.5, 1.35, Math.cos(a) * 4.5, 0, 0, 0, 0.05, 1.8, 0.05), 0x8a8fa0);
+      k.put('win', G.dot, mx(Math.sin(a) * 4.5, 2.3, Math.cos(a) * 4.5, 0, 0, 0, 0.17));
+    });
+    k.put('ice', G.dome, mx(0, 0.36, 0, 0, 0, 0, R));
+    for (i = 0; i < 4; i++) k.put('soft', G.rib, mx(0, 0.36, 0, 0, i * Math.PI / 4, 0, R + 0.02), 0xf4f5f9);
+    k.put('soft', G.hoop, mx(0, 0.36 + R * 0.574, 0, Math.PI / 2, 0, 0, R * 0.819 + 0.02), 0xf4f5f9);
+    k.put('soft', G.hoop, mx(0, 0.42, 0, Math.PI / 2, 0, 0, R, R, R * 1.4), 0xf4f5f9);
+    k.put('soft', G.cyl, mx(0, 0.36 + R, 0, 0, 0, 0, 0.5, 0.14, 0.5), 0xf4f5f9);
+    k.put('win', G.dot, mx(0, 0.36 + R + 0.2, 0, 0, 0, 0, 0.16));
+    k.put('soft', G.box, mx(0, 1.15, R + 0.1, 0, 0, 0, 1.9, 2.3, 1.0), 0xc3c7d2);                 // the door
+    k.put('soft', G.box, mx(0, 2.4, R + 0.1, 0, 0, 0, 2.1, 0.2, 1.2), 0x3d7dff);
+    k.put('soft', G.box, mx(0, 1.0, R + 0.62, 0, 0, 0, 1.1, 1.8, 0.06), 0x2b3147);
+    k.put('win', G.box, mx(0, 2.1, R + 0.63, 0, 0, 0, 1.2, 0.14, 0.06));
+    bake(u);
+    col(u, 0, 0, R + 0.25, 6.6); col(u, 0, R + 0.15, 0.95, 2.5);
+  }
+  // a tower of homes, four floors of lit windows
+  function tower(u) {
+    var k = u.kit, f, i, a, y;
+    k.put('soft', G.cyl, mx(0, 0.2, 0, 0, 0, 0, 2.9, 0.4, 2.9), 0xd7dae3);
+    k.put('soft', G.cyl, mx(0, 5.4, 0, 0, 0, 0, 2.6, 10, 2.6), 0xf4f5f9);
+    k.put('soft', G.dome, mx(0, 10.4, 0, 0, 0, 0, 2.6, 1.4, 2.6), 0xf4f5f9);
+    for (f = 0; f < 4; f++) {
+      k.put('soft', G.band, mx(0, 2.9 + f * 2.5, 0, Math.PI / 2, 0, 0, 2.63), f === 3 ? 0xff8a3d : 0x3d7dff);
+      for (i = 0; i < 9; i++) {
+        if (f === 0 && i === 0) continue;                           // the door is here
+        a = (i + f * 0.5) * Math.PI * 2 / 9; y = 1.85 + f * 2.5;
+        if ((i * 7 + f * 3) % 5 === 0) k.put('soft', G.dot, mx(Math.sin(a) * 2.56, y, Math.cos(a) * 2.56, 0, a, 0, 0.32, 0.48, 0.09), 0x2b3147);      // nobody home
+        else k.put('win', G.dot, mx(Math.sin(a) * 2.57, y, Math.cos(a) * 2.57, 0, a, 0, 0.32, 0.48, 0.1));
+      }
+    }
+    for (i = 1; i < 12; i++) {                                      // a bank of soil bags around the bottom
+      a = i * Math.PI / 6;
+      k.put('rough', G.lump, mx(Math.sin(a) * 2.7, 0.5, Math.cos(a) * 2.7, Math.PI / 2 - 0.35, a, 0, 0.78, 0.42, 0.7), i % 2 ? M.soil : M.soil2);
+    }
+    k.put('win', G.cyl, mx(0, 11.82, 0, 0, 0, 0, 0.8, 0.06, 0.8));
+    k.put('soft', G.cyl6, mx(0, 12.9, 0, 0, 0, 0, 0.06, 2.2, 0.06), 0xdfe2ea);
+    k.put('blink', G.dot, mx(0, 14.05, 0, 0, 0, 0, 0.15));
+    k.put('soft', G.box, mx(0, 1.15, 2.9, 0, 0, 0, 1.7, 2.3, 1.4), 0xc3c7d2);
+    k.put('soft', G.box, mx(0, 2.35, 2.9, 0, 0, 0, 1.9, 0.2, 1.6), 0x3d7dff);
+    k.put('soft', G.box, mx(0, 0.95, 3.62, 0, 0, 0, 1.1, 1.7, 0.06), 0x2b3147);
+    k.put('win', G.box, mx(0, 2.0, 3.63, 0, 0, 0, 1.2, 0.14, 0.06));
+    bake(u);
+    col(u, 0, 0, 3.1, 11.8); col(u, 0, 3.0, 0.9, 2.5);
+  }
+  // the ring road around the whole city, with a little tram and three stops
+  var RING = 33.4, STOPS = [84, 266, 347.5].map(function (d) { return d * Math.PI / 180; });
+  function tramCar(k, a) {
+    k.base = mx(Math.sin(a) * RING, 0, Math.cos(a) * RING, 0, a, 0);
+    k.put('soft', G.box, mx(0, 0.27, 0, 0, 0, 0, 3.3, 0.38, 1.3), 0x2b3147);
+    k.put('soft', G.box, mx(0, 1.25, 0, 0, 0, 0, 3.4, 1.5, 1.5), 0xf4f5f9);
+    k.put('soft', G.cyl, mx(0, 2.0, 0, 0, 0, Math.PI / 2, 0.75, 3.4, 0.75), 0xf4f5f9);
+    k.put('soft', G.box, mx(0, 0.72, 0, 0, 0, 0, 3.43, 0.24, 1.53), 0xff8a3d);
+    [-1.1, 0, 1.1].forEach(function (x) { [-1, 1].forEach(function (s) { k.put('win', G.box, mx(x, 1.5, s * 0.76, 0, 0, 0, 0.8, 0.62, 0.04)); }); });
+    [-1, 1].forEach(function (s) { k.put('win', G.box, mx(s * 1.71, 1.5, 0, 0, 0, 0, 0.04, 0.62, 1.0)); });
+    k.base = null;
+  }
+  function tramStop(u, a) {
+    var k = u.kit, r = RING - 2.15;
+    k.base = mx(Math.sin(a) * r, 0, Math.cos(a) * r, 0, a, 0);
+    k.put('soft', G.box, mx(0, 0.08, 0, 0, 0, 0, 3.0, 0.16, 1.3), 0xd7dae3);
+    [-1.25, 1.25].forEach(function (x) { k.put('soft', G.cyl6, mx(x, 1.2, -0.45, 0, 0, 0, 0.06, 2.3, 0.06), 0x8a8fa0); });
+    k.put('soft', G.box, mx(0, 2.38, -0.1, 0, 0, 0, 3.0, 0.1, 1.4), 0xff8a3d);
+    k.put('soft', G.box, mx(0, 0.36, -0.42, 0, 0, 0, 1.6, 0.4, 0.4), 0xf4f5f9);                  // a bench
+    k.put('cyan', G.box, mx(0, 2.3, 0.5, 0, 0, 0, 2.6, 0.05, 0.1));
+    k.base = null;
+    [-1.25, 1.25].forEach(function (x) { col(u, Math.sin(a) * (r - 0.45) + Math.cos(a) * x, Math.cos(a) * (r - 0.45) - Math.sin(a) * x, 0.25, 2.4); });
+  }
+  function ringRoad(u) {
+    var k = u.kit, n = 52, i, a, d = 1.9 / RING, tg, tk, c1, c2;
+    k.put('rough', new T.RingGeometry(32, 34.8, 80, 1), mx(0, 0.06, 0, -Math.PI / 2, 0, 0), M.road);
+    k.put('soft', new T.RingGeometry(RING - 0.09, RING + 0.09, 80, 1), mx(0, 0.075, 0, -Math.PI / 2, 0, 0), 0xb8bcc8);      // the tram's guide rail
+    for (i = 0; i < n; i++) {
+      a = i / n * Math.PI * 2;
+      k.put('cyan', G.box, mx(Math.sin(a) * 32.12, 0.08, Math.cos(a) * 32.12, 0, a, 0, 0.9, 0.04, 0.1));
+      k.put('cyan', G.box, mx(Math.sin(a) * 34.68, 0.08, Math.cos(a) * 34.68, 0, a, 0, 0.9, 0.04, 0.1));
+    }
+    STOPS.forEach(function (s) { tramStop(u, s); });
+    bake(u);
+    // the tram: two cars baked around the middle of the ring, so turning the group drives it along the road
+    tg = new T.Group(); tk = new Kit();
+    tramCar(tk, d); tramCar(tk, -d);
+    tk.put('soft', G.box, mx(0, 0.7, RING, 0, 0, 0, 0.6, 0.3, 0.5), 0x2b3147);
+    tk.put('win', G.dot, mx(Math.sin(d * 1.93) * RING, 0.95, Math.cos(d * 1.93) * RING, 0, 0, 0, 0.17));
+    tk.bake(tg); u.g.add(tg);
+    c1 = col(u, 0, RING, 1.25, 2.8); c2 = col(u, 0, RING, 1.25, 2.8);
+    tram = { u: u, g: tg, a: STOPS[0] - 0.7, next: 0, wait: 0, gone: 99, d: d, cols: [c1, c2] };
+    stepTram(0);
+  }
+  // the tram rolls from stop to stop, waits a moment at each, and its two colliders ride along with it
+  function stepTram(dt) {
+    var t = tram, full = Math.PI * 2, i, a, x, z, left, go;
+    if (!t) return;
+    if (t.wait > 0) t.wait -= dt;
+    else {
+      left = ((STOPS[t.next] - t.a) % full + full) % full * RING;
+      go = 2.6 * clamp(Math.min(left, t.gone) / 4 + 0.1, 0.1, 1) * dt;
+      if (go >= left) { t.a = STOPS[t.next]; t.next = (t.next + 1) % STOPS.length; t.wait = 3.5; t.gone = 0; }
+      else { t.a += go / RING; t.gone += go; }
+    }
+    t.g.rotation.y = t.a;
+    for (i = 0; i < 2; i++) {
+      a = t.a + (i ? -t.d : t.d); x = Math.sin(a) * RING; z = Math.cos(a) * RING;
+      t.cols[i].x = wx(x, z); t.cols[i].z = wz(x, z);
+    }
+  }
+  // the town square: a little rocket to remember the first ship, and flags all around
+  function square(u) {
+    var k = u.kit, i, a, x, z;
+    k.put('soft', G.disc, mx(0, 0.04, 0, 0, 0, 0, 4.5, 0.08, 4.5), 0xcfc8ba);
+    k.put('soft', G.ring, mx(0, 0.085, 0, Math.PI / 2, 0, 0, 3.0, 3.0, 0.4), 0x3d7dff);
+    k.put('soft', G.cyl, mx(0, 0.33, 0, 0, 0, 0, 1.05, 0.5, 1.05), 0xd7dae3);
+    k.put('soft', G.cyl, mx(0, 0.83, 0, 0, 0, 0, 0.75, 0.5, 0.75), 0xf4f5f9);
+    k.put('soft', G.band, mx(0, 1.08, 0, Math.PI / 2, 0, 0, 0.76), 0x3d7dff);
+    k.put('soft', G.cyl8, mx(0, 2.1, 0, 0, 0, 0, 0.3, 1.5, 0.3), 0xffc533);                        // the rocket, in bright paint
+    k.put('soft', G.cone, mx(0, 3.25, 0, 0, 0, 0, 0.3, 0.8, 0.3), 0xff8a3d);
+    for (i = 0; i < 3; i++) { a = i * Math.PI * 2 / 3; k.put('soft', G.box, mx(Math.sin(a) * 0.4, 1.5, Math.cos(a) * 0.4, -0.25, a, 0, 0.07, 0.75, 0.45), 0x3d7dff); }
+    k.put('soft', G.band, mx(0, 2.3, 0, 1.15, 0.5, 0, 0.95), 0xffd23f);
+    for (i = 0; i < 6; i++) {
+      a = (i + 0.5) * Math.PI / 3; x = Math.sin(a) * 3.9; z = Math.cos(a) * 3.9;
+      k.put('soft', G.cyl6, mx(x, 2.2, z, 0, 0, 0, 0.05, 4.4, 0.05), 0xf2f3f7);
+      k.put('soft', G.box, mx(x + 0.6, 3.95, z, 0, 0, 0, 1.1, 0.7, 0.04), COLORS[i]);
+      k.put('soft', G.box, mx(x + 0.6, 3.95, z, 0, 0, 0, 1.1, 0.22, 0.06), 0xf2f3f7);
+      k.put('win', G.dot, mx(x, 4.46, z, 0, 0, 0, 0.09));
+      col(u, x, z, 0.2, 4.4);
+      k.put('win', G.dot, mx(Math.sin(a) * 1.5, 0.14, Math.cos(a) * 1.5, 0, 0, 0, 0.1));       // little lights around the rocket
+    }
+    for (i = 0; i < 3; i++) {                                       // benches
+      a = i * Math.PI * 2 / 3;
+      k.put('soft', G.box, mx(Math.sin(a) * 3.2, 0.28, Math.cos(a) * 3.2, 0, a, 0, 1.3, 0.4, 0.45), 0xf4f5f9);
+      col(u, Math.sin(a) * 3.2, Math.cos(a) * 3.2, 0.5, 0.5);
+    }
+    bake(u);
+    col(u, 0, 0, 1.15, 3.6);
+  }
+  // more solar panels in an arc behind the town, and the box that stores their power
+  function sunArc(u) {
+    var k = u.kit, list = [], i, a;
+    for (i = 0; i < 6; i++) { a = (163 + i * 7) * Math.PI / 180; list.push([Math.sin(a) * 29.6, Math.cos(a) * 29.6]); }
+    panelField(u, list);
+    k.put('soft', G.box, mx(-11.5, 0.7, -27.2, 0, 0.4, 0, 1.8, 1.4, 1.1), 0xc3c7d2);
+    k.put('soft', G.box, mx(-11.5, 1.45, -27.2, 0, 0.4, 0, 1.95, 0.12, 1.25), 0xff8a3d);
+    k.put('green', G.box, mx(-11.28, 0.95, -26.69, 0, 0.4, 0, 1.0, 0.12, 0.05));
+    bake(u);
+    col(u, -11.5, -27.2, 1.05, 1.5);
   }
 
   // ---------- settlers ----------
@@ -474,6 +934,25 @@
     3: [[[4.7, -3.5], [3.6, 0.5], [4.7, 4.5]], [[0.8, 3.2], [-6, 6.6], [-15, 7.3]], [[0.2, -12.6], [-4.2, -11.0], [-7.6, -12.0]], [[-1.6, 4.8], [-1.0, -1.2]],
       [[13.2, -4.6], [13.2, 7.6]], [[10.3, -10.2], [12.6, -9.0], [17.6, -9.6]], [[-8.0, 6.5], [-4.5, 5.0], [-1.2, 3.4]], [[-1.2, 7.0], [-1.0, 18.5]]]
   };
+  // part of a circle, as a path (angles in degrees, from +z round to +x)
+  function arc(cx, cz, r, d0, d1, n) {
+    var out = [], i, a;
+    for (i = 0; i <= n; i++) { a = (d0 + (d1 - d0) * i / n) * Math.PI / 180; out.push([cx + Math.sin(a) * r, cz + Math.cos(a) * r]); }
+    return out;
+  }
+  function raised(route, y) { route.y = y; return route; }      // a path on a floor above the ground
+  // stage 4, 14 people: along the new streets and between the new doors
+  ROUTES[4] = ROUTES[3].concat([
+    [[-18.5, 8.4], [-5.5, 8.4]], [[4.5, 8.4], [13.5, 8.6], [16.2, 11.4]], [[-19.7, 6.5], [-19.7, -6]],
+    [[-21.7, 5.2], [-20.3, 1.4], [-22.2, -2.3]], [[22.1, 8.6], [22.1, 2], [22.1, -7.5]], [[-3.6, -18.6], [1.8, -20.6], [5.3, -20.3]]
+  ]);
+  // stage 5, 24 people: in the park under the dome, on the square, at the spaceport, along the ring road, at a tram stop
+  ROUTES[5] = ROUTES[4].concat([
+    raised(arc(-18, 17.8, 3.85, 10, 115, 5), 0.49), raised(arc(-18, 17.8, 3.85, 130, 235, 5), 0.49), raised(arc(-18, 17.8, 3.85, 250, 350, 5), 0.49),
+    arc(-8.5, 25.5, 2.3, -150, 25, 5), [[-3.6, 30.3], [-3.5, 24], [-3.6, 17.5]],
+    [[10.9, -18.6], [8.2, -18.2], [5.6, -20.4]], [[22.8, -10.6], [22.1, -7.5], [22.1, -1]],
+    arc(0, 0, 31.3, 14, 36, 4), arc(0, 0, 31.2, -88, -66, 4), raised([[31.15, 4.6], [31.4, 2.2]], 0.16)
+  ]);
   var mB = new T.Matrix4(), mL = new T.Matrix4(), mO = new T.Matrix4(), UP = new T.Vector3(0, 1, 0);
   function settlerGeos() {
     var body = merge([
@@ -484,10 +963,10 @@
     ], true);
     var helmet = new T.SphereGeometry(0.44, 16, 12); helmet.translate(0, 1.78, 0);
     var visor = new T.SphereGeometry(0.37, 16, 12); visor.scale(1, 0.78, 0.92); visor.translate(0, 1.76, 0.2);
-    var limb = new T.CapsuleGeometry(0.125, 0.34, 4, 8); limb.translate(0, -0.3, 0);
+    var limb = new T.CapsuleGeometry(0.125, 0.34, 3, 6); limb.translate(0, -0.3, 0);      // thin, and there are four for each of up to 24 people: keep them cheap
     return { body: body, helmet: helmet, visor: visor, limb: limb };
   }
-  // n instanced figures (the colony uses 8, the future vision a crowd)
+  // n instanced figures (the colony uses up to 24, the future vision a crowd)
   function makeCrowd(parent, n, geos) {
     function im(geo, m, count) { var x = new T.InstancedMesh(geo, m, count); x.castShadow = true; x.receiveShadow = true; x.frustumCulled = false; x.count = 0; parent.add(x); return x; }
     var c = { n: n, body: im(geos.body, M.soft, n), helmet: im(geos.helmet, M.helmet, n), visor: im(geos.visor, M.visor, n), limbs: im(geos.limb, M.white, n * 4), people: [] };
@@ -522,7 +1001,7 @@
     if (!men) return;
     var list = ROUTES[n] || [], old = men.people;
     men.people = list.map(function (r, k) {
-      var p = person(r, k, 0);
+      var p = person(r, k, r.y || 0);
       p.appear = instant || k < old.length ? 1 : 0;
       p.delay = instant ? 0 : (k - old.length) * 0.35;
       return p;
@@ -665,6 +1144,7 @@
     var a = arr; arr = null;
     units.forEach(function (u) { if (u.stage === a.n) show(u, true); });
     if (!a.men) placeMen(a.n, true);
+    setPop(a.n);
     fx.beacon.visible = false; fx.glow.visible = false; fx.glow.material.opacity = 0;
   }
 
@@ -672,7 +1152,7 @@
   function buildAll(rootGroup, siteId) {
     if (vis) endVision(true);
     site = siteId === 'moon' ? 'moon' : 'mars';
-    units = []; stageNow = 0; arr = null; men = null; panels = null; tm = 0;
+    units = []; stageNow = 0; arr = null; men = null; fields = []; tram = null; signT = null; popNow = K.people(3); tm = 0;
     G = makeGeos(); M = makeMats();
     var L = (Tn.L && Tn.L.colony) || [40, -62];
     CX = L[0]; CZ = L[1]; h0 = Tn.height(CX, CZ);
@@ -698,6 +1178,24 @@
     solarFarm(unit(3, 0, 0, 0, 0.9));
     plaza(unit(3, 0, 1.5, 0, 1.15));
     sign(unit(3, 5.2, 15.5, 0, 1.4));
+    // stage 4: a growing town, in a ring around the first one
+    p = unit(4, -16, -21.5, 0); pad(p, 4.3); p.pre = true;
+    ferry(unit(4, -16, -21.5, 0.64));
+    homes(unit(4, -26.1, -2.3, 0, 0));
+    streets(unit(4, 0, 0, 0, 0.35));
+    tankFarm(unit(4, -6, -24.2, 0.243, 0.7));
+    farm(unit(4, 21.5, 15.5, 0.945, 1.05));
+    school(unit(4, 27.6, 2.5, -Math.PI / 2, 1.4));
+    mast(unit(4, 3.5, -23.5, -0.148, 1.75));
+    // stage 5: the first city, out to the ring road
+    p = unit(5, 13.3, -23, 0); pad(p, 4.6); p.pre = true;
+    liner(unit(5, 13.3, -23, -0.524));
+    gantry(unit(5, 18.06, -20.25, -2.095, 0));
+    ringRoad(unit(5, 0, 0, 0, 0.4));
+    biodome(unit(5, -18, 17.8, -2.937, 0.8));
+    tower(unit(5, 26.6, -10.6, -Math.PI / 2, 1.2));
+    square(unit(5, -8.5, 25.5, 0, 1.5));
+    sunArc(unit(5, 0, 0, 0, 1.8));
     units.forEach(function (u) { u.home = u.g.position.clone(); });
     aimPanels(true);
     // effects shared by every arrival
@@ -709,7 +1207,7 @@
     fx.glow.rotation.x = -Math.PI / 2; fx.glow.visible = false; fx.glow.renderOrder = 4;
     grp.add(fx.beacon); grp.add(fx.glow);
     var sg = settlerGeos();
-    men = makeCrowd(grp, 8, sg); men.geos = sg;
+    men = makeCrowd(grp, ROUTES[LAST].length, sg); men.geos = sg;
     placeMen(0, true);
   }
 
@@ -721,13 +1219,23 @@
     M.win.emissiveIntensity = 1.45 + Math.sin(tm * 0.7) * 0.08;
   }
 
+  // the welcome sign counts the people
+  function setPop(n) {
+    var p = K.people(Math.max(3, n));
+    if (p === popNow) return;
+    popNow = p;
+    if (signT && signT.userData.redraw) signT.userData.redraw();
+  }
+  var WORDS = { 4: 'Four', 12: 'Twelve', 30: 'Thirty', 80: 'Eighty' };
+  function howMany(n) { var p = K.people(n); return WORDS[p] || String(p); }
+
   K.build = function (rootGroup, siteId) {
     try { buildAll(rootGroup, siteId); } catch (e) { warn(e); grp = null; }
   };
   K.setStage = function (n, opts) {
     if (!grp) return;
     try {
-      n = clamp(Math.round(+n || 0), 0, 3);
+      n = clamp(Math.round(+n || 0), 0, LAST);
       if (arr) finishArrival();
       var animate = !!(opts && opts.arrive) && n > 0 && n > stageNow;
       units.forEach(function (u) { show(u, u.stage < n || (u.stage === n && !animate)); });
@@ -738,9 +1246,18 @@
         startArrival(n);
       } else placeMen(n, true);
       if (n >= 3) aimPanels(true);
+      setPop(animate ? n - 1 : n);                     // the newcomers are counted once their ship has landed
     } catch (e) { warn(e); }
   };
   K.stage = function () { return stageNow; };
+  // how many people the story gives stage n (the stage now if n is left out): 0, 0, 4, 12, 30, 80
+  K.people = function (n) {
+    try {
+      var list = (JA.RULES && JA.RULES.townPeople) || PEOPLE;
+      n = clamp(Math.round(n == null ? stageNow : +n || 0), 0, LAST);
+      return list[n] != null ? list[n] : PEOPLE[n];
+    } catch (e) { warn(e); return 0; }
+  };
   K.update = function (dt, ctx) {
     if (!grp) return;
     try {
@@ -748,6 +1265,7 @@
       tm += dt;
       if (vis) { vis.last = Date.now(); stepVision(dt); }
       if (arr) stepArrival(dt, ctx);
+      if (tram && tram.u.g.visible) stepTram(dt);
       animLights();
       if (stageNow >= 3 || vis) aimPanels(false);
       if (men) stepMen(dt, vis ? {} : ctx);
@@ -775,6 +1293,12 @@
         (moon ? 'Its solar panels stand up tall, because near the south pole the Sun always stays low in the sky. '
           : 'Mars gets less than half the sunlight that Earth does, so the town needs a big solar farm. ') +
         'A hard landing pad stops rocket blasts from spraying dust and stones at the houses.' };
+    if (n === 4) return { icon: '🏫', title: name + ' is growing!',
+      text: howMany(4) + ' people live in ' + name + ' now. A big ferry brought whole families, so the town built more homes, a school, a farm of greenhouse tunnels and tall tanks of water and oxygen. ' +
+        'This town is imagined, but the idea is real: on the Space Station, about 98 of every 100 drops of water are cleaned and used again.' };
+    if (n === 5) return { icon: '🌆', title: 'The first city on ' + (moon ? 'the Moon' : 'Mars') + '!',
+      text: howMany(5) + ' people call ' + name + ' home now. A little tram circles the ring road, a spaceport welcomes big ships, and trees grow around a pond under a clear dome. ' +
+        'It is an imagined future built on real ideas: NASA\'s Ice Home design' + (moon ? ', first drawn for Mars,' : ' for Mars') + ' has walls of water ice that let sunlight in and keep space radiation out.' };
     return null;
   };
 
@@ -873,18 +1397,19 @@
     Z.C = P(CX, CZ); Z.ice = P(L.ice[0], L.ice[1]); Z.R = R;
     Z.plant = P(Z.ice.x - 0.6 * (R + 12), Z.ice.z - 0.8 * (R + 12));
     Z.plantFront = toward(Z.plant, Z.C, 9);
-    Z.react = P(128, -95); Z.farm = P(10, -100); Z.port = P(128, 26);
+    Z.react = P(128, -95); Z.farm = P(-4, -108); Z.port = P(128, 26);
     Z.city = moon ? P(-45, -105) : P(-62, -100); Z.cityR = moon ? 26 : 28;
+    // the roads start at the city's ring road (35 m out), and everything new stands outside it
     Z.roads = {
-      a: [P(-4, -13), P(1, -34), P(14, -40), cw(0, 28), cw(0, 21)],
-      b: [cw(22, -9), Z.plantFront],
-      c: [cw(-21, -10), P(12, -80)],
-      d: [cw(24, 2), P(80, -12), P(102, 10), P(112, 26)],
-      f: [cw(-24, 4), P(-10, -84), toward(Z.city, P(-10, -84), Z.cityR + 2)]
+      a: [P(-4, -13), P(1, -34), cw(-8, 38), cw(0, 35.4), cw(0, 23)],
+      b: [cw(33.9, -9), cw(36, -12), Z.plantFront],
+      c: [toward(Z.C, P(7, -89.5), 35.2), P(7, -89.5), P(-9, -89.5)],
+      d: [toward(Z.C, P(80, -12), 35.2), P(80, -12), P(102, 10), P(112, 26)],
+      f: [toward(Z.C, P(-10, -84), 35.2), P(-10, -84), toward(Z.city, P(-10, -84), Z.cityR + 2)]
     };
-    Z.mods = [[16, -52, 0.9], [58, -30, 0.2], [74, -48, 1.2], [44, -96, 0.1]];
-    Z.towers2 = [[6, -54, 2.8, 16], [54, -84, 3, 20], [24, -96, 2.8, 18], [30, -30, 2.5, 14]];
-    Z.domes2 = [[-26, -46, 8], [64, -92, 9], [62, 18, 8], [-56, 8, 9], [32, -104, 8], [110, 55, 9]];
+    Z.mods = [[-0.6, -69.2, 0.9], [58.3, -24, 0.2], [74, -42.5, 1.2], [47, -104, 0.1]];
+    Z.towers2 = [[-0.4, -54.8, 2.8, 16], [56.7, -98.9, 3, 20], [19.9, -98.2, 2.8, 18], [30.9, -22.1, 2.5, 14]];
+    Z.domes2 = [[-26, -46, 8], [72, -93, 9], [62, 18, 8], [-56, 8, 9], [31.7, -105.5, 8], [110, 55, 9]];
     Z.domes3 = [[-82, -22, 6], [-98, 12, 6], [-70, 62, 6], [-10, 72, 6], [40, 85, 6], [150, -20, 7], [155, 60, 6], [100, -130, 6], [-110, -60, 6], [-120, -100, 6]];
     Z.pads2 = [P(112, 26), P(128, 42), P(144, 26)]; Z.pads3 = [P(96, 44), P(160, 44)];
     return Z;
@@ -1336,7 +1861,7 @@
     vis = { t: 0, done: done, prev: stageNow, trash: [], insts: [], groups: [], roads: [], rovers: [], ships: [], people: [], ei: 0, last: Date.now(),
       env: { t: W.env.t, dust: W.env.dust, storm: W.env.storm }, fadeOn: !!(fadeEl && fadeEl.classList.contains('on')),
       eraT: { 0: 0, 1: VT.e1 + 0.2, 2: VT.e2 + 0.2, 3: VT.e3 + 0.2 } };
-    K.setStage(3);
+    K.setStage(LAST);                                  // the film starts from the full city, so the future is bigger than anything built in the game
     vis.root = new T.Group(); vis.root.name = 'colony-vision'; W.root.add(vis.root);
     visionStuff();
     var Z = vis.Z = layout();

@@ -56,7 +56,7 @@ function whys(ev) { return ev.filter(function (e) { return e.type === 'why'; }).
   var s = game('mars', 'commander', 7); quiet(s);
   s.m.food.lamp = 2; s.water = 100;
   ok('plant() uses the seeds in your pocket', sim.plant(s, 0) === 'lettuce' && s.m.food.beds[0].crop === 'lettuce');
-  ok('and switches when a crop is named', sim.plant(s, 1, 'potato') === 'potato' && s.seed === 'potato');
+  ok('and switches when a crop is named', sim.plant(s, 1, 'potato') === 'potato' && s.sow === 'potato' && typeof s.seed === 'number');
   run(s, 300 * 0.82);
   ok('lettuce is ripe in under a day, potatoes are not', s.m.food.beds[0].state === 'ripe' && s.m.food.beds[1].state === 'growing', s.m.food.beds[1].g.toFixed(2));
   var kind = sim.harvest(s, 0), f0 = s.food, r = sim.storeCrate(s, kind);
@@ -183,6 +183,76 @@ function whys(ev) { return ev.filter(function (e) { return e.type === 'why'; }).
     }
   }); }); });
   ok('the water and filter rows of every night report add up', worst <= 1, where);
+})();
+
+// ---- rover crashes
+(function () {
+  var s = game('mars', 'commander', 30); quiet(s);
+  s.m.rover.charge = 100;
+  var soft = sim.crash(s, R.crashSoft + 1);
+  ok('a bump costs nothing', !soft.hard && s.m.rover.charge === 100 && !s.seen.crash && s.stats.crashes === 1);
+  var hard = sim.crash(s, R.crashHard + 1);
+  ok('a real crash shakes charge out of the battery and is explained', hard.hard && s.m.rover.charge === 100 - R.crashCharge && s.seen.crash === s.sol);
+  s.m.rover.charge = 3; sim.crash(s, 20);
+  ok('the battery cannot go below empty', s.m.rover.charge === 0);
+})();
+
+// ---- the town beside the outpost
+(function () {
+  var s = game('mars', 'veteran', 31), D = R.townDays, i, stages = [], people = [];
+  function goodDay() { quiet(s); s.air = 90; s.food = 90; s.dose = 0; s.today.breath = 30; s.today.airMade = 60; s.today.crates = 1; var n = sim.townNight(s); sim.endSol(s, {}); sim.startSol(s); return n; }
+  function badDay() { quiet(s); s.air = 90; s.food = 90; s.dose = 0; s.today.breath = 30; s.today.airMade = 0; s.today.crates = 0; var n = sim.townNight(s); sim.endSol(s, {}); sim.startSol(s); return n; }
+  ok('no town at the start', s.colony.stage === 0 && sim.townLoad(s) === 0);
+  var cells0 = sim.extraCells(s, 'clear');
+  for (i = 0; i < 8; i++) { goodDay(); stages.push(s.colony.stage); people.push(s.colony.people); }
+  ok('ships come after 2, 3, 4, 6 and 8 self-sustaining days', stages.join(',') === '0,1,2,3,3,4,4,5', stages.join(','));
+  ok('and bring 4, 12, 30 and 80 people', people.join(',') === '0,0,4,12,12,30,30,80', people.join(','));
+  ok('the supply ship adds one power cell a day', sim.extraCells(s, 'clear') === cells0 + 1);
+  ok('settlers share the air plant', Math.abs(sim.townLoad(s) - R.townAir * 4) < 1e-9 && sim.airDrain(s) > s.level.airDrain * s.mods.breath);
+  ok('a well-run outpost lifts the town spirit', s.colony.spirit > R.spiritStart, s.colony.spirit);
+  ok('in good spirits the settlers bring gifts', s.colony.gifts.length >= 1, s.colony.gifts.join('; '));
+  var s2 = game('mars', 'veteran', 32); s = s2;
+  for (i = 0; i < 3; i++) goodDay();
+  ok('the first settlers are explained', s.colony.stage === 2 && s.seen.town === s.sol, s.colony.stage + ' ' + s.seen.town);
+  for (i = 0; i < 3; i++) badDay();
+  ok('days that are not self-sustaining pull the spirit down', s.colony.spirit < R.spiritLow, s.colony.spirit);
+  ok('a struggling town shares your dinner', s.colony.asks === R.townDinner && sim.dinner(s) === s.level.dinner + s.mods.dinner + R.townDinner);
+  quiet(s); s.air = 90; s.food = 60; var f0 = s.food, rep = sim.endSol(s, {});
+  ok('and the night report says so', Math.abs((f0 - s.food) - sim.dinner(s)) < 0.01 && rep.lines.filter(function (l) { return l.res === 'food'; })[0].parts.some(function (p) { return p.v === -R.townDinner; }));
+})();
+
+// ---- Pioneer mode
+(function () {
+  var plain = game('moon', 'commander', 33);
+  var s = sim.newGame({ site: 'moon', level: 'commander', seed: 33, weather: arch, dayLength: 300, pioneer: true });
+  ok('Pioneer mode starts with less', s.pioneer && s.air === plain.air - R.pioneerAir && s.food === plain.food - R.pioneerFood && s.cellsToday === plain.cellsToday - R.pioneerCells, s.air + ' ' + s.food + ' ' + s.cellsToday);
+  ok('building is refused in a classic mission', sim.canBuild(plain, 'panel').ok === false);
+  var y = sim.rockYield(s, 5, 2), y2 = sim.rockYield(s, 5, 2), total = { rock: 0, metal: 0, glass: 0 }, k;
+  ok('a boulder always gives the same', JSON.stringify(y) === JSON.stringify(y2) && y.rock >= 3);
+  for (k = 0; k < 40; k++) { var yy = sim.rockYield(s, k, 1.8); total.rock += yy.rock; total.metal += yy.metal; total.glass += yy.glass; }
+  ok('forty boulders hold plenty of rubble, and metal and glass are scarcer', total.rock > 100 && total.metal >= 10 && total.metal < 40 && total.glass >= 10 && total.glass < 40, JSON.stringify(total));
+  ok('breaking counts once and is explained', sim.breakRock(s, 5) === true && sim.breakRock(s, 5) === false && s.stats.rocks === 1 && s.seen.isru === s.sol);
+  ok('no materials, no building', sim.canBuild(s, 'panel').ok === false && /more/.test(sim.canBuild(s, 'panel').msg));
+  sim.addMat(s, 'metal', 20); sim.addMat(s, 'glass', 20); sim.addMat(s, 'rock', 30);
+  var c0 = s.cellsToday, m0 = s.mats.metal;
+  ok('a solar panel can be built, costs its materials and charges from today', sim.build(s, 'panel').ok && s.built.panel === 1 && s.mats.metal === m0 - JA.BUILDS.panel.cost.metal && Math.abs(s.cellsToday - c0 - 0.7) < 1e-9 && s.seen.built === s.sol);
+  sim.build(s, 'panel'); sim.build(s, 'panel');
+  ok('not more than the limit', sim.build(s, 'panel').ok === false && s.built.panel === 3);
+  ok('a wind turbine is refused on the Moon, a Sun mirror is not', sim.canBuild(s, 'turbine').ok === false && sim.canBuild(s, 'mirror').ok === true);
+  var sh0 = sim.shield(s); sim.build(s, 'berm');
+  ok('a brick wall adds shield without shade', Math.abs(sim.shield(s) - sh0 - 0.05) < 1e-9 && sim.shade(s) === 0);
+  sim.build(s, 'battery');
+  ok('a battery bank makes the rack bigger', sim.rackMax(s) === R.rackMax + 2);
+  quiet(s); s.rack.cells = R.rackMax; s.rack.charge = 0.99; run(s, 30);
+  ok('and the rack really fills past four', s.rack.cells > R.rackMax || s.rack.charge < 0.99, s.rack.cells);
+  sim.build(s, 'cistern'); s.water = 100;
+  ok('a cistern lets the tank take more water', sim.waterCap(s) === 150 && sim.feedIce(s, 'food').ok && s.water === 130);
+  var f1 = game('moon', 'commander', 34), f2 = sim.newGame({ site: 'moon', level: 'commander', seed: 34, weather: arch, dayLength: 300, pioneer: true });
+  quiet(f1); quiet(f2); f2.air = f1.air; sim.addMat(f2, 'metal', 5); sim.addMat(f2, 'glass', 5); sim.build(f2, 'filter');
+  run(f1, 200); run(f2, 200);
+  ok('a spare filter bed fills more slowly', (100 - f2.filter) < (100 - f1.filter) * 0.7, (100 - f1.filter).toFixed(1) + ' vs ' + (100 - f2.filter).toFixed(1));
+  Object.keys(JA.BUILDS).forEach(function (id) { var d = JA.BUILDS[id]; if (!d.name || !d.icon || !d.text || !d.why || !JA.SOURCES[d.src] || !(d.max > 0)) ok('build ' + id + ' is complete', false); Object.keys(d.cost).forEach(function (m) { if (!JA.MATS[m]) ok('build ' + id + ' uses a known material', false); }); });
+  ok('every structure has its words, a real source and known materials', true);
 })();
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

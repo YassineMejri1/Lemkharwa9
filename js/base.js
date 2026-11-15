@@ -13,7 +13,14 @@
 
   function group(p) { var g = new T.Group(); g.position.set(p[0], Tn.height(p[0], p[1]), p[1]); root.add(g); return g; }
   function wp(g, x, y, z) { return new T.Vector3(g.position.x + x, g.position.y + y, g.position.z + z); }
-  function collide(g, x, z, r) { B.colliders.push({ x: g.position.x + x, z: g.position.z + z, r: r }); }
+  // A collider is a circle on the ground that blocks walking, driving and thrown things. h: how tall it is
+  // (3.4 m when left out); dome: the radius of a round roof (the habitat).
+  function collide(g, x, z, r, h) {
+    var c = { x: g.position.x + x, z: g.position.z + z, r: r };
+    if (h) c.h = h;
+    B.colliders.push(c);
+    return c;
+  }
   // A raised floor you can walk on (actors.js stands the astronaut, the rover and dropped things on top of it).
   // A disc: flat 'top' metres high out to r0, then a bevel down to 'edge' at r1. A box: half sizes hw, hd, flat top.
   function floorDisc(g, top, r0, r1, edge) { B.floors.push({ x: g.position.x, z: g.position.z, y: g.position.y, top: top, r0: r0, r1: r1, edge: edge }); }
@@ -130,7 +137,7 @@
     B.spots.door = wp(g, 0, 0, 10.2);
     B.spots.hoppers.dome = wp(g, 0, 2.4, 0);
     B.pos.hab = wp(g, 0, 9.8, 0);
-    collide(g, 0, 0, 6.5); collide(g, 0, 7.2, 1.9);
+    collide(g, 0, 0, 6.5).dome = 5.4; collide(g, 0, 7.2, 1.9, 3.2);
     // path lights
     var lm = glow(0xfff0b0, 1.6), pm = mat(0x8a8fa0);
     [[-3.2, 11.5], [3.2, 11.5], [-3.2, 16], [3.2, 16], [-9, 6], [10, 5]].forEach(function (p) {
@@ -406,7 +413,7 @@
     B.spots.hoppers.cargo = wp(pad, dir.x * 4.9, 1.6, dir.z * 4.9);
     B.spots.rocketDoor = wp(pad, dir.x * 6.8 + dir.z * 2, 0, dir.z * 6.8 - dir.x * 2);
     B.pos.rocket = wp(pad, 0, 23.5, 0);
-    collide(pad, 0, 0, 4.2); collide(pad, dir.x * 4.9, dir.z * 4.9, 1.1); collide(pad, twX, twZ, 1.1);
+    collide(pad, 0, 0, 4.2, 24); collide(pad, dir.x * 4.9, dir.z * 4.9, 1.1); collide(pad, twX, twZ, 1.1, 12);
     floorDisc(pad, 0.3, 11.6, 12.05, -0.15);          // the concrete launch pad: 0.3 m high, its rim bevels down into the ground
 
     var pal = group(L.pallet);
@@ -456,7 +463,19 @@
       add(g, new T.IcosahedronGeometry(1.1, 0), im, 0, 0.6, 0).scale.set(1, 0.9, 1);
       add(g, new T.IcosahedronGeometry(0.7, 0), im, 0.9, 0.4, 0.4).rotation.y = i;
       add(g, new T.IcosahedronGeometry(0.6, 0), im, -0.7, 0.35, 0.6).rotation.y = i * 2;
-      P.ice.push({ group: g, mat: im });
+      // the ice drill: a tripod with a motor box, a warm auger and a lamp. The game starts it; it works by itself (B.rigs).
+      var rg = new T.Group(), legM = soft(0xdfe2ea), k;
+      for (k = 0; k < 3; k++) {
+        var la = k / 3 * Math.PI * 2 + 0.5, leg = add(rg, cyl(0.05, 0.07, 2.9, 6), legM, Math.cos(la) * 0.75, 1.3, Math.sin(la) * 0.75);
+        leg.rotation.set(Math.sin(la) * 0.5, 0, -Math.cos(la) * 0.5);
+      }
+      add(rg, box(0.55, 0.45, 0.55), soft(0xffc533), 0, 2.55, 0);
+      add(rg, box(0.6, 0.1, 0.6), soft(0x2b3147), 0, 2.82, 0);
+      var auger = add(rg, new T.ConeGeometry(0.16, 1.5, 6), new T.MeshStandardMaterial({ color: 0xb8bcc8, metalness: 0.8, roughness: 0.3, emissive: 0xff7a2d, emissiveIntensity: 0 }), 0, 1.6, 0);
+      auger.rotation.x = Math.PI;
+      var lamp = add(rg, ball(0.09, 8, 8), glow(0x46ff8a, 0.3), 0.33, 2.62, 0.3, true);
+      g.add(rg);
+      P.ice.push({ group: g, mat: im, auger: auger, lamp: lamp });
       B.spots.ice.push(wp(g, 0, 0.8, 0));
       collide(g, 0, 0, 1.1);
     });
@@ -514,7 +533,8 @@
     P = { cables: {} }; B.P = P;
     B.colliders = []; B.floors = []; B.pos = {}; B.repair = {};
     B.spots = { sockets: {}, hoppers: {}, rackSlots: [], bagTray: [], beds: [], panels: [], drill: [], ice: [], inst: {}, photo: [], pallet: [] };
-    Tn.boulders.forEach(function (b) { B.colliders.push({ x: b.x, z: b.z, r: b.r * 0.92 }); });
+    // every boulder keeps its own collider (b.col), so one that is broken up can stop blocking the way; h is how tall it stands
+    Tn.boulders.forEach(function (b) { b.col = { x: b.x, z: b.z, r: b.r * 0.92, h: b.seat ? 0.9 : b.r * (0.5 + b.sy) }; B.colliders.push(b.col); });
     hab(); solar(); airMaker(); greenhouse(); bagger(); lab(); comms(); rocket(); scienceSites();
     B.repair.rack = B.spots.rack.clone();
     var rackP = new T.Vector3(L.rack[0], 0, L.rack[1]);
@@ -639,7 +659,17 @@
       gp.ring.visible = gp.beam.visible = left > 0; gp.flag.visible = left <= 0;
       gp.ring.scale.setScalar(1 + Math.sin(t * 3 + i) * 0.06);
     }
-    for (i = 0; i < P.ice.length; i++) P.ice[i].mat.emissiveIntensity = 0.75 + Math.sin(t * 2 + i) * 0.2;
+    for (i = 0; i < P.ice.length; i++) {
+      var pi2 = P.ice[i], rs = B.rigs && s !== demo ? B.rigs[i] : null, drilling = !!rs && rs.state === 'drill', resting = !!rs && rs.state === 'rest';
+      pi2.mat.emissiveIntensity = 0.75 + Math.sin(t * 2 + i) * 0.2;
+      // the drill turns and sinks into the ice while it works, glows warm, and puffs a little vapour
+      pi2.auger.rotation.y += dt * (drilling ? 18 : 0);
+      pi2.auger.position.y += ((drilling ? 1.6 - rs.p * 0.55 : 1.6) - pi2.auger.position.y) * Math.min(1, dt * 6);
+      pi2.auger.material.emissiveIntensity = drilling ? 0.5 + rs.p * 0.9 : resting ? 0.5 : 0;
+      pi2.lamp.material.color.set(drilling ? 0xffd23f : resting ? 0xff8a3d : 0x46ff8a); pi2.lamp.material.emissive.copy(pi2.lamp.material.color);
+      pi2.lamp.material.emissiveIntensity = drilling ? 1.6 + Math.sin(t * 12) : resting ? 0.9 : 0.5;
+      if (drilling && Math.random() < dt * 14) W.emit(pi2.group.position.x + (Math.random() - 0.5) * 0.5, pi2.group.position.y + 0.9, pi2.group.position.z + (Math.random() - 0.5) * 0.5, { vy: 1.3, life: 1.1, size: 0.28, grow: 1.2, color: 0xdff7ff, alpha: 0.6 });
+    }
     Object.keys(P.inst).forEach(function (id) {
       var pi = P.inst[id], done = !!s.inst[id];
       pi.ring.visible = pi.ghost.visible = !done;

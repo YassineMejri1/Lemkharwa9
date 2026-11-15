@@ -92,6 +92,13 @@
     setMeter('dose', d, d >= 75, d >= 90 ? 'almost full: stay indoors!' : d >= 75 ? 'danger: shelter and shield' : d >= 50 ? 'half full · never goes down' : 'home shield ' + Math.round(sim.shield(s) * 100) + '%', d >= 75);
     setMeter('filter', fl, fl < R.filterWarn, fl <= 0 ? 'full: air drains faster' : fl < R.filterWarn ? 'nearly full: bake it' : fl < 60 ? 'soaking up CO₂' : 'clean', fl < R.filterWarn);
     setMeter('water', wt, wt < R.waterWarn, wt < 1 ? 'empty: plants stop' : wt < R.waterWarn ? 'low: plants thirsty first' : 'crew and plants', wt < R.waterWarn);
+    // the town's spirit: a meter that only appears once settlers have arrived
+    var town = s.colony, tm = meters.town;
+    if (tm) {
+      var live = !!town && town.stage >= 2;
+      if (tm.shown !== live) { tm.shown = live; show(tm.el, live); }
+      if (live) setMeter('town', town.spirit, town.spirit < R.spiritLow, town.people + ' people' + (town.spirit >= R.spiritHelp ? ' · helping' : town.spirit < R.spiritLow ? ' · need food' : ''), town.spirit < R.spiritLow);
+    }
     // the shift bar moves in steps of 0.1%, so it is written a few times a second, not every frame
     var f = Math.round(Math.min(1, s.t / s.dayLength) * 1000) / 10;
     if (f !== lastF) { lastF = f; hud.fill.style.width = f + '%'; hud.sun.style.left = f + '%'; }

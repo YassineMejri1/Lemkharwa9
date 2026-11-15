@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="css/holo.css">
 <link rel="stylesheet" href="css/windows.css">
 <link rel="stylesheet" href="css/map.css">
+<link rel="stylesheet" href="css/pioneer.css">
 </head>
 <body>
 <canvas id="scene" aria-label="3D view of your outpost"></canvas>
@@ -69,6 +70,12 @@
     <div class="meter mini" data-res="water" role="button" tabindex="0" title="Water: one tank for the crew and the plants. The recycler gives most of it back; only ice adds more. Tap to see the water loop.">
       <span class="m-icon" aria-hidden="true">💧</span>
       <div class="m-top"><b class="m-name">Water</b><span class="m-val">25</span></div>
+      <div class="m-bar"><i></i></div>
+      <small class="m-note"></small>
+    </div>
+    <div class="meter mini hidden" data-res="town" role="button" tabindex="0" title="Town spirit: how the settlers beside your outpost are doing. In good spirits they lend a hand. Tap to read more.">
+      <span class="m-icon" aria-hidden="true">🏘️</span>
+      <div class="m-top"><b class="m-name">Town</b><span class="m-val">60</span></div>
       <div class="m-bar"><i></i></div>
       <small class="m-note"></small>
     </div>
@@ -212,6 +219,7 @@
 <script src="js/keepsake.js"></script>
 <script src="js/interior.js"></script>
 <script src="js/colony.js"></script>
+<script src="js/pioneer.js"></script>
 <script src="js/journal.js"></script>
 <script src="js/holo.js"></script>
 <script src="js/icons.js"></script>

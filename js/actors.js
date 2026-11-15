@@ -2,7 +2,7 @@
    and every object you can pick up, carry and throw (with real Moon / Mars gravity). */
 (function (JA) {
   'use strict';
-  var T = window.THREE, W = JA.world, Tn = JA.terrain, B = JA.base, MD = JA.models;
+  var T = window.THREE, W = JA.world, Tn = JA.terrain, B = JA.base, MD = JA.models, R = JA.RULES;
   var A = JA.actors = { items: [], devils: [] };
   if (!T) return;
   // models made in Blender (js/models.js); without them the plain shapes below are drawn
@@ -313,13 +313,103 @@
   };
 
   // ---------- movement ----------
+  // Colliders are circles on the ground with a height: { x, z, r, h } (see js/base.js). After a hit,
+  // hitNx / hitNz point the way out of the thing that was hit.
+  var hitNx = 0, hitNz = 0;
   function collideCircle(p, r) {
     var C = B.colliders;
     for (var i = 0; i < C.length; i++) {
       var c = C[i], dx = p.x - c.x, dz = p.z - c.z, min = c.r + r;
       if (Math.abs(dx) > min || Math.abs(dz) > min) continue;
       var d = Math.hypot(dx, dz);
-      if (d < min && d > 0.0001) { p.x = c.x + dx / d * min; p.z = c.z + dz / d * min; return c; }
+      if (d < min && d > 0.0001) { hitNx = dx / d; hitNz = dz / d; p.x = c.x + hitNx * min; p.z = c.z + hitNz * min; return c; }
+    }
+    return null;
+  }
+  // How high a collider reaches at this spot.
+  function topOf(c) {
+    if (c.gy == null) c.gy = Tn.height(c.x, c.z);
+    return c.gy + (c.h != null ? c.h : 3.4);
+  }
+  // The rover is a box 2.5 m wide and 4.8 m long. Push a circle out of it; true when it was inside.
+  var ROVER_W = 1.25, ROVER_L = 2.4;
+  function roverPush(p, rad) {
+    var s = Math.sin(rover.yaw), c = Math.cos(rover.yaw), dx = p.x - rover.pos.x, dz = p.z - rover.pos.z;
+    var lx = dx * c - dz * s, lz = dx * s + dz * c;          // the same spot in the rover's own left-right and back-front
+    var ox = ROVER_W + rad - Math.abs(lx), oz = ROVER_L + rad - Math.abs(lz);
+    if (ox <= 0 || oz <= 0) return false;
+    if (ox < oz) { var sx = lx < 0 ? -1 : 1; lx += sx * ox; hitNx = sx * c; hitNz = -sx * s; }
+    else { var sz = lz < 0 ? -1 : 1; lz += sz * oz; hitNx = sz * s; hitNz = sz * c; }
+    p.x = rover.pos.x + lx * c + lz * s; p.z = rover.pos.z - lx * s + lz * c;
+    return true;
+  }
+  // A thing in the air meets what stands in its way: machines, rocks, the round roof of the habitat, the rover,
+  // and loose things lying about. px, py, pz: where it was a moment ago.
+  function hitThings(it, py) {
+    var C = B.colliders, i, c, dx, dz, d, min, top, nx, nz, vn, hit;
+    for (i = 0; i < C.length; i++) {
+      c = C[i]; dx = it.pos.x - c.x; dz = it.pos.z - c.z; min = c.r + it.r;
+      if (Math.abs(dx) > min || Math.abs(dz) > min) continue;
+      d = Math.hypot(dx, dz); if (d >= min) continue;
+      top = topOf(c);
+      if (c.dome) {                                   // the habitat: a low ring wall with a round roof on it
+        var cy = c.gy + 1.3, ddy = it.pos.y - cy, d3 = Math.hypot(d, Math.max(0, ddy)), R3 = c.dome + it.r;
+        if (ddy > 0) {
+          if (d3 >= R3 || d3 < 0.001) continue;
+          var ax = dx / d3, ay = ddy / d3, az = dz / d3, v3 = it.vel.x * ax + it.vel.y * ay + it.vel.z * az;
+          it.pos.x = c.x + ax * R3; it.pos.y = cy + ay * R3; it.pos.z = c.z + az * R3;
+          if (v3 < 0) { it.vel.x -= 1.4 * v3 * ax; it.vel.y -= 1.4 * v3 * ay; it.vel.z -= 1.4 * v3 * az; it.spin *= 0.7; if (-v3 > 1.5 && A.onBounce) A.onBounce(it, -v3); }
+          return c;
+        }
+        top = cy;
+      }
+      if (it.pos.y - it.r >= top) continue;           // it is flying over the top
+      nx = d > 0.001 ? dx / d : 1; nz = d > 0.001 ? dz / d : 0;
+      if (py - it.r >= top - 0.15) {                  // it came down on top: a small bounce, then it rolls off the edge
+        hit = Math.abs(it.vel.y);
+        it.pos.y = top + it.r;
+        it.vel.y = hit > 1.4 ? hit * 0.3 : 0;
+        it.vel.x = it.vel.x * 0.6 + nx * 1.7 - nz * 0.8; it.vel.z = it.vel.z * 0.6 + nz * 1.7 + nx * 0.8;      // outward, and a little sideways so it cannot get caught between two things
+        if (hit > 1.4 && A.onBounce) A.onBounce(it, hit);
+      } else {                                        // it hit the side: it bounces back
+        it.pos.x = c.x + nx * min; it.pos.z = c.z + nz * min;
+        vn = it.vel.x * nx + it.vel.z * nz;
+        if (vn < 0) { it.vel.x -= 1.45 * vn * nx; it.vel.z -= 1.45 * vn * nz; it.spin *= 0.6; if (-vn > 1.5 && A.onBounce) A.onBounce(it, -vn); }
+      }
+      return c;
+    }
+    // the rover: the cab is taller than the cargo bed
+    dx = it.pos.x - rover.pos.x; dz = it.pos.z - rover.pos.z;
+    if (Math.abs(dx) < 4 && Math.abs(dz) < 4) {
+      var front = dx * Math.sin(rover.yaw) + dz * Math.cos(rover.yaw) > 0.2;
+      top = rover.pos.y + (front ? 2.3 : 1.3);
+      if (it.pos.y - it.r < top) {
+        if (py - it.r >= top - 0.15) {
+          v1.copy(it.pos);
+          if (roverPush(v1, it.r * 0.5)) {
+            hit = Math.abs(it.vel.y);
+            it.pos.y = top + it.r; it.vel.y = hit > 1.4 ? hit * 0.3 : 0;
+            it.vel.x = it.vel.x * 0.6 + hitNx * 1.7; it.vel.z = it.vel.z * 0.6 + hitNz * 1.7;
+            if (hit > 1.4 && A.onBounce) A.onBounce(it, hit);
+            return rover;
+          }
+        } else if (roverPush(it.pos, it.r)) {
+          vn = it.vel.x * hitNx + it.vel.z * hitNz;
+          if (vn < 0) { it.vel.x -= 1.45 * vn * hitNx; it.vel.z -= 1.45 * vn * hitNz; it.spin *= 0.6; if (-vn > 1.5 && A.onBounce) A.onBounce(it, -vn); }
+          return rover;
+        }
+      }
+    }
+    // a fast throw knocks away a loose thing it lands on
+    if (it.vel.lengthSq() > 9) for (i = 0; i < A.items.length; i++) {
+      var o = A.items[i];
+      if (o === it || o.state !== 'rest') continue;
+      if (Math.abs(o.pos.x - it.pos.x) > 1 || Math.abs(o.pos.z - it.pos.z) > 1 || it.pos.distanceTo(o.pos) > it.r + o.r) continue;
+      o.state = 'fly'; o.from = null; o.spin = 3;
+      o.vel.copy(it.vel).multiplyScalar(0.5); o.vel.y = Math.max(1.4, o.vel.y);
+      it.vel.multiplyScalar(0.45);
+      if (A.onBounce) A.onBounce(it, 3);
+      return o;
     }
     return null;
   }
@@ -364,6 +454,7 @@
     else {
       if (!inBounds(a.pos) && A.onEdge) A.onEdge();
       if (collideCircle(a.pos, 0.5)) collideCircle(a.pos, 0.5);
+      if (!rover.driver) roverPush(a.pos, 0.42);
     }
     var ground = room ? room.floor : groundAt(a.pos.x, a.pos.z), landed = false;
     if (a.onGround) {
@@ -582,7 +673,35 @@
     var s = Math.sin(r.yaw), c = Math.cos(r.yaw);
     r.pos.x += s * r.speed * dt; r.pos.z += c * r.speed * dt;
     if (!inBounds(r.pos)) r.speed *= 0.5;
-    if (collideCircle(r.pos, 1.9)) r.speed *= 0.86;
+    // What the rover hits stops it, and a fast hit throws it back. The rover is two circles, front and back.
+    var hit = null, into = 0, e;
+    for (e = -1; e <= 1; e += 2) {
+      v1.set(r.pos.x + s * 1.1 * e, 0, r.pos.z + c * 1.1 * e); v2.copy(v1);
+      var col = collideCircle(v1, 1.4);
+      if (!col) continue;
+      r.pos.x += v1.x - v2.x; r.pos.z += v1.z - v2.z;
+      var vin = -(s * hitNx + c * hitNz) * r.speed;           // how fast it was going INTO the thing
+      if (!hit || vin > into) { hit = col; into = vin; }
+    }
+    r.crashT = Math.max(0, (r.crashT || 0) - dt);
+    if (hit && into > 0) {
+      var share = clamp(into / Math.max(0.01, Math.abs(r.speed)), 0, 1);      // 1 = straight into it, 0 = sliding along it
+      if (into > R.crashSoft && r.crashT <= 0) {
+        var before = r.speed;
+        r.speed = -before * 0.35 * share + before * (1 - share) * 0.6;       // head-on it bounces back; at an angle it scrapes past
+        r.crashT = 0.7; r.pitch += 0.2 * (before > 0 ? 1 : -1) * Math.min(1, into / 9);
+        if (A.onCrash) A.onCrash(into, hit, before);
+      } else r.speed *= 1 - Math.min(0.9, share * dt * 9);
+    }
+    // loose things lying in its way are knocked aside
+    if (Math.abs(r.speed) > 1.5) for (e = 0; e < A.items.length; e++) {
+      var loose = A.items[e];
+      if (loose.state !== 'rest' || Math.abs(loose.pos.x - r.pos.x) > 4 || Math.abs(loose.pos.z - r.pos.z) > 4 || loose.pos.y - r.pos.y > 2) continue;
+      if (!roverPush(loose.pos, loose.r)) continue;
+      loose.state = 'fly'; loose.from = null; loose.spin = 4;
+      loose.vel.set(s * r.speed * 0.9 + hitNx * 2, 2.2, c * r.speed * 0.9 + hitNz * 2);
+      if (A.onBounce) A.onBounce(loose, 3);
+    }
     var gnd = groundAt(r.pos.x, r.pos.z);
     r.vy -= grav * dt; r.pos.y += r.vy * dt;
     if (r.pos.y <= gnd) {
@@ -622,14 +741,13 @@
         var b = BED[it.slot]; roverLocal(b[0], b[1], b[2], it.pos);
         it.mesh.rotation.set(0, rover.yaw, 0);
       } else if (it.state === 'fly') {
+        var py = it.pos.y;
         it.vel.y -= grav * dt;
         it.pos.addScaledVector(it.vel, dt);
         it.mesh.rotation.x += it.spin * dt; it.mesh.rotation.z += it.spin * 0.6 * dt;
+        // it bounces off whatever stands in its way, unless it is dropping into the very place that takes it (A.skipHit, set by the game)
+        if (!(A.skipHit && A.skipHit(it))) hitThings(it, py);
         var gnd = groundAt(it.pos.x, it.pos.z) + it.r;
-        if (it.pos.y - gnd < 3.4) {
-          var c = collideCircle(it.pos, it.r);
-          if (c) { var nx = (it.pos.x - c.x), nz = (it.pos.z - c.z), nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl; var vn = it.vel.x * nx + it.vel.z * nz; if (vn < 0) { it.vel.x -= 1.5 * vn * nx; it.vel.z -= 1.5 * vn * nz; } }
-        }
         if (it.pos.y <= gnd) {
           it.pos.y = gnd;
           var hit = Math.abs(it.vel.y);

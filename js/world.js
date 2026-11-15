@@ -159,7 +159,7 @@
       var ra = rnd() * Math.PI * 2, rd = i < 160 ? 30 + rnd() * 34 : 60 + Math.pow(rnd(), 1.3) * 300;
       var rx = Math.cos(ra) * rd, rz = Math.sin(ra) * rd;
       var cdx = rx - Tn.L.colony[0], cdz = rz - Tn.L.colony[1], cdd = Math.hypot(cdx, cdz);
-      if (cdd < 30) { rx = Tn.L.colony[0] + cdx / (cdd || 1) * (30 + (30 - cdd) * 0.5); rz = Tn.L.colony[1] + cdz / (cdd || 1) * (30 + (30 - cdd) * 0.5); }      // the colony site stays clear
+      if (cdd < 37) { rx = Tn.L.colony[0] + cdx / (cdd || 1) * (37 + (37 - cdd) * 0.5); rz = Tn.L.colony[1] + cdz / (cdd || 1) * (37 + (37 - cdd) * 0.5); }      // the colony site stays clear, out to the city's ring road
       var sc = i < 160 ? 0.08 + rnd() * 0.22 : 0.15 + Math.pow(rnd(), 2.2) * 0.8;
       var r1 = rnd(), r2 = rnd(), r3 = rnd(), r4 = rnd();
       if (rockGeos) { dummy.position.set(rx, Tn.height(rx, rz) - sc * 0.12, rz); dummy.rotation.set((r1 - 0.5) * 0.5, r2 * 6.28, (r3 - 0.5) * 0.5); }
@@ -179,6 +179,7 @@
         m.scale.y = b.sy; m.rotation.set(b.tilt, b.rot, b.tilt * 0.5);
       }
       if (b.seat) { m.updateMatrixWorld(true); Tn.seatTop = new T.Box3().setFromObject(m).max.y - gy; Tn.seatRock = m; }   // the landing film measures this rock to sit on its edge
+      b.mesh = m;          // kept so that a boulder can be broken up and taken away (js/pioneer.js)
     });
   }
 
@@ -422,7 +423,7 @@
     if (JA.models.prepare) JA.models.prepare(renderer, look);   // reflections for the Blender models (js/models.js)
     JA.base.build(root, site);
     JA.actors.build(root, site, suitColor);
-    ['interior', 'colony'].forEach(function (k) {         // optional extras: the world still works without them
+    ['interior', 'colony', 'pioneer'].forEach(function (k) {         // optional extras: the world still works without them
       var m = JA[k];
       if (m && typeof m.build === 'function') { try { m.build(root, site); } catch (e) { if (window.console) console.warn('Astro Outpost add-on ' + k + '.build failed:', e); } }
     });
