@@ -110,6 +110,31 @@
     return out;
   }
 
+  // The Moon's ice crater is a permanently shadowed region: with the Sun only a few degrees above the horizon at the
+  // south pole, the crater rim hides its floor from the Sun all year round — that is why the ice survives there.
+  // The terrain casts no shadows of its own, so the ground's shader blocks direct sunlight on the crater floor.
+  // Only the Sun is blocked (directional light): the helmet lamp and the rover lights still light the floor.
+  function eternalShadow(m) {
+    var L = Tn.L.ice, r = Tn.iceR;
+    m.customProgramCacheKey = function () { return 'eternal-shadow'; };
+    m.onBeforeCompile = function (sh) {
+      sh.uniforms.uPsr = { value: new T.Vector3(L[0], L[1], r) };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vPsrXZ;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPsrXZ = ( modelMatrix * vec4( transformed, 1.0 ) ).xz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uPsr;\nvarying vec2 vPsrXZ;')
+        .replace('#include <lights_fragment_begin>', psrLightsChunk());
+    };
+  }
+  var PSR_DIR = 'getDirectionalLightInfo( directionalLight, geometry, directLight );',
+    PSR_HEMI = 'irradiance += getHemisphereLightIrradiance( hemisphereLights[ i ], geometry.normal );';
+  function psrLightsChunk() {
+    // psrSun: 0 on the crater floor (no sunlight ever), rising to 1 up the walls and on the rim. The floor keeps a
+    // little of the sky fill: real shadowed floors are faintly lit by sunlight bouncing off the crater walls.
+    return 'float psrSun = smoothstep( 0.6, 0.92, length( vPsrXZ - uPsr.xy ) / uPsr.z );\n' +
+      T.ShaderChunk.lights_fragment_begin
+        .replace(PSR_DIR, PSR_DIR + '\n\t\tdirectLight.color *= psrSun;')
+        .replace(PSR_HEMI, PSR_HEMI.replace(';', ' * mix( 0.18, 1.0, psrSun );'));
+  }
   function buildGround() {
     var size = 800, seg = 250;
     var g = new T.PlaneGeometry(size, size, seg, seg);
@@ -129,6 +154,7 @@
       gm = new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0,
         normalMap: tileTex(tile.n, size / tile.tile, false), normalScale: new T.Vector2(1.5, 1.5), map: tileTex(tile.a, size / tile.tile, true) });
     } else gm = new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: true });
+    if (siteId === 'moon') eternalShadow(gm);
     var ground = new T.Mesh(g, gm);
     ground.receiveShadow = true;
     root.add(ground);
@@ -349,7 +375,7 @@
     try { renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' }); } catch (e) { return false; }
     W.renderer = renderer;
     W.lite = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);      // phones and tablets
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, W.lite ? 1.5 : 2));
+    renderer.setPixelRatio(pixelRatio());
     renderer.outputEncoding = T.sRGBEncoding;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = T.PCFSoftShadowMap;
@@ -362,10 +388,16 @@
     W.ready = true;
     return true;
   };
+  // How many real pixels to draw per CSS pixel: the screen's own density, capped (1.5 on phones and tablets, 2 elsewhere).
+  // It is checked again on every resize and every frame, because it changes when the window moves to another
+  // screen, when the browser zooms, or when the page was opened in a hidden tab: reading it only once could leave
+  // the picture blurry for the whole game.
+  function pixelRatio() { return Math.min(window.devicePixelRatio || 1, W.lite ? 1.5 : 2); }
   W.resize = function () {
     if (!renderer) return;
     var w = window.innerWidth, h = window.innerHeight;
     if (!w || !h) return;                    // hidden or minimised window: keep the last good size
+    if (renderer.getPixelRatio() !== pixelRatio()) renderer.setPixelRatio(pixelRatio());
     renderer.setSize(w, h, false);
     camera.aspect = w / h; camera.updateProjectionMatrix();
     W.w = w; W.h = h;
@@ -778,8 +810,10 @@
       phobos.rotation.y += dt * 0.05;
       env.dark = clamp((1 - day) * 0.8 + d * 0.5, 0, 1);
     } else {
-      sun.intensity = look.sunInt * (1 - d * 0.86);
-      hemi.intensity = look.hemiInt * (1 - d * 0.3);
+      // down in the ice crater no sunlight ever reaches you (see eternalShadow): only the helmet lamp and starlight
+      var inPsr = 1 - smooth(0.55, 0.9, Math.hypot(f.x - Tn.L.ice[0], f.z - Tn.L.ice[1]) / Tn.iceR);
+      sun.intensity = look.sunInt * (1 - d * 0.86) * (1 - 0.85 * inPsr);
+      hemi.intensity = look.hemiInt * (1 - d * 0.3) * (1 - 0.6 * inPsr);
       sunSprite.material.opacity = 1 - d;
       earth.position.copy(camera.position).add(v1.copy(EARTH_DIR).multiplyScalar(2350));
       earth.rotation.y += dt * 0.004;                      // a slow turn (the real one takes a day)
@@ -874,7 +908,7 @@
 
   W.update = function (dt) {
     if (!W.ready || !root) return;
-    if (window.innerWidth !== W.w || window.innerHeight !== W.h) W.resize();
+    if (window.innerWidth !== W.w || window.innerHeight !== W.h || renderer.getPixelRatio() !== pixelRatio()) W.resize();
     time += dt; W.time = time;
     updateCamera(dt);
     if (pUni) pUni.uScale.value = pointScale();      // the film changes the lens, so keep particles the right size

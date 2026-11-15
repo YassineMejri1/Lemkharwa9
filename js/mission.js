@@ -39,7 +39,7 @@
     var inflight = box(s).log.filter(function (m) { return m.state === 'transit'; });
     var cur = inflight.length ? inflight[inflight.length - 1] : null, prog = 0;
     if (cur) prog = clamp((s.t - cur.t0) / Math.max(0.1, cur.t1 - cur.t0), 0, 1);
-    var align = p.sep < 35 ? 'close approach' : p.sep > 145 ? 'far side of the Sun' : p.sep < 90 ? 'drawing apart' : 'wide apart';
+    var align = JA.weather.alignment(p);
     return { moon: moon, p: p, minutes: moon ? 1.28 / 60 : p.minutes, oneWaySec: oneWaySec, dish: !!s.m.comms.on, dishBroken: !!s.m.comms.broken,
       cur: cur, prog: prog, pending: inflight.length, align: align, info: info };
   };
@@ -182,6 +182,7 @@
     if (e.type === 'crisis') { M.logEvent(s, '🚨', 'Crisis: ' + (JA.crisis.view(s) || {}).title, 2); return null; }
     if (e.type === 'consequence') { M.logEvent(s, e.tone === 'bad' ? '🟥' : e.tone === 'good' ? '🟩' : '🟨', e.text, e.tone === 'bad' ? 1 : 0); return null; }
     if (e.type === 'fail') { M.logEvent(s, '🛑', 'ABORT: ' + JA.FAIL[e.reason].title, 2); return null; }
+    if (e.type === 'devil' && e.phase === 'clean' && e.gain > 0.01) { M.logEvent(s, '🌪️', 'Dust devil crossed the solar field: +' + Math.round(e.gain * 100) + '% panel power.', 0); return null; }
     return null;
   };
   // The repair call from the toolbox (sim.askEarth) goes through the same radio so the screens show it.
@@ -254,7 +255,7 @@
     // left: the instrument
     var ox = w * 0.2, oy = 44 + (h - 44) * 0.47, orad = Math.min(w * 0.17, (h - 44) * 0.4);
     ctx.fillStyle = MUTED; ctx.font = '600 15px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('EARTH–MARS LINK · ' + Math.round(mdl.p.km / 1e6) + ' MILLION KM', ox, 62);
+    ctx.fillText(mdl.moon ? 'EARTH–MOON LINK · 384,400 KM' : 'EARTH–MARS LINK · ' + Math.round(mdl.p.km / 1e6) + ' MILLION KM', ox, 62);
     M.drawOrbit(ctx, ox, oy + 8, orad, mdl, t, { scale: 1 });
     ctx.fillStyle = MUTED; ctx.font = '500 13px ' + MONO;
     ctx.fillText('mean orbits · about ±3%', ox, h - 14);
@@ -275,7 +276,7 @@
     ctx.fillStyle = MUTED; ctx.font = '600 14px ' + MONO; ctx.fillText('LAST TRANSMISSION', lx, 196);
     ctx.fillStyle = INK; ctx.font = '500 16px ' + FONT;
     wrapText(ctx, last ? (last.dir === 'up' ? 'OUTPOST-01: ' : 'HOUSTON: ') + (last.text || '…') : 'No transmissions yet this mission.', lx, 218, lw, 20, 3);
-    ctx.fillStyle = MUTED; ctx.font = '600 14px ' + MONO; ctx.fillText('PENDING ' + mdl.pending + '  ·  ALIGNMENT: ' + mdl.align.toUpperCase(), lx, h - 22);
+    ctx.fillStyle = MUTED; ctx.font = '600 14px ' + MONO; ctx.fillText('PENDING ' + mdl.pending + '  ·  ' + (mdl.moon ? 'NEAR-INSTANT LINK' :'MARS–EARTH: ' + mdl.align.toUpperCase()), lx, h - 22);
     // right: the log
     var rx = w * 0.75, rw = w * 0.23;
     ctx.fillStyle = MUTED; ctx.font = '600 15px ' + MONO; ctx.fillText('MISSION LOG', rx, 66);

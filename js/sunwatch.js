@@ -83,7 +83,10 @@
         n: n, state: state, open: state !== 'blind' && state !== 'later', today: n === sol && !over,
         ms: dayMs(w.date), cls: typeof w.cls === 'string' && w.cls ? w.cls : '', clock: clockMs(w.time),
         level: Math.max(0, Math.min(3, Math.round(+w.level) || 0)), count: Math.round(+w.count) || 0,
-        link: nasaLink(w.link), report: reports[n] || null
+        link: nasaLink(w.link), report: reports[n] || null,
+        // what really reached the site that day (spaceweather.js describe), and the NASA records behind it
+        story: JA.weather && w.date ? JA.weather.describe(w, s.site && s.site.id).text : '',
+        sepLink: nasaLink(w.sep && w.sep.link), cmeLink: nasaLink((w.cme && w.cme.link) || (w.arrive && w.arrive.link))
       });
     });
     return out;
@@ -166,7 +169,7 @@
       var may = m.ok && m.t0 <= Date.UTC(2024, 4, 10) && m.t1 >= Date.UTC(2024, 4, 10);
       box = '<div class="info-row sunwatch-data"><span class="ic">📼</span><div><b>Saved NASA records (not live)</b>' +
         '<p><span class="tagline archive">NASA archive</span>This list is saved inside the game. It is not live data.' +
-        (may ? ' It covers one of the stormiest times in 20 years.' : '') +
+        (may ? ' It covers one of the most active months on the Sun in 20 years.' : '') +
         (isNaN(m.saved) ? '' : ' It was copied from NASA on ' + esc(longDate(m.saved)) + '.') + '</p></div></div>';
     }
     return '<h2>☀️ Sun Watch</h2><p class="sub">The real Sun behind your mission.</p>' +
@@ -317,13 +320,13 @@
           : 'Not yet. Play this ' + esc(low) + ' to see what the Sun did.') + '</span></div>' +
         '<span class="sunwatch-pill sunwatch-pq">❓ ' + (blind ? 'No forecast' : 'Not yet') + '</span></li>';
     }
-    var flare;
-    if (d.cls) {
-      flare = 'Strongest flare: <b>class ' + esc(d.cls) + '</b>' + (isNaN(d.clock) ? '' : ', peak at ' + esc(clock(d.clock)) + ' UTC') + '.' +
-        (d.count > 1 ? ' NASA listed ' + esc(d.count) + ' flares that day.' : '') +
-        (d.level === 0 ? ' Too weak for a storm.' : '') +
-        (d.link ? ' <a href="' + esc(d.link) + '" target="_blank" rel="noopener">NASA record</a>' : '');
-    } else flare = m.source === 'archive' ? 'No M or X flare that day.' : 'No flare listed that day.';
+    var links = [];
+    if (d.sepLink) links.push('<a href="' + esc(d.sepLink) + '" target="_blank" rel="noopener">particle storm record</a>');
+    if (d.cmeLink) links.push('<a href="' + esc(d.cmeLink) + '" target="_blank" rel="noopener">CME record</a>');
+    if (d.link) links.push('<a href="' + esc(d.link) + '" target="_blank" rel="noopener">flare record</a>');
+    var flare = esc(d.story || (d.cls ? 'Strongest flare: class ' + d.cls + '.' : 'No flare listed that day.')) +
+      (d.count > 1 ? ' NASA listed ' + esc(d.count) + ' flares that day.' : '') +
+      (links.length ? ' NASA: ' + links.join(' · ') : '');
     var what = '';
     if (d.state === 'played') what = happened(m, d);
     else if (d.state === 'today') what = rightNow(m, d);
@@ -347,7 +350,7 @@
         : sofar + ' you were caught outside in a solar storm for about ' + esc(plural(Math.round(out), 'second')) + '.') + '</p>';
     }
     return '<h3>🗓️ Your mission, day by real day</h3>' +
-      '<p class="sunwatch-how">Each mission ' + esc(m.dayWord.toLowerCase()) + ' replays one real day. The strongest flare of that day sets the storm.</p>' +
+      '<p class="sunwatch-how">Each mission ' + esc(m.dayWord.toLowerCase()) + ' replays one real day. The chart above shows the flares: flashes of light. Each row says what really reached ' + esc(m.s && m.s.site && m.s.site.id === 'mars' ? 'Mars' : 'the Moon') + ': a storm of fast particles, or nothing.</p>' +
       '<ol class="sunwatch-days">' + m.days.map(function (d) { return rowHtml(m, d); }).join('') + '</ol>' + sum;
   }
 
@@ -359,10 +362,12 @@
   }
   function factsHtml(m) {
     return '<h3>🔎 How to read this</h3>' +
-      '<div class="info-row"><span class="ic">☀️</span><div><b>What is a solar flare?</b><p>A giant flash on the Sun. In a few minutes it blasts out light and radiation. The flash takes about 8 minutes to reach Earth and the Moon.</p></div></div>' +
+      '<div class="info-row"><span class="ic">☀️</span><div><b>What is a solar flare?</b><p>A giant flash on the Sun: light and X-rays. It takes about 8 minutes to reach Earth and the Moon, and about 13 minutes to reach Mars. It is the first sign that something happened.</p></div></div>' +
+      '<div class="info-row"><span class="ic">☁️</span><div><b>What is a CME?</b><p>A coronal mass ejection: a giant cloud of solar gas thrown into space. It takes one to three days to cross to Earth or Mars. A fast one pushes a shock wave ahead of it, like a boat’s bow wave.</p></div></div>' +
+      '<div class="info-row"><span class="ic">☢️</span><div><b>So what is a radiation storm?</b><p>Protons sped up to huge speeds, mostly by that shock wave. They race along the Sun’s spiral magnetic field, so they only reach a planet that is linked to the right part of the Sun. Big flares often send none your way. That is why the crew watches for particles, not flashes.</p></div></div>' +
       '<div class="info-row"><span class="ic">🔠</span><div><b>What do the letters mean?</b><p>Scientists sort flares by strength: A, B, C, M and X. Each letter is 10 times stronger than the one before. The number counts steps inside a letter: an M2 is twice as strong as an M1.</p></div></div>' +
       '<div class="info-row"><span class="ic">🌙</span><div><b>Why is the Moon hit harder than Mars?</b><p>The Moon has no air at all, so nothing slows a solar storm down. Mars has thin air that soaks up part of it. In this game a storm on Mars is half as strong as on the Moon. That half is a game number.</p></div></div>' +
-      '<p class="sunwatch-how"><b>Real:</b> every flare, date, time and class here. <b>Game:</b> the storm sizes. In real life only some flares send a radiation storm to the Moon or Mars.</p>' +
+      '<p class="sunwatch-how"><b>Real:</b> every flare, particle storm, CME, date and time here (NASA DONKI). On the Moon, the particle storms are the ones NASA’s satellites measured near Earth. On Mars, no detector reports to DONKI, so the game checks each fast CME against where Mars really was and how well it was linked to the eruption. <b>Game:</b> how many badge points a storm costs.</p>' +
       sourceHtml(m);
   }
 

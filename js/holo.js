@@ -973,11 +973,11 @@
     icon: '🌩️', title: 'What a solar storm is', src: 'donki',
     fix: function (d) { return { dish: d.dish !== false, lead: Math.round(num(d.lead, 45, 0, 999)) }; },
     steps: function (d) {
-      return ['Sometimes the Sun throws out a huge burst of energy called a solar flare.',
-        'Its light reaches us in about 8 minutes. Telescopes that watch the Sun see the flash.',
-        'The dangerous particles are slower and arrive later. That gap is your warning time.',
-        d.dish ? 'Your Radio Dish is on, so Earth can warn you early: about ' + d.lead + ' seconds in this game.' :
-          'Your Radio Dish is off, so only your suit\'s small sensor can warn you: about ' + d.lead + ' seconds in this game.'];
+      return ['Sometimes the Sun flashes (a solar flare) and throws out a giant cloud of gas (a CME).',
+        'The flash of light arrives in minutes. Telescopes that watch the Sun see it, and the cloud leaving.',
+        'The dangerous particles, sped up by the cloud\'s shock wave, come later. That gap is your warning time.',
+        d.dish ? 'Your Radio Dish is on, so Earth\'s forecasters can warn you early: about ' + d.lead + ' seconds in this game.' :
+          'Your Radio Dish is off, so only your suit\'s sensor notices, when the particles are already here: ' + (d.lead > 0 ? 'about ' + d.lead + ' seconds of warning.' : 'no warning at all.')];
     },
     draw: function (d, s, t) {
       var i, p, q, u, x, y;

@@ -9,7 +9,8 @@ global.window={};
 ['data','archive-data','spaceweather','sim','crisis'].forEach(f=>require(P+f+'.js'));
 var JA=window.JA, sim=JA.sim, R=JA.RULES;
 module.exports={JA,sim,R};
-var arch={source:'archive',start:window.JA_ARCHIVE_FLARES.start,end:window.JA_ARCHIVE_FLARES.end,flares:window.JA_ARCHIVE_FLARES.flares};
+// the archive exactly as the game loads it (flares, particle events, CMEs, CME arrivals, notes)
+var arch=JA.weather.load('archive') && Object.assign({source:'archive'},window.JA_ARCHIVE_FLARES);
 module.exports.arch=arch;
 // bot: one action every `gap` seconds. opts.bags = target bags, opts.shelter = go inside on warning
 function run(site,level,seed,o){
@@ -20,7 +21,10 @@ function run(site,level,seed,o){
     var next=0, fail=null;
     while(!s.dayDone && !fail){
       var ph=sim.stormPhase(s);
-      var outside = !(o.shelter!==false && (ph==='warning'||ph==='active'));
+      var hiding = o.shelter!==false && (ph==='warning'||ph==='active');
+      // opts.travel: seconds a real player needs to walk home after the warning (0 = the bot is always at the door)
+      if(hiding && o.travel && s.storm && s.t < s.storm.start - sim.warnLead(s) + o.travel) hiding=false;
+      var outside = !hiding;
       var ev=sim.tick(s,0.25,{outside:outside,driving:false});
       ev.forEach(function(e){ if(e.type==='fail')fail=e.reason; if(e.type==='bag')bagsReady++;
         if(e.type==='crisis'){ var v=JA.crisis.view(s); var pick=(o.pick&&o.pick[v.id])||v.options[0].id; var r=JA.crisis.choose(s,pick); if(r.skip){var secs=r.skip*s.dayLength; while(secs>0&&!s.dayDone){sim.tick(s,0.5,{outside:false});secs-=0.5;}} }
@@ -41,6 +45,7 @@ function run(site,level,seed,o){
       if(s.rack.cells>0){
         var tgt=null;
         if(m.air.power===0 && s.air<80) tgt='air';
+        else if(o.dishFirst && !m.comms.on && !m.comms.broken && o.dish!==false && s.t<D*0.5) tgt='comms';   // a player who powers the dish every morning
         else if(o.scrub!==false && s.filter<(o.scrubAt==null?25:o.scrubAt)) tgt='scrub';
         else if(m.food.lamp<0.15) tgt='food';
         else if(s.bags+m.bag.pending+bagsReady<(o.bags==null?16:o.bags)) tgt='bag';

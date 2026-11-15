@@ -382,7 +382,7 @@
     var today = tidy(info.today, 40) || todayText(), o = { weight: 500, size: 18, min: 12, maxW: 1380, color: 'rgba(245, 247, 255, 0.92)' };
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.75)'; ctx.shadowBlur = 6;
-    put(ctx, 'Solar storm dates and classes: NASA DONKI space-weather database' + src + '.', CW / 2, 1052, o);
+    put(ctx, 'Solar storm dates: NASA DONKI space-weather database' + src + '. SEP = solar particle event, CME = coronal mass ejection shock.', CW / 2, 1052, o);
     put(ctx, 'Astro Outpost is a student project and is not affiliated with or endorsed by NASA.   ·   ' + today, CW / 2, 1076, o);
     ctx.restore();
   }

@@ -191,17 +191,23 @@
     bannerText = text + cls; b.className = cls || ''; b.textContent = text;
   };
   var lastSay = '';
-  // Mission Control on Earth, over the radio.
+  // Who is talking on the radio. from 'earth': Mission Control on Earth (with the Quindar beeps real NASA radio used).
+  // from 'crew': a crewmate inside the habitat — on Mars, Earth is minutes away by radio, so the crewmate inside
+  // talks the astronaut through the work (real spacewalks have this job: the "IV" crew member). No beeps: it is local.
+  U.RADIO_FROM = { earth: 'Mission Control · Earth', crew: '🧑‍🚀 Crewmate · in the habitat' };
   // vid: the recorded voice line for these words (a list plays one after the other); without one, read-aloud speaks them
-  U.say = function (text, vid, why) {
-    if (!text || text === lastSay) return;
-    lastSay = text;
+  U.say = function (text, vid, why, from) {
+    from = from === 'crew' ? 'crew' : 'earth';
+    if (!text || text + from === lastSay) return;
+    lastSay = text + from;
     var b = $('radio');
     b.classList.remove('hidden');
     b.classList.toggle('can-why', !!why);
+    b.classList.toggle('from-crew', from === 'crew');
+    $('radio-from').textContent = U.RADIO_FROM[from];
     $('radio-text').textContent = text;
     b.classList.remove('say'); void b.offsetWidth; b.classList.add('say');
-    if (!JA.audio.line(vid)) JA.audio.speak(text);
+    if (!JA.audio.line(vid, from === 'crew' ? { plain: true } : undefined)) JA.audio.speak(text);
   };
   var promptKey = null;
   U.prompt = function (text, key, info) {
@@ -362,14 +368,13 @@
       return '<div class="info-row"><span class="ic">❓</span><div><b>No space-weather forecast</b>' +
         '<p>The Radio Dish was off, so Earth could not send a forecast. Your suit\'s small sensor only gives a few seconds of warning.</p></div></div>';
     }
+    var story = esc(JA.weather.describe(w, s.site.id).text);
     if (!w || w.level === 0) {
-      var what = w && w.cls ? 'only small flares (the strongest was class ' + esc(w.cls) + ')' : 'no solar flares at all';
-      return '<div class="info-row good"><span class="ic">😎</span><div><b>Quiet Sun ' + when + '</b>' +
-        '<p>' + U.dataTag(s) + 'On ' + date + ' NASA recorded ' + what + '. No radiation storm.</p></div></div>';
+      return '<div class="info-row good"><span class="ic">😎</span><div><b>No radiation storm ' + when + '</b>' +
+        '<p>' + U.dataTag(s) + story + '</p></div></div>';
     }
     return '<div class="info-row alert"><span class="ic">🌩️</span><div><b>' + U.stormWords(w.level) + ' ' + when + '!</b>' +
-      '<p>' + U.dataTag(s) + 'On ' + date + ' the real Sun fired a class <b>' + esc(w.cls) + '</b> flare' + (w.time ? ' at ' + esc(w.time) + ' UTC' : '') +
-      '. Soil bags on the dome help — and do not get caught far from home!</p></div></div>';
+      '<p>' + U.dataTag(s) + story + ' Soil bags on the dome help — and do not get caught far from home!</p></div></div>';
   };
   U.findRow = function (f) {
     return '<div class="find"><em>' + (f.icon || '🧪') + '</em><div><b>' + esc(f.title) + '</b><span>' + esc(f.text) + '</span></div></div>';

@@ -1134,7 +1134,7 @@
     ctx.fillText('SPACE WEATHER', w * 0.48, h * 0.24);
     ctx.fillStyle = '#fff'; ctx.font = '600 24px ' + FONT;
     var known = s.forecast || ph !== 'none';
-    ctx.fillText(ph === 'active' ? 'STORM NOW!' : ph === 'warning' ? 'STORM COMING' : known ? (wx && wx.level ? 'flare ' + wx.cls + ' today' : 'quiet Sun') : 'no forecast', w * 0.48, h * 0.48);
+    ctx.fillText(ph === 'active' ? 'STORM NOW!' : ph === 'warning' ? 'STORM COMING' : known ? (wx && wx.level ? (wx.cause === 'cme' ? 'CME shock today' : 'particle storm today') : 'quiet Sun') : 'no forecast', w * 0.48, h * 0.48);
     ctx.fillStyle = '#b3bde0'; ctx.font = '600 20px ' + FONT;
     ctx.fillText('Use me: Sun Watch', w * 0.48, h * 0.72);
   }
