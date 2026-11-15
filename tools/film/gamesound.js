@@ -86,6 +86,7 @@ function main() {
   const talk = new Float32Array(NF);
   vstarts.forEach((v, i) => {
     if (v.hush) return;
+    if (vstarts.slice(i + 1).some((w) => !w.hush && w.T <= v.T + 0.05)) return;      // cut off at once by the next line, as in the game
     const next = vstarts.slice(i + 1).find((w) => w.T > v.T + 0.05), until = next ? next.T : LEN;
     let t = v.T;
     if (v.src) { const c = decode(path.join(ROOT, v.src)); const d = add(vox, c, t, 0.9, 0, until - t); for (let f = Math.floor(t * FPS); f < Math.min(NF, (t + d) * FPS); f++) talk[f] = 1; return; }

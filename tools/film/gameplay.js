@@ -120,7 +120,7 @@
     ['power', 4, 'Power is limited', 'the Sun charges a few cells a day: each one goes where you carry it', 'groove'],
     ['visor', 5, 'One-sixth gravity', 'every step is a bound · helmet view and the map', 'groove'],
     ['ice1', 6, 'Ice is treasure', 'dug from a crater that never sees the Sun · electricity splits it into oxygen', 'groove'],
-    ['rover', 7, 'The rover', 'four things in the bed · a battery to watch · bumps fly far in low gravity', 'groove'],
+    ['rover', 7, 'The rover', 'four things in the bed, a battery to watch · the ice crater is far', 'groove'],
     ['farm', 8, 'Food and shielding', 'lettuce or potatoes · soil bags block radiation', 'groove'],
     ['core', 9, 'Real science', 'rock cores, holograms and a Field Journal, all with NASA sources', 'groove'],
     ['warn', 10, 'Real solar storms', 'no air to stop them: the particle storms NASA measured near Earth', 'storm'],
@@ -252,10 +252,10 @@
   shot({ id: 'visor', frames: 75,
     begin: async function () {
       stage({ envT: 0.42 });
-      var h = B.spots.door; put(h.x + 14, h.z + 22); face(h.x, h.z - 30);
+      var h = B.spots.door; put(h.x + 10, h.z + 44); face(h.x, h.z);
       playCam(0, 0.2, 7); quiet(4);
       press('KeyV'); quiet(20);
-      F.note.dir = norm2(-14, -52);
+      F.note.dir = norm2(-10, -44);
     },
     frame: function (t) {
       var d = F.note.dir; walk(d[0], d[1], true);
@@ -341,20 +341,38 @@
     }
     return best;
   }
+  function flatRun(len) {         // the flattest straight stretch of open ground near the outpost
+    var best = null, bs = 1e9, x, z, k, i, ax, az, h0, worst, px, pz, j, o, blocked;
+    for (x = -70; x <= 70; x += 7) for (z = -70; z <= 70; z += 7) {
+      if (Math.hypot(x, z) < 30) continue;
+      for (k = 0; k < 12; k++) {
+        ax = Math.sin(k / 12 * 6.283); az = Math.cos(k / 12 * 6.283); h0 = Tn.height(x, z); worst = 0; blocked = false;
+        for (i = 0; i <= len && !blocked; i += 2) {
+          px = x + ax * i; pz = z + az * i;
+          worst = Math.max(worst, Math.abs(Tn.height(px, pz) - h0), i ? Math.abs(Tn.height(px, pz) - Tn.height(px - ax * 2, pz - az * 2)) * 4 : 0);
+          if (Math.hypot(px, pz) < 28 || Math.hypot(px - Tn.L.colony[0], pz - Tn.L.colony[1]) < 50 || Math.hypot(px - Tn.L.rocket[0], pz - Tn.L.rocket[1]) < 16) blocked = true;
+          for (j = 0; j < Tn.boulders.length && !blocked; j++) { o = Tn.boulders[j]; if (o.mesh && o.mesh.visible && Math.hypot(o.x - px, o.z - pz) < o.r + 3) blocked = true; }
+        }
+        if (!blocked && worst < bs) { bs = worst; best = { x: x, z: z, ax: ax, az: az, bump: worst }; }
+      }
+    }
+    return best;
+  }
   shot({ id: 'rover', frames: 120,
     begin: async function () {
       stage({ envT: 0.5 });
-      var run = findRun(); if (!run) throw new Error('no clear run for the rover');
-      var r = A.rover, b = run.b;
+      var run = flatRun(26); if (!run) throw new Error('no flat run for the rover');
+      var r = A.rover, b = { x: run.x + run.ax * 30, z: run.z + run.az * 30, r: 0 };
       A.items.slice().forEach(function (it) { if (it.state === 'bed') A.remove(it); });
-      r.pos.set(b.x - run.ax * 22, 0, b.z - run.az * 22); r.pos.y = ground(r.pos.x, r.pos.z); r.yaw = Math.atan2(run.ax, run.az); r.speed = 0; r.vy = 0;
+      r.pos.set(run.x, 0, run.z); r.pos.y = ground(r.pos.x, r.pos.z); r.yaw = Math.atan2(run.ax, run.az); r.speed = 0; r.vy = 0;
       G.s.m.rover.charge = 100; G.s.m.rover.stuck = false;
       A.roverSpot('door', A.astro.pos); A.enterRover();
       ['ice', 'ice', 'crate'].forEach(function (type) { A.toBed(A.spawn(type, V.set(r.pos.x, r.pos.y + 2, r.pos.z), type === 'crate' ? { name: 'Lettuce crate', crop: 'lettuce' } : null, 'rest')); });
       W.cam.yaw = Math.atan2(-run.ax, -run.az);
-      F.note.run = { ax: run.ax, az: run.az, bx: b.x, bz: b.z, br: b.r }; F.note.c0 = G.s.stats.crashes || 0; G.keys.up = true; playCam(Math.atan2(-run.ax, -run.az) + 0.5, 0.26, 9); quiet(60);
+      F.note.run = { ax: run.ax, az: run.az, bump: +run.bump.toFixed(2) }; F.note.c0 = G.s.stats.crashes || 0; F.note.vmax = 0; G.keys.up = true; playCam(Math.atan2(-run.ax, -run.az) + 0.5, 0.26, 9);
+      for (var i = 0; i < 60; i++) { G.keys.up = Math.abs(r.speed) < 5; quiet(1); }
     },
-    frame: function (t) { hold(0.5); W.cam.yaw = Math.atan2(-F.note.run.ax, -F.note.run.az) + lerp(0.5, 1.1, t / 4); W.cam.pitch = 0.26; G.keys.up = (G.s.stats.crashes || 0) === F.note.c0; },
+    frame: function (t) { var r = A.rover; hold(0.5); W.cam.yaw = Math.atan2(-F.note.run.ax, -F.note.run.az) + lerp(0.5, 1.1, t / 4); W.cam.pitch = 0.26; G.keys.up = Math.abs(r.speed) < 5; F.note.vmax = Math.max(F.note.vmax, Math.abs(r.speed)); F.note.air = Math.max(F.note.air || 0, +(r.pos.y - ground(r.pos.x, r.pos.z)).toFixed(2)); },
     end: function () { F.note.crashes = (G.s.stats.crashes || 0) - F.note.c0; halt(); if (A.rover.driver) A.exitRover(); A.rover.speed = 0; }
   });
 
