@@ -329,6 +329,8 @@
 
   // ---------- one slice of time ----------
   // ctx: { outside, sprint, driving }. Returns a list of things that just happened.
+  // In crew mode (js/crew.js) outside and sprint are shares of the crew (0..1): how many of the astronauts are out
+  // in the open, and how many of them are running. One player is true / false, the same as 1 / 0.
   function tick(s, dt, ctx) {
     var ev = [];
     if (s.over || s.night || s.dayDone) return ev;
@@ -336,12 +338,13 @@
     s.t = Math.min(D, s.t + dt); dt = s.t - t0;
 
     // breathing empties the tanks and fills the CO2 filter; with stale air the tanks must give even more
-    var puff = airDrain(s) / D * dt * (ctx.outside && ctx.sprint ? R.sprintAir : 1), breath = puff * stale(s);
+    var out = ctx.outside === true ? 1 : +ctx.outside || 0, run = ctx.sprint === true ? out : Math.min(out, +ctx.sprint || 0);
+    var puff = airDrain(s) / D * dt * (1 + (R.sprintAir - 1) * run), breath = puff * stale(s);
     s.air = Math.max(0, s.air - breath); td.breath += breath; td.staleAir += breath - puff;
     var soaked = Math.min(s.filter, puff * R.filterPerAir * (built(s, 'filter') ? 0.67 : 1));
     s.filter -= soaked; td.filterUsed += soaked;
     if (s.filter <= 0) td.wasStale = true;
-    if (ctx.outside && ctx.sprint) s.stats.sprint += dt;
+    if (run > 0) s.stats.sprint += dt * run;
     // the crew drinks and washes; the recycler gives most of it back
     if (s.water > 0) {
       var sip = R.crewWater / D * dt, back = sip * s.mods.recycle;
@@ -351,7 +354,8 @@
     if (s.leak > 0) { var lost = s.leak / D * dt; s.air = Math.max(0, s.air - lost); s.today.leaked += lost; }
 
     var sf = shield(s);
-    var base = s.site.doseDay * s.level.doseScale / D * dt * (ctx.outside ? 1 : 1 - sf);
+    var bare = out + (1 - out) * (1 - sf);         // the share of the crew's dose that the walls and bags do not block
+    var base = s.site.doseDay * s.level.doseScale / D * dt * bare;
     s.dose += base; s.today.doseBase += base;
 
     var st = s.storm;
@@ -360,9 +364,9 @@
       var o = Math.max(0, Math.min(s.t, st.end) - Math.max(t0, st.start));
       if (o > 0) {
         if (!st.active) { st.active = true; ev.push({ type: 'storm', phase: 'active' }); }
-        var got = st.strength / R.stormDuration * o * (ctx.outside ? 1 : 1 - sf);
+        var got = st.strength / R.stormDuration * o * bare;
         s.dose += got; s.today.doseStorm += got;
-        if (ctx.outside) { s.stats.stormOut += o; td.stormOut += o; if (td.stormOut > 2) note(s, 'stormout'); }
+        if (out > 0) { s.stats.stormOut += o * out; td.stormOut += o * out; if (td.stormOut > 2) note(s, 'stormout'); }
       }
       if (!st.over && s.t >= st.end) {
         st.over = true; st.active = false; ev.push({ type: 'storm', phase: 'over' });

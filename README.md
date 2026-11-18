@@ -137,6 +137,30 @@ Before the mission you choose:
 Ice is mined by drill rigs that work by themselves: start one, go and do something else, and come back for the chunk.
 When the crew flies home after a won mission, the game shows what the outpost could become in 10, 30 and 100 years, and then the results.
 
+### Play with friends (crew mode)
+
+Up to 4 players share one outpost, each on their own computer or tablet: one air supply, one Solar Rack, one rover,
+the same storms. It is free and there is nothing to install.
+
+1. One player picks **Play with friends**, types a name and presses **Host**. The game shows a 5-letter crew code and
+   a **Copy invite link** button.
+2. The others open the game, pick **Play with friends** and type the code (or open the invite link) and press **Join**.
+3. When everyone is in the crew room, the host presses **Plan the mission**, chooses the site and level, and launches.
+
+How it works, in short:
+- The host's game runs the mission. Everyone else's game shows what the host's game says and sends it what that player does.
+  The host should have the strongest computer and the best connection, and must keep the game open: if the host
+  leaves, the mission ends for everyone.
+- You move your own astronaut on your own screen at once. Your crewmates see you within about a tenth of a second.
+- The big moments (the morning card, the night report, a crisis with no checklist, the launch) open on every screen.
+  The host's choice moves everyone on.
+- The radiation badge counts how much of the crew is out in the open, and running uses air for everyone, so a storm
+  means getting the whole crew inside.
+- Players join in the crew room, before the launch. Pioneer mode is for one player.
+- The game talks peer to peer (WebRTC). The free PeerJS service only introduces the players to each other. A few
+  strict networks (some school, office or phone networks) block direct links between players: if a friend cannot
+  join, try another network (a phone hotspot often works) or let someone else host.
+
 ---
 
 ## Run it yourself
@@ -163,12 +187,24 @@ node tools/tests/systems.test.js
 node tools/tests/fixes.test.js
 ```
 
+Crew mode and the game for one are also played through in headless Chrome (needs Node 22 and Chrome). The crew test
+runs four players on one computer, talking through the browser (`--peer` uses the real PeerJS service instead):
+
+```bash
+node tools/tests/crew.test.js
+```
+
+```bash
+node tools/tests/solo.test.js
+```
+
 ## How the code is organised
 
 - `js/sim.js`, `js/data.js`, `js/crisis.js`, `js/spaceweather.js`: all the **rules**, with no graphics. This is what the tests load.
 - `js/game.js`: input, goals, radio, night reports, endings.
 - `js/world.js`, `js/base.js`, `js/actors.js`, `js/interior.js`, `js/fx.js`: the three.js world, outpost, astronaut, rover, habitat and rocket interiors, and camera effects.
 - `js/mission.js`: the Mission Control workstation (orbit screen, radio link, log).
+- `js/net.js`, `js/crew.js`: crew mode. The network (PeerJS / WebRTC, or a BroadcastChannel with `?net=local` for tests), and the crew itself: the crew room, crewmates' astronauts and name tags, the mission state and things kept the same on every screen, and the shared big moments.
 - `js/holo.js`, `js/journal.js`, `js/sunwatch.js`, `js/keepsake.js`: holograms, Field Journal, Sun Watch, certificate.
 - `js/colony.js`, `js/pioneer.js`: the town that grows beside the outpost (and the future film after a win), and Pioneer mode's rock breaking and building.
 - `assets/blender/scripts/`, `tools/`: how the models, textures, icons and sounds are built.

@@ -4,6 +4,7 @@
   'use strict';
   var T = window.THREE, Tn = JA.terrain;
   var W = JA.world = { ready: false, T: T };
+  W.noDraw = /[?&]draw=0/.test(location.search);
   if (!T) return;
 
   var renderer, scene, camera, root = null, look = null, siteId = 'mars';
@@ -919,6 +920,7 @@
     updateParticles(dt);
     if (!(window.innerWidth && window.innerHeight)) return;
     // the picture goes through the camera (js/fx.js) when it is on and working; otherwise it is drawn plainly
+    if (W.noDraw) return;                 // ?draw=0: everything moves but nothing is drawn (tests that run many players on one computer)
     if (!(JA.fx && JA.fx.render && JA.fx.render(renderer, scene, camera, dt))) { renderer.setRenderTarget(null); renderer.render(scene, camera); }
   };
 })(window.JA);

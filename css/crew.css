@@ -1,0 +1,68 @@
+/* Astro Outpost — crew mode (js/crew.js): the menus, the names over your crewmates' heads, and the crew list. */
+
+/* ---------- the title screen ---------- */
+.title-card .crew-btn { margin-top: 10px; }
+
+/* ---------- host or join ---------- */
+.modal.crew-menu { max-width: 620px; }
+.crew-field { display: flex; align-items: center; gap: 12px; margin: 14px 0 6px; font-weight: 600; }
+.crew-field input, .crew-join input {
+  flex: 1; min-width: 0; font: 600 1.05rem var(--font); color: var(--ink); background: rgba(255, 255, 255, 0.08);
+  border: 0; border-radius: 12px; padding: 0.55em 0.8em; box-shadow: inset 0 0 0 2px var(--line);
+  user-select: text; -webkit-user-select: text; touch-action: manipulation;
+}
+.crew-field input:focus, .crew-join input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--power, #ffd23f); }
+.crew-ways { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.crew-way { display: flex; flex-direction: column; gap: 6px; background: rgba(255, 255, 255, 0.06); border-radius: 16px; padding: 14px; box-shadow: inset 0 0 0 1.5px var(--line); }
+.crew-way b { font-family: var(--font-display); font-size: 1.1rem; }
+.crew-way span { color: var(--muted); font-size: 0.92rem; flex: 1; }
+.crew-way > .btn { align-self: flex-start; }
+.crew-join { display: flex; gap: 8px; }
+.crew-join input { text-transform: uppercase; letter-spacing: 0.3em; font-family: var(--font-display); font-size: 1.2rem; width: 7.5em; flex: 0 1 auto; }
+.crew-status { min-height: 1.4em; margin: 12px 0 0; color: var(--muted); font-weight: 600; }
+.crew-status.bad { color: #ff8a98; }
+@media (max-width: 560px) { .crew-ways { grid-template-columns: 1fr; } }
+
+/* ---------- the crew room ---------- */
+.modal.crew-room { max-width: 560px; }
+.crew-code { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; background: rgba(255, 210, 63, 0.1); border-radius: 16px; padding: 12px 16px; margin: 10px 0; box-shadow: inset 0 0 0 2px rgba(255, 210, 63, 0.55); }
+.crew-code small { color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; }
+.crew-code b { font-family: var(--font-display); font-size: 2.1rem; letter-spacing: 0.32em; color: #ffd23f; user-select: text; -webkit-user-select: text; }
+.crew-note { flex-basis: 100%; color: #7be36a; font-weight: 600; font-size: 0.92rem; }
+.crew-list { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
+.crew-list li { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 9px 12px; }
+.crew-list li i, #crew-hud li i { width: 16px; height: 16px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7); flex: none; }
+.crew-list li b { flex: 1; }
+.crew-list .crew-empty { color: var(--muted); background: none; font-style: italic; }
+.crew-badge, .crew-you { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; border-radius: 999px; padding: 2px 9px; }
+.crew-badge { background: rgba(255, 210, 63, 0.2); color: #ffd23f; }
+.crew-you { background: rgba(123, 227, 106, 0.18); color: #7be36a; }
+.crew-ping { color: var(--muted); font-size: 0.85rem; }
+.crew-waiting { color: var(--muted); font-weight: 600; text-align: center; margin: 14px 0 0; }
+.crew-plan { margin-top: 14px; }
+
+/* a card's button that belongs to the host waits on a guest's screen */
+.modal button.crew-wait { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.5); }
+
+/* ---------- names over your crewmates' heads ---------- */
+.crew-tag {
+  position: fixed; left: 0; top: 0; z-index: 17; pointer-events: none; will-change: transform;
+  background: var(--panel-fill, rgba(6, 20, 60, 0.68)); color: #fff; border-radius: 999px; padding: 3px 11px 4px;
+  font: 700 0.86rem var(--font); white-space: nowrap; box-shadow: inset 0 0 0 2px var(--c), 0 4px 12px rgba(2, 4, 14, 0.35);
+}
+body.in-cut .crew-tag { display: none !important; }
+
+/* ---------- the crew in the corner ---------- */
+#crew-hud { position: fixed; right: 12px; top: calc(var(--hud-b, 84px) + 10px + var(--safe-t, 0px)); z-index: 18; pointer-events: none; }
+#crew-hud ul { list-style: none; margin: 0; padding: 6px; display: grid; gap: 4px; background: var(--panel-fill, rgba(6, 20, 60, 0.68)); border-radius: 16px; box-shadow: var(--panel-drop); }
+#crew-hud li { display: flex; align-items: center; gap: 8px; padding: 3px 8px; border-radius: 10px; font-size: 0.86rem; font-weight: 600; }
+#crew-hud li i { width: 12px; height: 12px; }
+#crew-hud li b { max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#crew-hud li em { font-style: normal; }
+#crew-hud li small { color: #ffb15c; font-size: 0.72rem; }
+#crew-hud li.danger { background: rgba(255, 84, 104, 0.28); box-shadow: inset 0 0 0 1.5px rgba(255, 84, 104, 0.9); }
+body.in-rocket #crew-hud, body.in-cut #crew-hud { display: none; }
+@media (max-width: 640px) { #crew-hud li b { max-width: 5em; } #crew-hud { top: auto; bottom: calc(120px + var(--safe-b, 0px)); } }
+
+/* one day length and no fast-forward when the clock is shared */
+body.crew-on #btn-fast { display: none !important; }

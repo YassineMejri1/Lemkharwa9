@@ -3,7 +3,7 @@
 (function (JA) {
   'use strict';
   var T = window.THREE, W = JA.world, Tn = JA.terrain, B = JA.base, MD = JA.models, R = JA.RULES;
-  var A = JA.actors = { items: [], devils: [] };
+  var A = JA.actors = { items: [], devils: [], crew: [] };
   if (!T) return;
   // models made in Blender (js/models.js); without them the plain shapes below are drawn
   function hasModel(name) { return !!(MD && MD.has(name)); }
@@ -161,6 +161,8 @@
   A.toBed = function (it) {
     var i = A.bedFree(); if (i < 0) return false;
     if (astro.carrying === it) astro.carrying = null;
+    if (it.holder && it.holder.carrying === it) it.holder.carrying = null;
+    it.holder = null;
     rover.bed[i] = it; it.state = 'bed'; it.slot = i; it.vel.set(0, 0, 0);
     return true;
   };
@@ -208,9 +210,13 @@
     return g;
   }
   var RADIUS = { cell: 0.4, ice: 0.4, bag: 0.32, core: 0.34, crate: 0.3, inst: 0.38, 'case': 0.28 };
-  A.spawn = function (type, pos, data, state) {
+  // Every thing has a number (id) so that, in crew mode, all the players' games mean the same thing by it.
+  // holder: the astronaut carrying it (yours, or a crewmate's: see js/crew.js).
+  A.lastId = 0;
+  A.spawn = function (type, pos, data, state, id) {
     var it = { type: type, mesh: itemMesh(type, data), pos: pos.clone(), vel: new T.Vector3(), state: state || 'rest', r: RADIUS[type] || 0.35,
-      data: data || null, spin: 0, from: null, slot: -1, tag: null, age: 0 };
+      data: data || null, spin: 0, from: null, slot: -1, tag: null, age: 0, id: id || ++A.lastId, holder: null };
+    if (id && id > A.lastId) A.lastId = id;
     it.mesh.position.copy(it.pos);
     root.add(it.mesh);
     A.items.push(it);
@@ -219,36 +225,49 @@
   A.remove = function (it) {
     var i = A.items.indexOf(it); if (i >= 0) A.items.splice(i, 1);
     if (astro.carrying === it) astro.carrying = null;
-    if (it.state === 'bed' && it.slot >= 0) rover.bed[it.slot] = null;
+    if (it.holder && it.holder.carrying === it) it.holder.carrying = null;
+    it.holder = null;
+    if (it.state === 'bed' && it.slot >= 0 && rover.bed[it.slot] === it) rover.bed[it.slot] = null;
     root.remove(it.mesh);
   };
+  A.byId = function (id) { for (var i = 0; i < A.items.length; i++) if (A.items[i].id === id) return A.items[i]; return null; };
   A.pick = function (it) {
-    if (it.state === 'bed' && it.slot >= 0) { rover.bed[it.slot] = null; it.slot = -1; }
-    it.state = 'held'; it.vel.set(0, 0, 0); it.from = null; astro.carrying = it;
+    if (it.state === 'bed' && it.slot >= 0) { if (rover.bed[it.slot] === it) rover.bed[it.slot] = null; it.slot = -1; }
+    if (it.holder && it.holder !== astro && it.holder.carrying === it) it.holder.carrying = null;
+    it.state = 'held'; it.vel.set(0, 0, 0); it.from = null; astro.carrying = it; it.holder = astro;
   };
-  A.handPos = function (out) {
-    var s = Math.sin(astro.yaw), c = Math.cos(astro.yaw);
-    var f = astro.fp ? 0.95 : 0.72;      // in first person, hold things a little higher and further out so you can see them
-    return out.set(astro.pos.x + s * f, astro.pos.y + (astro.fp ? 1.25 : 1.15), astro.pos.z + c * f);
+  A.handPos = function (out, who) {
+    var a = who || astro, s = Math.sin(a.yaw), c = Math.cos(a.yaw);
+    var f = a.fp ? 0.95 : 0.72;      // in first person, hold things a little higher and further out so you can see them
+    return out.set(a.pos.x + s * f, a.pos.y + (a.fp ? 1.25 : 1.15), a.pos.z + c * f);
   };
   A.setDown = function () {
     var it = astro.carrying; if (!it) return null;
-    astro.carrying = null; it.state = 'fly'; it.from = null;
+    astro.carrying = null; it.holder = null; it.state = 'fly'; it.from = null;
     it.vel.set(Math.sin(astro.yaw) * 1.2 + astro.vel.x, 0.6, Math.cos(astro.yaw) * 1.2 + astro.vel.z);
     return it;
   };
-  function throwVel(power, out) {
+  // fwd: the direction the thrower looks ({ x, z }); without it, the way this screen's camera looks
+  function throwVel(power, out, fwd) {
     var v = lerp(THROW_MIN, THROW_MAX, power);
-    W.forward(v1);
+    if (fwd) v1.set(fwd.x, 0, fwd.z).normalize(); else W.forward(v1);
     return out.set(v1.x * Math.cos(THROW_ANGLE) * v, Math.sin(THROW_ANGLE) * v, v1.z * Math.cos(THROW_ANGLE) * v);
   }
-  A.throwHeld = function (power) {
+  A.throwHeld = function (power, fwd) {
     var it = astro.carrying; if (!it) return null;
     A.handPos(it.pos); it.pos.y += 0.5;
-    throwVel(power, it.vel); it.vel.x += astro.vel.x * 0.5; it.vel.z += astro.vel.z * 0.5;
+    throwVel(power, it.vel, fwd); it.vel.x += astro.vel.x * 0.5; it.vel.z += astro.vel.z * 0.5;
     it.state = 'fly'; it.from = astro.pos.clone(); it.spin = 3 + power * 5;
-    astro.carrying = null; astro.throwT = 0.35;
+    astro.carrying = null; it.holder = null; astro.throwT = 0.35;
     return it;
+  };
+  // Run fn as if astronaut a were the one playing (crew mode: the host does a crewmate's action with the crewmate's
+  // own body, position and hands). Everything that reads A.astro or the astronaut in here sees a.
+  A.withAstro = function (a, fn) {
+    if (!a || a === astro) return fn();
+    var keep = astro;
+    astro = A.astro = a;
+    try { return fn(); } finally { astro = A.astro = keep; }
   };
   // The arc a throw would follow — the same physics the real throw uses.
   A.trajectory = function (power, pts) {
@@ -314,7 +333,7 @@
   A.build = function (rootGroup, siteId, suitColor) {
     root = rootGroup; site = siteId; grav = JA.SITES[site].gravity;
     add = W.add; mat = W.mat; soft = W.soft; glow = W.glow;
-    A.items = [];
+    A.items = []; A.crew = [];
     astro = A.astro = buildAstronaut(suitColor || 0xff7a3d);
     rover = A.rover = buildRover();
     buildDevils();
@@ -478,6 +497,11 @@
       if (!inBounds(a.pos) && A.onEdge) A.onEdge();
       if (collideCircle(a.pos, 0.5)) collideCircle(a.pos, 0.5);
       if (!rover.driver) roverPush(a.pos, 0.42);
+      for (var o = 0; o < A.crew.length; o++) {        // crewmates (js/crew.js): you cannot walk through each other
+        var cm = A.crew[o]; if (!cm.solid || cm.mode !== 'walk' && cm.mode !== 'busy') continue;
+        var cx = a.pos.x - cm.pos.x, cz = a.pos.z - cm.pos.z, cd = Math.hypot(cx, cz);
+        if (cd < 0.85 && cd > 0.0001 && Math.abs(a.pos.y - cm.pos.y) < 1.6) { a.pos.x = cm.pos.x + cx / cd * 0.85; a.pos.z = cm.pos.z + cz / cd * 0.85; }
+      }
     }
     var ground = room ? room.floor : groundAt(a.pos.x, a.pos.z), landed = false;
     if (a.onGround) {
@@ -610,7 +634,7 @@
       var ph = (a.cyc + i * 0.5) % 1;
       if (ph < a.legPh[i] && a.onGround && a.move > 0.4 && A.onStep) {
         var fs = (D * 0.5 + G.zOff) * S;
-        A.onStep(vF.set(a.pos.x + sy * fs, a.pos.y, a.pos.z + cy * fs), a.yaw, i ? 1 : -1, sprint);
+        A.onStep(vF.set(a.pos.x + sy * fs, a.pos.y, a.pos.z + cy * fs), a.yaw, i ? 1 : -1, sprint, a);
       }
       a.legPh[i] = ph;
     }
@@ -699,8 +723,35 @@
     }
   }
 
+  // Somebody else drives (crew mode): the rover goes where their game says (js/crew.js sets pos, yaw, speed, pitch,
+  // roll), and here it only turns its wheels, kicks up dust, leaves tracks and, on the host, knocks loose things aside.
+  function followRover(dt) {
+    var r = rover, s = Math.sin(r.yaw), c = Math.cos(r.yaw), e;
+    if (A.knockLoose && Math.abs(r.speed) > 1.5) for (e = 0; e < A.items.length; e++) {
+      var loose = A.items[e];
+      if (loose.state !== 'rest' || Math.abs(loose.pos.x - r.pos.x) > 4 || Math.abs(loose.pos.z - r.pos.z) > 4 || loose.pos.y - r.pos.y > 2) continue;
+      if (!roverPush(loose.pos, loose.r)) continue;
+      loose.state = 'fly'; loose.from = null; loose.spin = 4;
+      loose.vel.set(s * r.speed * 0.9 + hitNx * 2, 2.2, c * r.speed * 0.9 + hitNz * 2);
+      if (A.onBounce) A.onBounce(loose, 3);
+    }
+    r.group.position.copy(r.pos); r.group.position.y -= r.sink || 0;
+    r.group.rotation.set(0, 0, 0); r.group.rotateY(r.yaw); r.group.rotateX(r.pitch); r.group.rotateZ(r.roll);
+    for (var i = 0; i < r.wheels.length; i++) { r.wheels[i].rotation.x += r.speed * dt / 0.62; if (i >= 4) r.wheels[i].rotation.y = -(r.steer || 0) * 0.35; }
+    var mv = Math.abs(r.speed);
+    if (mv > 2) {
+      if (Math.random() < dt * mv * 2.2) W.dust(r.pos.x - s * 2 + (Math.random() - 0.5) * 2, r.pos.z - c * 2 + (Math.random() - 0.5) * 2, 1, 1.5, 0.7);
+      r.trackD += mv * dt;
+      if (r.trackD > 1.1) { r.trackD = 0; W.print(r.pos.x - c * 1.25, r.pos.z + s * 1.25, r.yaw, 0.42, 1.2); W.print(r.pos.x + c * 1.25, r.pos.z - s * 1.25, r.yaw, 0.42, 1.2); }
+    }
+    var charged = !A.roverCharge || A.roverCharge() > 0;
+    r.light.intensity = lerp(r.light.intensity, r.manned ? 0.6 + W.env.dark * 2.4 : 0, Math.min(1, dt * 4));
+    r.ring.material.emissiveIntensity = charged ? 0.6 : 1 + Math.sin(W.time * 6);
+    r.ring.material.color.set(charged ? 0x46ff8a : 0xffd23f); r.ring.material.emissive.copy(r.ring.material.color);
+  }
   function updateRover(dt, input) {
     var r = rover, thr = 0, steer = 0;
+    if (r.remote) { followRover(dt); return; }
     if (r.driver && input) { thr = -input.z; steer = input.x; }
     var stuck = !!(A.roverStuck && A.roverStuck());
     if (stuck) { thr = 0; r.speed *= Math.max(0, 1 - dt * 6); }
@@ -759,6 +810,7 @@
     r.group.position.copy(r.pos); r.group.position.y -= r.sink;
     r.group.rotation.set(0, 0, 0); r.group.rotateY(r.yaw); r.group.rotateX(r.pitch + r.sink * 0.16); r.group.rotateZ(r.roll);
     for (var i = 0; i < r.wheels.length; i++) { r.wheels[i].rotation.x += r.speed * dt / 0.62; if (i >= 4) r.wheels[i].rotation.y = -steer * 0.35; }
+    r.steer = steer;
     var mv = Math.abs(r.speed);
     if (r.onGround && mv > 2) {
       if (Math.random() < dt * mv * 2.2) W.dust(r.pos.x - s * 2 + (Math.random() - 0.5) * 2, r.pos.z - c * 2 + (Math.random() - 0.5) * 2, 1, 1.5, 0.7);
@@ -775,9 +827,10 @@
       var it = A.items[i];
       it.age += dt;
       if (it.state === 'held') {
-        A.handPos(it.pos);
-        if (astro.aim) it.pos.y += astro.fp ? 0.12 : 0.5;
-        it.mesh.rotation.set(0, astro.yaw, 0);
+        var h = it.holder || astro;
+        A.handPos(it.pos, h);
+        if (h.aim) it.pos.y += h.fp ? 0.12 : 0.5;
+        it.mesh.rotation.set(0, h.yaw, 0);
       } else if (it.state === 'bed') {
         var b = BED[it.slot]; roverLocal(b[0], b[1], b[2], it.pos);
         it.mesh.rotation.set(0, rover.yaw, 0);
@@ -801,7 +854,7 @@
       }
       it.mesh.position.copy(it.pos);
       // helmet view: what you carry sits small in the corner of your eye instead of filling the visor
-      if (it.state === 'held' && astro.fp) {
+      if (it.state === 'held' && astro.fp && (it.holder || astro) === astro) {
         it.mesh.position.x -= Math.cos(astro.yaw) * 0.4; it.mesh.position.z += Math.sin(astro.yaw) * 0.4; it.mesh.position.y -= 0.14;
         if (!it.small) { it.small = true; it.mesh.scale.setScalar(0.5); }
       } else if (it.small) { it.small = false; it.mesh.scale.setScalar(1); }
@@ -817,6 +870,46 @@
     // the helmet lamp
     var f = astro.mode === 'hidden' ? null : astro.pos;
     if (f) W.setLamp(f.x, f.y + 2.1, f.z, Math.sin(astro.yaw), Math.cos(astro.yaw));
+  };
+
+  // ---------- crewmates (crew mode, js/crew.js) ----------
+  // A crewmate is a second astronaut in your world. Their own game moves them; here they are posed from what it
+  // sends: position, velocity, heading, on the ground or in the air, and what they are doing.
+  A.addCrewmate = function (color) {
+    var p = buildAstronaut(color);
+    p.solid = true; p.puppet = true;
+    A.crew.push(p);
+    return p;
+  };
+  A.removeCrewmate = function (p) {
+    var i = A.crew.indexOf(p); if (i >= 0) A.crew.splice(i, 1);
+    if (p.carrying && p.carrying.holder === p) { p.carrying.holder = null; p.carrying = null; }
+    if (p.group.parent) p.group.parent.remove(p.group);
+  };
+  // moving: they push the stick; sprint: they run
+  A.poseCrewmate = function (p, dt, moving, sprint) {
+    p.group.visible = p.mode !== 'hidden';
+    if (p.mode === 'hidden') return;
+    if (p.mode === 'drive') {
+      roverLocal(0, 1.3, 0.25, p.pos); p.yaw = p.lastYaw = rover.yaw;
+      p.group.position.copy(p.pos); p.group.rotation.set(0, p.yaw, 0); p.drill.visible = false;
+      poseSeated(p);
+      return;
+    }
+    if (p.mode === 'sit') {
+      p.group.position.copy(p.pos); p.group.rotation.set(0, p.yaw, 0); p.drill.visible = false;
+      p.sitK = Math.min(1, (p.sitK || 0) + dt * 2); p.relaxK = 0;
+      poseRock(p, dt);
+      return;
+    }
+    p.sitK = 0;
+    if (p.spin > 0) p.spin -= dt;
+    p.throwT = Math.max(0, p.throwT - dt);
+    p.drill.visible = p.mode === 'busy';
+    if (p.mode === 'busy') p.bit.rotation.y += dt * 30;
+    poseAstro(p, dt, moving && p.mode === 'walk', sprint, p.room || null);
+    p.group.position.copy(p.pos);
+    p.tip.material.emissiveIntensity = 1.2 + Math.sin(W.time * 6);
   };
 
   A.enterRover = function () { rover.driver = true; astro.mode = 'drive'; astro.vel.set(0, 0, 0); };
