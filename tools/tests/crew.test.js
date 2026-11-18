@@ -10,7 +10,9 @@ const fs = require('fs'), path = require('path'), os = require('os'), http = req
 const ROOT = path.resolve(__dirname, '..', '..');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.mp3': 'audio/mpeg', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.webp': 'image/webp' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PEER = process.argv.includes('--peer'), SHOW = process.argv.includes('--show');
+// --peer: the real PeerJS service and direct links. --relay: everyone through the public relay.
+// --mixed: the host as usual, the guests on networks that allow no direct link (they must find the relay by themselves).
+const PEER = process.argv.includes('--peer'), RELAY = process.argv.includes('--relay'), MIXED = process.argv.includes('--mixed'), SHOW = process.argv.includes('--show');
 let passed = 0, failed = 0;
 function check(name, ok, info) {
   if (ok) { passed++; console.log('  ok   ' + name); } else { failed++; console.log('  FAIL ' + name + (info !== undefined ? '  ' + JSON.stringify(info) : '')); }
@@ -78,7 +80,9 @@ const dist = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 
 async function main() {
   const chrome = findChrome(); if (!chrome) throw new Error('Chrome not found (set CHROME)');
-  const srv = await serve(), base = 'http://127.0.0.1:' + srv.address().port + '/index.html?fx=0&draw=0' + (PEER ? '' : '&net=local');
+  const srv = await serve(), root = 'http://127.0.0.1:' + srv.address().port + '/index.html?fx=0&draw=0';
+  const base = root + (PEER || MIXED ? '' : RELAY ? '&net=relay' : '&net=local'), guestBase = MIXED ? root + '&net=relay' : base;
+  const urlOf = (p) => (p.name === 'Host' ? base : guestBase);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astro-crew-'));
   const proc = spawn(chrome, (SHOW ? [] : ['--headless=new']).concat(['--remote-debugging-port=0', '--user-data-dir=' + profile, '--mute-audio', '--autoplay-policy=no-user-gesture-required',
     '--no-first-run', '--disable-extensions', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
@@ -91,7 +95,7 @@ async function main() {
     const names = ['Host', 'Ana', 'Ben', 'Cy'];
     for (const n of names) pages.push(await openPage(port, n));
     const [H, G1, G2, G3] = pages, guests = [G1, G2, G3];
-    for (const p of pages) await p.send('Page.navigate', { url: base });
+    for (const p of pages) await p.send('Page.navigate', { url: urlOf(p) });
     for (const p of pages) await until(p, 'return window.JA && JA.game && JA.game.mode === "title" && !!JA.crew', 30000, 'the title screen');
 
     console.log('Crew room');
@@ -101,19 +105,22 @@ async function main() {
     for (let i = 0; i < 3; i++) {
       const g = guests[i];
       await g.run('JA.crew.openMenu("' + code + '"); document.getElementById("crew-name").value = "' + names[i + 1] + '"; document.querySelector("[data-act=join]").click();');
-      await until(g, 'return JA.crew.on && JA.net.me > 0', 20000, 'joining');
+      await until(g, 'return JA.crew.on && JA.net.me > 0', 40000, 'joining');
     }
     await until(H, 'return JA.crew.count() === 4', 10000, 'four players');
     check('four players are in the crew room', await H.run('return JA.crew.count()') === 4);
     check('each guest sees the whole crew', (await Promise.all(guests.map((g) => g.run('return JA.crew.count()')))).every((n) => n === 4));
+    const links = await Promise.all(guests.map((g) => g.run('return JA.net.linkOf(0)')));
+    console.log('  (links to the host: ' + links.join(', ') + ')');
+    if (RELAY || MIXED) check('the guests went through the relay', links.every((l) => l === 'relay'), links);
     const suits = await Promise.all(pages.map((p) => p.run('return JA.crew.players[JA.net.me === undefined ? 0 : JA.net.me].suit')));
     check('every astronaut has a different suit colour', new Set(suits).size === 4, suits);
     // a fifth player is turned away
     const extra = await openPage(port, 'Extra'); pages.push(extra);
-    await extra.send('Page.navigate', { url: base });
+    await extra.send('Page.navigate', { url: guestBase });
     await until(extra, 'return window.JA && JA.game && JA.game.mode === "title" && !!JA.crew', 30000);
     await extra.run('JA.crew.openMenu("' + code + '"); document.querySelector("[data-act=join]").click();');
-    await until(extra, 'return /full/.test(document.getElementById("crew-status").textContent)', 15000, 'the crew-full message');
+    await until(extra, 'return /full/.test(document.getElementById("crew-status").textContent)', 40000, 'the crew-full message');
     check('a fifth player is told the crew is full', true);
     extra.close(); pages.pop();
 

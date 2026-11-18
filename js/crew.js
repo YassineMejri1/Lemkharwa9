@@ -67,7 +67,7 @@
       SUITS.map(function (c, i) { return '<button class="swatch' + (o.suit === c ? ' sel' : '') + '" style="--c:' + hex(c) + '" data-act="suit" data-v="' + c + '" aria-label="' + SUIT_NAMES[i] + ' spacesuit" aria-pressed="' + (o.suit === c) + '"></button>'; }).join('') + '</div>' +
       '<div class="crew-ways">' +
       '<div class="crew-way"><b>🚀 Host a mission</b><span>You plan the mission and your friends join you.</span><button class="btn primary" data-act="host">Host</button></div>' +
-      '<div class="crew-way"><b>🔑 Join a friend</b><span>Type the 5-letter crew code your host sees.</span><div class="crew-join"><input id="crew-code" maxlength="5" autocomplete="off" spellcheck="false" placeholder="CODE" value="' + esc(menuCode) + '"><button class="btn primary" data-act="join">Join</button></div></div>' +
+      '<div class="crew-way"><b>🔑 Join a friend</b><span>Type the 5-letter crew code your host sees, or paste the invite link.</span><div class="crew-join"><input id="crew-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" aria-label="Crew code" value="' + esc(menuCode) + '"><button class="btn primary" data-act="join">Join</button></div></div>' +
       '</div><p class="crew-status" id="crew-status" role="status"></p>' +
       '<div class="modal-actions"><button class="btn ghost" data-act="back">Back</button></div>',
       { cls: 'crew-menu', noFocus: true, actions: {
@@ -87,14 +87,15 @@
   function busy(on) { Array.prototype.forEach.call(document.querySelectorAll('#modal-root .crew-menu button'), function (b) { if (b.getAttribute('data-act') !== 'back') b.disabled = on; }); }
   var WHY = { full: 'That crew is full: four astronauts already.', started: 'That crew has already launched its mission. Ask the host to start a new one.',
     version: 'Your friend has a different version of the game. Both of you, reload the page.', dropped: 'The host lost touch with your game. Join again!', nohost: 'No crew with that code. Check the letters, and that the host is still on the crew screen.',
-    timeout: 'The host did not answer. Check the code, or try another network: some school and phone networks block games like this.',
+    timeout: 'The host did not answer. Check the code, and that the host is still on the crew screen with the game open.',
+    blocked: 'Could not reach the host, neither directly nor through the relay. Check the code and your internet connection. Some school and office networks block games like this: a phone hotspot usually works.',
     load: 'Could not reach the free connection service. Check your internet connection.', network: 'No connection to the internet.', error: 'Something went wrong with the connection. Try again.' };
 
   function startHost() {
     keepTyped();
     var name = cleanName($('crew-name').value); saveName(name);
     busy(true); status('Opening a crew…');
-    N.on = {};
+    N.on = { status: function (t) { status(t); } };
     N.host(function (err, code) {
       if (err) { busy(false); status(WHY[err] || WHY.error, true); return; }
       begin(true, 0);
@@ -108,7 +109,7 @@
     saveName(name);
     if (code.length !== 5) { status('A crew code has 5 letters.', true); return; }
     busy(true); status('Calling the host…');
-    N.on = { msg: onMessage, lost: lost };
+    N.on = { msg: onMessage, lost: lost, status: function (t) { if (!C.on) status(t); } };
     N.join(code, { name: name, suit: G().opts.suit }, function (err) {
       if (err) { busy(false); status(WHY[err] || WHY.error, true); N.close(); return; }
       begin(false, N.me);
@@ -118,7 +119,8 @@
   function begin(host, me) {
     C.on = true; C.host = host; C.guest = !host; C.me = me; C.players = {}; C.rover = null; C.started = false; C.flowOpen = false;
     document.body.classList.add('crew-on'); document.body.classList.toggle('crew-guest', !host);
-    if (host) N.on = { join: onJoin, leave: onLeave, msg: onMessage, trouble: function () { /* the broker may hiccup; the links stay */ } };
+    if (host) N.on = { join: onJoin, leave: onLeave, msg: onMessage, knock: knock, status: function () { /* the crew room says it */ }, trouble: function () { /* the broker may hiccup; the links stay */ } };
+    clearInterval(roomTimer); roomTimer = setInterval(refreshRoom, 2000);
     patchFeedback();
     keepAwake(true);
   }
@@ -144,7 +146,7 @@
     others().forEach(function (p) { dropPuppet(p); });
     C.on = C.host = C.guest = false; C.players = {}; C.rover = null; C.started = false; C.flowOpen = false; C.pending = null; C.queued = [];
     document.body.classList.remove('crew-on', 'crew-guest');
-    unpatchFeedback(); keepAwake(false);
+    unpatchFeedback(); keepAwake(false); clearInterval(roomTimer);
     tags.forEach(function (t) { t.remove(); }); tags = [];
     if (hud) hud.classList.add('hidden');
     if (A.rover) { A.rover.remote = false; A.rover.manned = false; }
@@ -152,23 +154,38 @@
   };
 
   // The crew room: the code to share, who is here, and (for the host) the way on to planning the mission.
+  // Each crewmate shows how quick their link is, and "relay" when their network would not allow a direct link.
+  function roomRows() {
+    var rows = list().map(function (p) {
+      var rtt = p.pid === C.me ? 0 : C.host ? N.rttOf(p.pid) : p.pid === 0 ? N.rtt : 0;
+      var via = p.pid === C.me ? '' : C.host ? N.linkOf(p.pid) : p.pid === 0 ? N.linkOf(0) : '';
+      return '<li><i style="--c:' + hex(p.suit) + '"></i><b>' + esc(p.name) + '</b>' + (p.pid === 0 ? '<span class="crew-badge">host</span>' : '') +
+        (via === 'relay' ? '<span class="crew-relay" title="Their network does not allow a direct link, so their game goes through the relay">relay</span>' : '') +
+        (p.pid === C.me ? '<span class="crew-you">you</span>' : rtt ? '<span class="crew-ping">' + Math.round(rtt) + ' ms</span>' : '') + '</li>';
+    }).join('');
+    return rows + (C.count() < 2 ? '<li class="crew-empty">' + (C.host ? 'Nobody else yet. Send your friends the code!' : '') + '</li>' : '');
+  }
+  var roomTimer = null, knockUntil = 0;
+  function refreshRoom() {
+    var ul = document.querySelector('#modal-root .crew-room .crew-list'); if (!ul) return;
+    var h = roomRows(); if (ul.innerHTML !== h) ul.innerHTML = h;
+    var k = document.querySelector('#modal-root .crew-knock'); if (k) k.classList.toggle('hidden', performance.now() > knockUntil);
+  }
+  // somebody's game has reached this one and is saying hello (shown until they are in, or for a while)
+  function knock() { knockUntil = performance.now() + 9000; refreshRoom(); }
   function lobby() {
     if (!C.on) return;
     var g = G();
     if (g.mode !== 'title' && C.started) return;          // in a mission: the crew list is in the corner of the screen
     U.show($('title'), false);
-    var rows = list().map(function (p) {
-      var rtt = p.pid === C.me ? '' : C.host ? N.rttOf(p.pid) : p.pid === 0 ? N.rtt : 0;
-      return '<li><i style="--c:' + hex(p.suit) + '"></i><b>' + esc(p.name) + '</b>' + (p.pid === 0 ? '<span class="crew-badge">host</span>' : '') +
-        (p.pid === C.me ? '<span class="crew-you">you</span>' : rtt ? '<span class="crew-ping">' + Math.round(rtt) + ' ms</span>' : '') + '</li>';
-    }).join('');
-    var empty = C.count() < 2 ? '<li class="crew-empty">' + (C.host ? 'Nobody else yet. Send your friends the code!' : '') + '</li>' : '';
+    var rows = roomRows(), empty = '';
     var link = location.origin + location.pathname + '?crew=' + N.code + (N.mode === 'local' ? '&net=local' : '');
     var keep = document.querySelector('#modal-root .crew-room');
     U.modal('<h2>' + (C.host ? 'Your crew' : esc(C.name(0)) + '\'s crew') + '</h2>' +
       '<div class="crew-code"><small>Crew code</small><b>' + esc(N.code) + '</b>' + (C.host ? '<button class="btn ghost" data-act="copy">📋 Copy invite link</button>' : '') + '</div>' +
       (C.host ? '<p class="sub">Your friends open this game, pick <b>Play with friends</b> and type the code, or open the invite link. Up to 3 can join.</p>' : '<p class="sub">You are in! The host plans the mission and launches it for everyone.</p>') +
       '<ul class="crew-list">' + rows + empty + '</ul>' +
+      (C.host ? '<p class="crew-knock' + (performance.now() > knockUntil ? ' hidden' : '') + '">📡 Someone is connecting…</p>' : '') +
       (C.host ? '<p class="sub">Everyone shares the outpost: one air supply, one Solar Rack, one rover. Split the jobs and talk to each other!</p>' : '<p class="crew-waiting">⏳ Waiting for ' + esc(C.name(0)) + ' to launch the mission…</p>') +
       '<div class="modal-actions"><button class="btn ghost" data-act="leave">Leave the crew</button>' + (C.host ? '<button class="btn primary" data-act="plan">Plan the mission ▶</button>' : '') + '</div>',
       { cls: 'crew-room', noFocus: !!keep, actions: {
@@ -187,6 +204,7 @@
 
   // ---------- the host hears the crew come and go ----------
   function onJoin(pid, hi) {
+    knockUntil = 0;
     var p = addPlayer(pid, cleanName(hi.name), freeSuit(+hi.suit || SUITS[pid % SUITS.length]));
     Au.play('ding');
     sendCrew();

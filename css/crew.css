@@ -38,6 +38,8 @@
 .crew-badge { background: rgba(255, 210, 63, 0.2); color: #ffd23f; }
 .crew-you { background: rgba(123, 227, 106, 0.18); color: #7be36a; }
 .crew-ping { color: var(--muted); font-size: 0.85rem; }
+.crew-relay { font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; border-radius: 999px; padding: 2px 8px; background: rgba(92, 240, 255, 0.16); color: #7fe9ff; }
+.crew-knock { color: #ffd23f; font-weight: 600; margin: 4px 0 0; }
 .crew-waiting { color: var(--muted); font-weight: 600; text-align: center; margin: 14px 0 0; }
 .crew-plan { margin-top: 14px; }
 

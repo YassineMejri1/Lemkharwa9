@@ -157,9 +157,12 @@ How it works, in short:
 - The radiation badge counts how much of the crew is out in the open, and running uses air for everyone, so a storm
   means getting the whole crew inside.
 - Players join in the crew room, before the launch. Pioneer mode is for one player.
-- The game talks peer to peer (WebRTC). The free PeerJS service only introduces the players to each other. A few
-  strict networks (some school, office or phone networks) block direct links between players: if a friend cannot
-  join, try another network (a phone hotspot often works) or let someone else host.
+- The games talk straight to each other (WebRTC) when the networks allow it; the free PeerJS service only introduces
+  the players. Many home routers and phone networks do not allow a direct link. Then the joining player's game switches
+  by itself, after a few seconds, to a free public message relay (test.mosquitto.org, or broker.hivemq.com) and the
+  crew room shows "relay" beside that player. What goes through the relay is locked (AES-GCM) with a key made from
+  the crew code, so the relay only sees scrambled bytes. If a school or office network blocks even the relay, a phone
+  hotspot usually works.
 
 ---
 
@@ -188,7 +191,8 @@ node tools/tests/fixes.test.js
 ```
 
 Crew mode and the game for one are also played through in headless Chrome (needs Node 22 and Chrome). The crew test
-runs four players on one computer, talking through the browser (`--peer` uses the real PeerJS service instead):
+runs four players on one computer, talking through the browser (`--peer` uses the real PeerJS service and direct
+links, `--relay` the public relay only, `--mixed` a host as usual and guests whose networks allow no direct link):
 
 ```bash
 node tools/tests/crew.test.js
@@ -204,7 +208,7 @@ node tools/tests/solo.test.js
 - `js/game.js`: input, goals, radio, night reports, endings.
 - `js/world.js`, `js/base.js`, `js/actors.js`, `js/interior.js`, `js/fx.js`: the three.js world, outpost, astronaut, rover, habitat and rocket interiors, and camera effects.
 - `js/mission.js`: the Mission Control workstation (orbit screen, radio link, log).
-- `js/net.js`, `js/crew.js`: crew mode. The network (PeerJS / WebRTC, or a BroadcastChannel with `?net=local` for tests), and the crew itself: the crew room, crewmates' astronauts and name tags, the mission state and things kept the same on every screen, and the shared big moments.
+- `js/net.js`, `js/crew.js`: crew mode. The network (PeerJS / WebRTC, an encrypted MQTT relay when a direct link is not possible, or a BroadcastChannel with `?net=local` for tests), and the crew itself: the crew room, crewmates' astronauts and name tags, the mission state and things kept the same on every screen, and the shared big moments.
 - `js/holo.js`, `js/journal.js`, `js/sunwatch.js`, `js/keepsake.js`: holograms, Field Journal, Sun Watch, certificate.
 - `js/colony.js`, `js/pioneer.js`: the town that grows beside the outpost (and the future film after a win), and Pioneer mode's rock breaking and building.
 - `assets/blender/scripts/`, `tools/`: how the models, textures, icons and sounds are built.
