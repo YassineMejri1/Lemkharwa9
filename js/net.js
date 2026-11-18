@@ -243,13 +243,12 @@
   // =====================================================================
   //  THE HOST
   // =====================================================================
-  N.locked = false;        // once the mission starts, nobody new can join
   function freePid() { var used = {}; Object.keys(N.peers).forEach(function (k) { if (N.peers[k].pid) used[N.peers[k].pid] = 1; }); for (var p = 1; p <= MAX_GUESTS; p++) if (!used[p]) return p; return 0; }
   function hello(link, m) {
     if (link.pid) { sendRaw(link, { t: '_welcome', pid: link.pid }); return; }      // said twice (both ways got through)
-    var pid = N.locked ? 0 : freePid();
+    var pid = freePid();                     // players may join at any time, also in the middle of a mission
     if (!pid || m.v !== N.version) {
-      sendRaw(link, { t: '_reject', why: m.v !== N.version ? 'version' : N.locked ? 'started' : 'full' });
+      sendRaw(link, { t: '_reject', why: m.v !== N.version ? 'version' : 'full' });
       setTimeout(function () { drop(link, 'rejected'); }, 300);
       return;
     }
@@ -257,10 +256,10 @@
     sendRaw(link, { t: '_welcome', pid: pid });
     emit('join', pid, m.hello || {});
   }
-  N.version = 4;
+  N.version = 5;
   N.host = function (cb) {
     N.close();
-    N.role = 'host'; N.me = 0; N.locked = false; N.cid = 'host';
+    N.role = 'host'; N.me = 0; N.cid = 'host';
     var code = N.newCode(), told = false, relayAsked = false;
     function ready() { if (told) return; told = true; N.code = code; heartbeat(); cb(null, code); }
     function failed(why) { if (told) return; told = true; N.close(); cb(why); }

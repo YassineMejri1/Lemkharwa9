@@ -201,7 +201,8 @@
   //  TITLE + SETUP
   // =====================================================================
   // flow: the actions of the card that, in crew mode, belong to the host
-  function flowModal(html, opts, flow) { var c = crew(); return c ? c.modal(html, opts, flow) : U.modal(html, opts); }
+  // kind: which moment this is ('welcome', 'morning', 'night', 'crisis', 'crisisResult'), for players who join late
+  function flowModal(html, opts, flow, kind) { var c = crew(); return c ? c.modal(html, opts, flow, kind) : U.modal(html, opts); }
   function hideHud() {
     ['hud', 'goals', 'banner', 'radio', 'prompt', 'hands', 'rover-hud', 'mini', 'inside', 'stick', 'touch-btns'].forEach(function (id) { U.show($(id), false); });
     U.tags([]); U.marks([]); U.stormFx(''); U.clearCards();
@@ -286,7 +287,8 @@
     U.show($('title'), false); U.closeModal();
     W.env.t = 0.1; W.env.dust = dustFor(sim.env(s).kind);
     // the landing film plays once per place; after that it is skipped automatically
-    if (JA.intro && !G.introSeen[s.site.id]) {
+    if (snap && snap.late) { G.introSeen[s.site.id] = true; lateJoin(snap.late); }      // crew mode: straight into the mission under way
+    else if (JA.intro && !G.introSeen[s.site.id]) {
       G.introSeen[s.site.id] = true;
       G.mode = 'intro';
       JA.intro.play(s.site.id, welcomeModal);
@@ -314,7 +316,7 @@
       (crew() ? '<div class="info-row good"><span class="ic">🧑‍🚀</span><div><b>Your crew: ' + crew().count() + ' astronauts</b><p>You share everything: the air, the food, the Solar Rack, the rover. Split the jobs, call out storms, and get everyone inside in time!</p></div></div>' : '') +
       '<div class="modal-actions"><button class="btn ghost" data-act="how">How to play</button><button class="btn primary" data-act="ok">Step outside ▶</button></div>',
       { speak: 'Welcome to ' + s.site.name + ', Commander! This is Mission Control on Earth. We are with you on the radio all the way. Keep the crew alive for ' + n + ' ' + dw + ', do real science, then ride the rocket home.', line: 'welcome-' + s.site.id,
-        actions: { how: howInfo, ok: function () { Au.play('door'); U.closeModal(); beginSol(); } } }, ['ok']);
+        actions: { how: howInfo, ok: function () { Au.play('door'); U.closeModal(); beginSol(); } } }, ['ok'], 'welcome');
   }
 
   // The radio delay for this mission's real dates (the same model as the Mission Control screens), and who talks to you.
@@ -349,7 +351,24 @@
     U.show($('stick'), on); U.show($('touch-btns'), on);
     if (!on) { G.stick.x = G.stick.z = 0; G.eHeld = false; G.fHeld = false; var nub = $('stick').querySelector('i'); if (nub) nub.style.transform = ''; }
   }
-  function beginSol() {
+  // Crew mode: you joined a mission that was already under way. ph.kind: 'day' (out at work), 'morning' (the day's card
+  // is open), 'crisis' or 'crisisResult' (a crisis card is open), 'night' (the night report; ph.r when it is ready).
+  function lateJoin(ph) {
+    var k = ph.kind, s = G.s;
+    if (s.colony && s.colony.stage) ext('colony', 'setStage', s.colony.stage);      // the town as it stands today
+    if (k === 'morning') { beginSol(); return; }                 // the host's morning card, waiting with the crew
+    if (k === 'night') { beginSol('quiet'); endDay(ph.info || {}); if (ph.r) showNight(ph.r); return; }
+    beginSol(k === 'day' ? 'hello' : 'quiet');
+    if (k === 'crisis') crisisModal();
+    else if (k === 'crisisResult' && ph.x) crisisResult(ph.x);
+  }
+  function lateHello() {
+    var s = G.s;
+    U.banner(dayWord() + ' ' + s.sol + ' of ' + s.totalSols + ' · you joined the crew', 'info'); G.bannerUntil = G.clock + 7;
+    say('Welcome aboard! The crew is already at work: it is ' + dayWord().toLowerCase() + ' ' + s.sol + ' of ' + s.totalSols + '. Your task list shows what the outpost needs. Grab a job!', true);
+  }
+  // late: crew mode, joining a mission already under way ('hello': say welcome; 'quiet': a card follows)
+  function beginSol(late) {
     var s = G.s, env = sim.env(s), look = s.site.env[env.kind], w = sim.weather(s), last = s.sol >= s.totalSols;
     if (A.rover.driver) exitRoverLocal(true);
     if (G.room) leaveRoom(true);
@@ -387,7 +406,8 @@
       ext('mission', 'milestone', s, '🌍', 'A ship from Earth has landed at the settlement.');
       setTimeout(function () { if (G.mode === 'play' || G.mode === 'inside') say('Look to the north-east! A ship from Earth is landing at the new settlement. Go and say hello!', true); }, 2500);
     }
-    if (s.sol === 1) go(); else dayCard(landing);
+    if (late) { if (late === 'hello') lateHello(); }
+    else if (s.sol === 1) go(); else dayCard(landing);
   }
 
   // The morning briefing: one new thing to learn, today's challenge, and what got harder.
@@ -406,7 +426,7 @@
       (hard.length ? '<h3>📈 Harder than yesterday</h3><ul class="harder">' + hard.map(function (h) { return '<li><span>' + h.icon + '</span>' + esc(h.text) + '</li>'; }).join('') + '</ul>' : '') +
       '<div class="modal-actions"><button class="btn primary" data-act="ok">Start the shift ▶</button></div>',
       { speak: dayWord() + ' ' + s.sol + '. ' + day.title + '. ' + day.learn + (day.goal ? ' Today\'s challenge: ' + day.goal.text + '.' : ''), line: 'day-morning',
-        actions: { ok: function () { Au.play('door'); U.closeModal(); done(); } } }, ['ok']);
+        actions: { ok: function () { Au.play('door'); U.closeModal(); done(); } } }, ['ok'], 'morning');
   }
   // crew mode: each astronaut starts the day at their own spot beside the door, not inside each other
   function crewSpot() {
@@ -995,7 +1015,7 @@
       '<div class="crisis-radio"><div class="radio-badge" aria-hidden="true">📡<i></i><i></i></div><p><small>' + esc(U.RADIO_FROM[mars ? 'crew' : 'earth']) + '</small>We have no checklist for this one, Commander.' + esc(far) + ' There is more than one thing you could do. You decide.</p></div>' +
       v.options.map(function (o) { return '<button class="opt" data-act="pick" data-v="' + o.id + '"><b>' + o.icon + ' ' + esc(o.label) + '</b><span>' + esc(o.text) + '</span></button>'; }).join('') +
       '<p class="sub crisis-foot">⏸ The clock is stopped while you think. Nobody will tell you which choice is best. You will see what yours leads to.</p>',
-      { cls: 'crisis', noFocus: true, speak: v.title + ' ' + v.text + ' You decide.' + v.options.map(function (o, i) { return ' Choice ' + (i + 1) + ': ' + o.label + '. ' + o.text; }).join(''), line: 'crisis-your-call', actions: { pick: function (el) { crisisPick(el.getAttribute('data-v')); } } }, ['pick']);
+      { cls: 'crisis', noFocus: true, speak: v.title + ' ' + v.text + ' You decide.' + v.options.map(function (o, i) { return ' Choice ' + (i + 1) + ': ' + o.label + '. ' + o.text; }).join(''), line: 'crisis-your-call', actions: { pick: function (el) { crisisPick(el.getAttribute('data-v')); } } }, ['pick'], 'crisis');
   }
   function crisisPick(id) {
     var s = G.s, r = JA.crisis.choose(s, id);
@@ -1015,7 +1035,7 @@
         Au.play('page'); U.closeModal(); G.crisisOpen = false;
         if (x.sync && !guest()) syncRack();
         if (x.skip) skipTime(x.skip, x.home);
-      } } }, ['ok']);
+      } } }, ['ok'], 'crisisResult');
   }
   // A choice that takes time: the shift clock jumps forward while you work on it indoors.
   function skipTime(frac, home) {
@@ -1641,7 +1661,7 @@
         Au.play('page'); U.closeModal();
         if (r.fail) { G.ending = { fail: r.fail }; startLaunchScene(); }
         else { if (!guest()) sim.startSol(s); beginSol(); }
-      } } }, ['next']);
+      } } }, ['next'], 'night');
   }
 
   // =====================================================================

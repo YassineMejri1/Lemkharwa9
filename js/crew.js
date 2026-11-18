@@ -209,7 +209,27 @@
     Au.play('ding');
     sendCrew();
     if (!C.started) lobby();
-    else U.toast('👋 ' + p.name + ' joined', W.w / 2, W.h * 0.25, '#7be36a');
+    else { U.toast('👋 ' + p.name + ' joined the crew', W.w / 2, W.h * 0.25, '#7be36a'); lateStart(pid); }
+  }
+  // Which moment of the mission the crew is in, for a player who joins now (see lateJoin in game.js).
+  function moment() {
+    var g = G(), s = g.s, open = C.flowOpen && U.modalOpen();
+    if (!s || g.mode === 'title') return null;
+    if (g.mode === 'launch' || g.mode === 'end') return { kind: 'end' };
+    if (g.mode === 'intro' || g.mode === 'brief') return { kind: 'welcome' };
+    if (g.mode === 'night') return { kind: 'night', info: C.nightInfo || {}, r: C.lastReport && C.lastReport.sol === s.sol ? C.lastReport : null };
+    if (open && C.flowKind === 'morning') return { kind: 'morning' };
+    if (open && C.flowKind === 'crisis') return { kind: 'crisis' };
+    if (open && C.flowKind === 'crisisResult') return { kind: 'crisisResult', x: C.lastCrisisX };
+    return { kind: 'day' };
+  }
+  function lateStart(pid) {
+    var ph = moment();
+    if (!ph) return;
+    if (ph.kind === 'end') { N.send(pid, { t: 'wait' }); return; }      // the rocket is leaving: they fly with the next mission
+    C.syncNow();                                                          // so the snapshot and the next changes line up
+    makePuppets();
+    N.send(pid, { t: 'start', opts: G().opts, data: G().weather, snap: lastState, items: itemsFull(), list: list(), rover: C.rover, late: ph.kind === 'welcome' ? null : ph });
   }
   function onLeave(pid, why) {
     var p = C.players[pid]; if (!p) return;
@@ -249,8 +269,9 @@
 
   // ---------- the guest's side ----------
   GUEST.crew = function (pid, m) {
-    var keep = {};
-    m.list.forEach(function (p) { keep[p.pid] = 1; addPlayer(p.pid, p.name, p.suit); });
+    var keep = {}, fresh = [];
+    m.list.forEach(function (p) { keep[p.pid] = 1; if (!C.players[p.pid] && C.started && p.pid !== C.me) fresh.push(p.name); addPlayer(p.pid, p.name, p.suit); });
+    if (fresh.length && G().s && G().mode !== 'title') U.toast('👋 ' + fresh.join(', ') + ' joined the crew', W.w / 2, W.h * 0.25, '#7be36a');
     Object.keys(C.players).forEach(function (k) { if (!keep[k]) { dropPuppet(C.players[k]); delete C.players[k]; } });
     var mine = C.players[C.me]; if (mine) G().opts.suit = mine.suit;
     if (!C.started || G().mode === 'title') lobby();
@@ -268,7 +289,7 @@
     U.closeModal();
     C.rover = m.rover;
     var s = m.snap.s; s.site = JA.SITES[m.snap.site]; s.level = JA.LEVELS[m.snap.level];
-    I().startMission(m.data, { s: s, rigs: m.snap.rigs, tut: m.snap.tut, items: m.items });
+    I().startMission(m.data, { s: s, rigs: m.snap.rigs, tut: m.snap.tut, items: m.items, late: m.late || null });
     lastState = m.snap;
   };
   GUEST.st = function (pid, m) {
@@ -283,9 +304,17 @@
     Object.keys(ht).forEach(function (k) { if (k !== 'moved' && k !== 'jumped') t[k] = ht[k]; });
     B.rigs = g.rigs;
   };
-  GUEST.items = function (pid, m) { applyItems(m); };
+  function live() { return C.started && !!G().s; }      // this screen has the mission (messages before that are not for it yet)
+  GUEST.items = function (pid, m) { if (live()) applyItems(m); };
+  // the crew is finishing a mission (the rocket is leaving): wait in the crew room for the next one
+  GUEST.wait = function () {
+    lobby();
+    var w = document.querySelector('#modal-root .crew-waiting');
+    if (w) w.textContent = '🚀 The crew is just finishing a mission. You will fly with them on the next one!';
+  };
   // D: for each crewmate, how long before this packet the host heard their state (so a relayed state keeps its own time)
   GUEST.w = function (pid, m) {
+    if (!live()) return;
     var t = now(), off = C.hostOff = offset(C.hostOff, t - m.ts), at = m.ts + off, late = t - at;
     Object.keys(m.P).forEach(function (k) {
       var p = C.players[k]; if (!p || +k === C.me) return;
@@ -294,7 +323,7 @@
     if (m.R && C.rover !== C.me) push(roverBuf, { t: at + (m.RD || 0), r: m.R }, late);
     if (m.I) flyingFromHost(m.I, (late + (N.rtt || 0) / 2) / 1000);      // a flying thing is shown where it is now
   };
-  GUEST.ev = function (pid, m) { if (G().s) I().mirrorEvents(m.ev); };
+  GUEST.ev = function (pid, m) { if (live()) I().mirrorEvents(m.ev); };
   GUEST.say = function (pid, m) { I().say.apply(null, m.a); };
   GUEST.tip = function (pid, m) { I().tip(m.id, m.text, m.vid, m.topic); };
   GUEST.toast = function (pid, m) { I().toastAt(v1.set(m.p[0], m.p[1], m.p[2]), m.text, m.c); };
@@ -305,9 +334,9 @@
   GUEST.deny = function (pid, m) { Au.play('deny'); if (m.msg) I().say(m.msg, true); };
   GUEST.drive = function (pid, m) { driverChanged(m.pid); };
   GUEST.flow = function (pid, m) { flowFromHost(m); };
-  GUEST.night = function (pid, m) { I().endDay(m.info || {}); };
-  GUEST.report = function (pid, m) { I().showNight(m.r); };
-  GUEST.launch = function (pid, m) { G().ending = m.ending; I().startLaunchScene(m.text, m.vid); };
+  GUEST.night = function (pid, m) { if (live()) I().endDay(m.info || {}); };
+  GUEST.report = function (pid, m) { if (live()) I().showNight(m.r); };
+  GUEST.launch = function (pid, m) { if (!live()) return; G().ending = m.ending; I().startLaunchScene(m.text, m.vid); };
   GUEST.reply = function (pid, m) { I().earthReply(m.m); };
   GUEST.pos = function (pid, m) {                       // the host put you somewhere (morning, the end of a crisis job)
     var a = A.astro; if (!a) return;
@@ -662,7 +691,7 @@
   // The host's game has just started the mission: send it to the crew. Nobody can join after this.
   C.missionStarted = function (data) {
     if (!C.host) return;
-    C.started = true; N.locked = true;
+    C.started = true;
     C.local = A.astro; C.rover = null; A.rover.remote = false; A.rover.manned = false;
     lastItems = {}; lastState = stateNow();
     var items = itemsFull();
@@ -671,7 +700,7 @@
     makePuppets();
   };
   // a guest's game has built the same mission from the host's snapshot
-  C.guestStarted = function (items) { C.local = A.astro; C.loadItems(items || []); makePuppets(); A.rover.remote = true; A.rover.manned = false; roverBuf.length = 0; };
+  C.guestStarted = function (items) { C.local = A.astro; C.loadItems(items || []); makePuppets(); A.rover.remote = true; A.rover.manned = C.rover != null; roverBuf.length = 0; };
 
   var sendT = 0, stateT = 0;
   C.frame = function (dt) {
@@ -742,15 +771,15 @@
   };
   C.send = function (pid, msg) { N.send(pid, msg); };
   C.broadcast = function (msg) { if (C.host) N.broadcast(msg); };
-  C.night = function (info) { if (C.host) { C.syncNow(); N.broadcast({ t: 'night', info: info }); } };
-  C.report = function (r) { if (C.host) { C.syncNow(); N.broadcast({ t: 'report', r: JSON.parse(JSON.stringify(r)) }); } };
+  C.night = function (info) { if (C.host) { C.syncNow(); C.nightInfo = info; N.broadcast({ t: 'night', info: info }); } };
+  C.report = function (r) { if (C.host) { C.syncNow(); C.lastReport = JSON.parse(JSON.stringify(r)); N.broadcast({ t: 'report', r: C.lastReport }); } };
   C.launch = function (text, vid, ending) { if (C.host) { C.syncNow(); N.broadcast({ t: 'launch', text: text || null, vid: vid || null, ending: ending }); } };
-  C.toLobby = function () { if (C.host && C.started) { C.started = false; N.locked = false; N.broadcast({ t: 'lobby' }); } };
+  C.toLobby = function () { if (C.host && C.started) { C.started = false; N.broadcast({ t: 'lobby' }); } };
 
   // ---------- the big moments: a card that opens on every screen, and the host's choice moves everyone on ----------
   // flow: the names of the card's actions that belong to the host. On a guest's screen those buttons wait.
   C.queued = [];
-  C.modal = function (html, opts, flow) {
+  C.modal = function (html, opts, flow, kind) {
     opts = opts || {};
     var acts = Object.assign({}, opts.actions || {});
     if (C.host) {
@@ -765,7 +794,8 @@
           C.flowData = null;
         };
       });
-      C.flowOpen = true;
+      C.flowOpen = true; C.flowKind = kind || '';
+      if (kind === 'crisisResult') C.lastCrisisX = C.flowData;
       return U.modal(html, Object.assign({}, opts, { actions: acts }));
     }
     var waiting = {};

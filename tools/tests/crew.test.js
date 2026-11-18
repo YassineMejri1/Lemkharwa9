@@ -306,6 +306,42 @@ async function main() {
     await until(G1, 'return JA.crew.count() === 3', 10000, 'Ana sees Cy gone');
     check('...and so do the others', true);
 
+    console.log('Joining late');
+    // Cy comes back in the middle of day 2: straight into the day, with the mission as it stands
+    await G3.run('JA.crew.openMenu("' + code + '"); document.getElementById("crew-name").value = "Cy"; document.querySelector("[data-act=join]").click();');
+    await until(G3, 'return JA.crew.on && JA.game.mode === "play" && !!JA.game.s && !JA.ui.modalOpen()', 60000, 'Cy back in the day');
+    check('a player joining mid-mission lands straight in the current day (no welcome card to wait on)', true);
+    await until(H, 'return JA.crew.count() === 4', 10000, 'four again');
+    const solNow = await Promise.all([H, G3].map((p) => p.run('return JA.game.s.sol')));
+    check('he is on the same day as the crew (day ' + solNow[0] + ')', solNow[0] === solNow[1], solNow);
+    await sleep(1500);
+    const late = await Promise.all([H, G3].map((p) => p.run('var s = JA.game.s; return [s.t, s.air, s.food, s.dose, s.water];')));
+    check('...with the same clock, air, food, radiation and water', late[1].every((x, k) => Math.abs(x - late[0][k]) <= [1.5, 0.5, 0.5, 0.5, 0.5][k]), late);
+    const lateItems = await Promise.all([H, G3].map((p) => p.run('return JA.actors.items.map(function (i) { return i.id + i.type + i.state; }).sort().join(",")')));
+    check('...and the same things lying around', lateItems[0] === lateItems[1]);
+    await G3.run('var a = JA.actors.astro; a.pos.x += 3; a.pos.y = JA.actors.groundAt(a.pos.x, a.pos.z);');
+    await sleep(1200);
+    const cyReal = await G3.run('var p = JA.actors.astro.pos; return [p.x, p.y, p.z];');
+    const cyViews = await Promise.all([H, G1, G2].map((p) => p.run('var b = JA.crew.players[3].puppet; return b ? [b.pos.x, b.pos.y, b.pos.z] : [9e9, 0, 9e9];')));
+    check('everyone sees him where he stands', cyViews.every((v) => dist(v, cyReal) < 0.4), cyViews.map((v) => dist(v, cyReal).toFixed(2)));
+    check('he sees the other three', await G3.run('return [0, 1, 2].every(function (k) { var p = JA.crew.players[k]; return p && p.puppet; })'));
+    // Ben drops out and comes back while the night report is open: he waits on it with the crew
+    await G2.run('JA.crew.leave();');
+    await until(H, 'return JA.crew.count() === 3', 10000, 'Ben gone');
+    await H.run('var s = JA.game.s; s.air = 90; s.food = 90; s.water = 80; s.dose = 0; s.filter = 100; JA.game._.endDay({});');      // a crew that will see the morning
+    await until(H, 'return JA.game.mode === "night" && JA.ui.modalOpen() && /Night report/.test(document.getElementById("modal-root").textContent)', 20000, 'the host night report');
+    await G2.run('JA.crew.openMenu("' + code + '"); document.getElementById("crew-name").value = "Ben"; document.querySelector("[data-act=join]").click();');
+    await until(G2, 'return JA.crew.on && JA.game.mode === "night" && JA.ui.modalOpen() && /Night report/.test(document.getElementById("modal-root").textContent)', 60000, 'Ben at the night report');
+    check('a player joining during the night report sees the same report', true);
+    check('...and waits for the host like everyone else', await G2.run('var b = document.querySelector("#modal-root [data-act=next]"); return !!b && b.disabled;'));
+    await H.run('document.querySelector("#modal-root [data-act=next]").click();');
+    for (const p of [H, G1, G2, G3]) await until(p, 'return JA.ui.modalOpen() && !!document.querySelector("#modal-root .day-head")', 20000, 'the next morning card');
+    const sols = await Promise.all([H, G1, G2, G3].map((p) => p.run('return JA.game.s.sol')));
+    check('the next morning comes for all four, late joiners too (day ' + sols[0] + ')', sols.every((x) => x === sols[0]), sols);
+    await H.run('document.querySelector("#modal-root [data-act=ok]").click();');
+    for (const p of [H, G1, G2, G3]) await until(p, 'return JA.game.mode === "play" && !JA.ui.modalOpen()', 20000, 'out again');
+    check('and all four go out together', true);
+
     console.log('The end');
     await H.run('JA.game.s.air = 0;');
     for (const p of [H, G1, G2]) await until(p, 'return JA.game.mode === "launch" || JA.game.mode === "end"', 40000, 'the launch scene');

@@ -156,7 +156,9 @@ How it works, in short:
   The host's choice moves everyone on.
 - The radiation badge counts how much of the crew is out in the open, and running uses air for everyone, so a storm
   means getting the whole crew inside.
-- Players join in the crew room, before the launch. Pioneer mode is for one player.
+- Friends can join at any time, also in the middle of a mission (or come back after losing their connection): they
+  land straight in the day the crew is living, or on the morning card, night report or crisis that is open, and
+  play on from there. Pioneer mode is for one player.
 - The games talk straight to each other (WebRTC) when the networks allow it; the free PeerJS service only introduces
   the players. Many home routers and phone networks do not allow a direct link. Then the joining player's game switches
   by itself, after a few seconds, to a free public message relay (test.mosquitto.org, or broker.hivemq.com) and the
