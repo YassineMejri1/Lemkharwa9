@@ -24,8 +24,9 @@
   C.leak = {
     icon: '🕳️', title: 'Hiss… the habitat is leaking!', alarm: 'AIR LEAK', src: 'iss',
     text: function (s) {
-      return (s.site.id === 'moon' ? 'A speck of space rock, smaller than a grain of sand, has just punched a tiny hole in the habitat wall.'
-        : 'The bitter cold has cracked a seal in the habitat wall.') + ' You can hear air hissing out, and the air meter is falling.';
+      return JA.pick(s, { moon: 'A speck of space rock, smaller than a grain of sand, has just punched a tiny hole in the habitat wall.',
+        mars: 'The bitter cold has cracked a seal in the habitat wall.',
+        sahrun: 'Years of wind-blown sand have scoured a seal in the habitat wall until it gave way.' }) + ' You can hear air hissing out, and the air meter is falling.';
     },
     science: 'In 2018 the crew of the International Space Station found a hole just 2 millimetres wide that was letting air escape. They sealed it with glue and a cloth patch. The Station is enormous, so Mission Control even let the crew sleep first. A small habitat has far less air to spare.',
     ok: function () { return true; },
@@ -164,14 +165,16 @@
   }
   C.cold = {
     icon: '🥶', title: 'Battery fault! A freezing night is coming', alarm: 'POWER FAULT', at: [0.66, 0.76],
-    src: function (s) { return s.site.id === 'moon' ? 'moon' : 'mer'; },
+    src: function (s) { return JA.pick(s, { moon: 'moon', mars: 'mer', sahrun: 'mer' }); },
     text: function (s) {
       return 'A battery pack has just failed. Tonight there is only enough stored power to keep ONE machine warm. ' +
-        (s.site.id === 'moon' ? 'In the dark, the Moon\'s surface drops to about −133°C.' : 'Nights on Mars fall far below −70°C.') + ' Anything left unheated will freeze.';
+        JA.pick(s, { moon: 'In the dark, the Moon\'s surface drops to about −133°C.', mars: 'Nights on Mars fall far below −70°C.',
+          sahrun: 'The desert is scorching by day, but dry air holds no heat: tonight the sand will fall far below freezing.' }) + ' Anything left unheated will freeze.';
     },
     science: function (s) {
-      return s.site.id === 'moon' ? 'Away from sunlight the Moon\'s surface falls to about −133°C. Landers and rovers on the Moon carry heaters, and mission teams must decide which parts to keep warm when power runs low.'
-        : 'In 2010 the Spirit rover could not tilt its solar panels toward the low winter Sun on Mars. Without enough power for its heaters it grew too cold, and it never called home again.';
+      return JA.pick(s, { moon: 'Away from sunlight the Moon\'s surface falls to about −133°C. Landers and rovers on the Moon carry heaters, and mission teams must decide which parts to keep warm when power runs low.',
+        mars: 'In 2010 the Spirit rover could not tilt its solar panels toward the low winter Sun on Mars. Without enough power for its heaters it grew too cold, and it never called home again.',
+        sahrun: 'Real deserts can be blazing at noon and freezing before dawn, because dry air holds very little heat. On Mars in 2010, the Spirit rover ran too low on power to keep its heaters on through the cold, and it never called home again.' });
     },
     ok: function (s) { return s.sol < s.totalSols; },
     options: [
@@ -189,7 +192,7 @@
     ok: function () { return true; },
     start: function (s) { var m = s.m; s.flags.dishWasOn = m.comms.on; m.comms.broken = true; m.comms.on = false; pumpFuse(s, true); },
     options: [
-      { id: 'radio', icon: '📡', label: 'Put the fuse in the Radio Dish', text: 'Earth can reach you again. The Greenhouse pump stays off.',
+      { id: 'radio', icon: '📡', label: 'Put the fuse in the Radio Dish', text: function (s) { return JA.homeName(s, true) + ' can reach you again. The Greenhouse pump stays off.'; },
         run: function (s, d) {
           s.m.comms.broken = false; s.m.comms.on = !!s.flags.dishWasOn;
           inSecs(s, d, 35, function () { return { tone: 'mixed', text: 'The Greenhouse pump is silent. Until the crew makes a new fuse tonight, the plants cannot drink, so they have stopped growing.' }; });
@@ -198,7 +201,7 @@
       { id: 'pump', icon: '💧', label: 'Put the fuse in the Greenhouse pump', text: 'The plants keep drinking. The Radio Dish stays off.',
         run: function (s, d) {
           pumpFuse(s, false);
-          inSecs(s, d, 35, function () { return { tone: 'mixed', text: 'The Radio Dish is dark. There will be no forecast tonight, only a few seconds of warning if a solar storm comes, and Earth cannot help with repairs today.' }; });
+          inSecs(s, d, 35, function () { return { tone: 'mixed', text: 'The Radio Dish is dark. There will be no forecast tonight, only a few seconds of warning if a solar storm comes, and ' + JA.homeName(s) + ' cannot help with repairs today.' }; });
           return { now: 'Water gurgles through the Greenhouse pipes again. The Radio Dish stays dead.' };
         } },
       { id: 'foil', icon: '🧻', label: 'Make a second fuse out of kitchen foil', text: 'Wrap foil where the missing fuse should go. Then both machines can run.',
@@ -300,7 +303,7 @@
     var c = s.crisis; if (!c || c.state !== 'open') return null;
     var def = C[c.id];
     return { id: c.id, icon: def.icon, title: def.title, alarm: def.alarm, text: def.text(s),
-      options: def.options.map(function (o) { return { id: o.id, icon: o.icon, label: o.label, text: o.text }; }) };
+      options: def.options.map(function (o) { return { id: o.id, icon: o.icon, label: o.label, text: typeof o.text === 'function' ? o.text(s) : o.text }; }) };      // a text may depend on the planet
   }
   function choose(s, optId) {
     var c = s.crisis; if (!c || c.state !== 'open') return null;

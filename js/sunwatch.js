@@ -4,6 +4,8 @@
    days this mission replays, and lists what each of those days meant in the game.
    Two honesty rules: it always says if the data is live or the saved archive, and it never
    shows the flares of a mission day the player has no way of knowing about yet.
+   On a made-up planet (Sahrun) it becomes Star Watch: the same card for the made-up star the game invents
+   (spaceweather.js star). Then it says so everywhere, and counts days instead of showing dates.
    No network, no storage. If something is missing it shows less; it never throws. */
 (function (JA) {
   'use strict';
@@ -44,6 +46,12 @@
   // '2024-05-10T06:54Z' -> milliseconds UTC (NaN if it cannot be read)
   function stampMs(t) { return typeof t === 'string' ? dayMs(t) + clockMs(t.slice(11)) : NaN; }
   function longDate(ms) { var d = new Date(ms); return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); }
+  // a made-up star has no real dates: its days are numbered from the start of its record (★1, ★2 … on the chart,
+  // so they are never mixed up with the mission's own day numbers)
+  function dayName(m, ms, short) {
+    if (!m || !m.star) return short ? shortDate(ms) : longDate(ms);
+    return (short ? '★' : 'star day ') + (Math.round((ms - m.t0) / DAY) + 1);
+  }
   function shortDate(ms) { var d = new Date(ms); return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()].slice(0, 3); }
   function clock(ms) { var d = new Date(ms); return ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2); }
   // Flare class -> where it sits on the log scale: C1 = 0, M1 = 1, X1 = 2, X10 = 3.
@@ -96,8 +104,11 @@
   function build(s, data) {
     s = s && typeof s === 'object' ? s : null;
     data = data && typeof data === 'object' ? data : null;
+    if (s && s.weatherSource === 'star' && data && data.source !== 'star') data = null;      // never draw real flares for a made-up star
     var m = { s: s, days: s ? missionDays(s) : [], pts: [], total: 0, ok: false, full: !!(data && Array.isArray(data.flares)) };
     m.source = String((s && s.weatherSource) || (data && data.source) || '');
+    m.star = m.source === 'star'; m.starName = String((data && data.star) || 'the star');
+    m.planet = s && s.site ? (s.site.id === 'mars' ? 'Mars' : s.site.id === 'moon' ? 'the Moon' : String(s.site.name)) : '';
     m.fallback = !!((s && s.weatherFallback) || (data && data.fallback));
     m.fetched = data ? dayMs(data.fetchedAt) : NaN;
     m.saved = data ? dayMs(data.downloaded) : NaN;
@@ -148,6 +159,7 @@
 
   // ---------- 1. heading and where the data comes from ----------
   function headHtml(m) {
+    if (m.star) return starHead(m);
     var range = m.ok ? 'from <b>' + esc(longDate(m.t0)) + '</b> to <b>' + esc(longDate(m.t1)) + '</b>' : '';
     var lead = !m.ok ? 'Sun Watch shows real solar flares, recorded by NASA on real dates.'
       : m.full && !m.total ? 'This is the real Sun. NASA listed no solar flares at all ' + range + '.'
@@ -176,13 +188,26 @@
       '<p class="sunwatch-lead">' + lead + '</p>' + box;
   }
 
+  function starHead(m) {
+    var range = m.ok ? 'from <b>' + esc(dayName(m, m.t0)) + '</b> to <b>' + esc(dayName(m, m.t1)) + '</b>' : '';
+    var lead = !m.ok ? 'Star Watch shows the flares of ' + esc(m.starName) + ', a made-up star.'
+      : !m.total ? 'The game gave ' + esc(m.starName) + ' no flares at all ' + range + '.'
+        : 'These flares are made up. The game invented all ' + esc(m.total) + ' of them on ' + esc(m.starName) + ', ' + range + '.';
+    return '<h2>⭐ Star Watch</h2><p class="sub">' + esc(m.starName) + ', the made-up star behind your mission.</p>' +
+      '<p class="sunwatch-lead">' + lead + '</p>' +
+      '<div class="info-row sunwatch-data"><span class="ic">🌞</span><div><b>A made-up star (not real data)</b>' +
+      '<p><span class="tagline made">Made-up star</span>' + esc(m.planet) + ' and ' + esc(m.starName) + ' are made up, so NASA has no records of them. ' +
+      'The game invents the storms with the same physics as our own Sun: spots that grow and fade while the star turns, flares from those spots, ' +
+      'and fast particles that reach ' + esc(m.planet) + ' only from the part of the star linked to it by its spiral magnetic field.</p></div></div>';
+  }
+
   // ---------- 2. the chart ----------
   function xAt(m, ms) { return r2(GUT + WIDE * Math.max(0, Math.min(1, (ms - m.t0) / m.span))); }
   function yAt(m, log) { return r1(BOT - Math.max(0, Math.min(m.top, log)) / m.top * (BOT - TOP)); }
-  function tipFor(p) { return p.cls + ' flare · ' + longDate(p.ms) + (p.timed ? ' · peak at ' + clock(p.ms) + ' UTC' : ''); }
+  function tipFor(m, p) { return m.star ? p.cls + ' flare · ' + dayName(m, p.ms) + ' · made up' : p.cls + ' flare · ' + longDate(p.ms) + (p.timed ? ' · peak at ' + clock(p.ms) + ' UTC' : ''); }
 
   function chartHtml(m) {
-    if (!m.ok) return '<p class="sunwatch-note">No flare list is loaded yet. Start a mission to see the real Sun here.</p>';
+    if (!m.ok) return '<p class="sunwatch-note">No flare list is loaded yet. Start a mission to see ' + (m.star ? esc(m.starName) : 'the real Sun') + ' here.</p>';
     var o = [], i, days = m.days.filter(function (d) { return !isNaN(d.ms); });
     var right = GUT + WIDE, dw = m.dayWord, today = days.filter(function (d) { return d.today; })[0] || null;
 
@@ -202,7 +227,7 @@
     for (i = 0; i < m.nDays; i += step) {
       var tx = xAt(m, m.t0 + (i + 0.5) * DAY);
       o.push('<line class="sunwatch-axis" x1="' + tx + '%" x2="' + tx + '%" y1="' + BOT + '" y2="' + (BOT + 5) + '"/>');
-      o.push('<text x="' + tx + '%" y="' + (BOT + 21) + '" text-anchor="middle">' + esc(shortDate(m.t0 + i * DAY)) + '</text>');
+      o.push('<text x="' + tx + '%" y="' + (BOT + 21) + '" text-anchor="middle">' + esc(dayName(m, m.t0 + i * DAY, true)) + '</text>');
     }
 
     // the days this mission replays: a band with the mission day numbers on top
@@ -232,7 +257,7 @@
       m.pts.forEach(function (p) {
         if (p.band !== band) return;
         var x = xAt(m, p.ms), y = yAt(m, p.log);
-        var at = ' class="sunwatch-f sunwatch-f' + band + '" data-x="' + x + '" data-y="' + y + '" data-tip="' + esc(tipFor(p)) + '"';
+        var at = ' class="sunwatch-f sunwatch-f' + band + '" data-x="' + x + '" data-y="' + y + '" data-tip="' + esc(tipFor(m, p)) + '"';
         if (band === 'x') o.push('<svg' + at + ' x="' + x + '%" y="' + y + '" overflow="visible"><path d="M0-7L6.5 0 0 7-6.5 0z"/></svg>');
         else o.push('<circle' + at + ' cx="' + x + '%" cy="' + y + '" r="4"/>');
       });
@@ -250,16 +275,16 @@
     }
     o.push('<circle class="sunwatch-pick" cx="50%" cy="' + TOP + '" r="12"/>');   // shown by open() around the flare you point at
 
-    var label = 'Chart of ' + plural(m.pts.length, 'real solar flare') + ' from ' + longDate(m.t0) + ' to ' + longDate(m.t1) +
+    var label = 'Chart of ' + plural(m.pts.length, m.star ? 'made-up flare' : 'real solar flare') + ' from ' + dayName(m, m.t0) + ' to ' + dayName(m, m.t1) +
       '. Time goes from left to right. Stronger flares are higher up, in three bands: C, M and X. ' +
       plural(m.count.x, 'X flare') + ', ' + plural(m.count.m, 'M flare') + ', ' + plural(m.count.c, 'C flare') + '.';
     var intro = '';
     if (days.length) {
       intro = '<p>The yellow band is your mission: ' + esc(dw + ' 1 to ' + dw + ' ' + days[days.length - 1].n) + ' replay ' +
-        esc(longDate(days[0].ms)) + ' to ' + esc(longDate(days[days.length - 1].ms)) + '.</p>';
+        esc(dayName(m, days[0].ms)) + ' to ' + esc(dayName(m, days[days.length - 1].ms)) + '.</p>';
     }
-    return '<h3>📈 The real Sun, flare by flare</h3><div class="sunwatch-fig">' + intro +
-      '<svg class="sunwatch-chart" width="100%" height="' + TALL + '" role="img" aria-label="' + esc(label) + '">' + o.join('') + '</svg>' +
+    return '<h3>📈 ' + (m.star ? esc(m.starName) + ', flare by flare (made up)' : 'The real Sun, flare by flare') + '</h3><div class="sunwatch-fig">' + intro +
+      '<svg class="sunwatch-chart" width="100%" height="' + TALL + '" role="img" aria-label="' + esc(label) + '"' + (m.star ? ' data-made="1"' : '') + '>' + o.join('') + '</svg>' +
       '<p class="sunwatch-read" aria-live="polite"></p>' + keyHtml(m, days, today) + '</div>';
   }
 
@@ -310,14 +335,14 @@
   }
   function rowHtml(m, d) {
     var low = m.dayWord.toLowerCase();
-    var date = isNaN(d.ms) ? 'Date not known' : longDate(d.ms);
+    var date = isNaN(d.ms) ? 'Date not known' : dayName(m, d.ms), home = m.star ? 'the relay ship' : 'Earth';
     var when = d.today ? 'today' : d.state === 'forecast' ? 'tomorrow' : '';
     var head = '<span class="sunwatch-chip">' + esc(m.dayWord + ' ' + d.n) + '</span><div class="sunwatch-info"><b>' + esc(date) + (when ? ' <em>' + when + '</em>' : '') + '</b>';
     if (!d.open) {
       var blind = d.state === 'blind';
       return '<li class="sunwatch-day sunwatch-wait' + (d.today ? ' sunwatch-now' : '') + '">' + head +
-        '<span>' + (blind ? 'No forecast. The Radio Dish was off, so Earth could not warn you. Look again later today.'
-          : 'Not yet. Play this ' + esc(low) + ' to see what the Sun did.') + '</span></div>' +
+        '<span>' + (blind ? 'No forecast. The Radio Dish was off, so ' + home + ' could not warn you. Look again later today.'
+          : 'Not yet. Play this ' + esc(low) + ' to see what ' + (m.star ? esc(m.starName) : 'the Sun') + ' did.') + '</span></div>' +
         '<span class="sunwatch-pill sunwatch-pq">❓ ' + (blind ? 'No forecast' : 'Not yet') + '</span></li>';
     }
     var links = [];
@@ -325,12 +350,12 @@
     if (d.cmeLink) links.push('<a href="' + esc(d.cmeLink) + '" target="_blank" rel="noopener">CME record</a>');
     if (d.link) links.push('<a href="' + esc(d.link) + '" target="_blank" rel="noopener">flare record</a>');
     var flare = esc(d.story || (d.cls ? 'Strongest flare: class ' + d.cls + '.' : 'No flare listed that day.')) +
-      (d.count > 1 ? ' NASA listed ' + esc(d.count) + ' flares that day.' : '') +
+      (d.count > 1 ? (m.star ? ' The game made up ' + esc(d.count) + ' flares that day.' : ' NASA listed ' + esc(d.count) + ' flares that day.') : '') +
       (links.length ? ' NASA: ' + links.join(' · ') : '');
     var what = '';
     if (d.state === 'played') what = happened(m, d);
     else if (d.state === 'today') what = rightNow(m, d);
-    else if (d.state === 'forecast') what = 'Forecast from Earth. Your Radio Dish was on, so you know what is coming.';
+    else if (d.state === 'forecast') what = 'Forecast from ' + home + '. Your Radio Dish was on, so you know what is coming.';
     else if (d.state === 'ended') what = 'The mission ended on this ' + esc(low) + '.';
     else if (d.state === 'missed') what = 'The mission ended before this ' + esc(low) + '.';
     var st = STORMS[d.level] || STORMS[0];
@@ -349,18 +374,22 @@
       sum = '<p class="sunwatch-sum">' + (out < 1 ? '🏅 ' + sofar + ' you were never caught outside in a solar storm. Nice work!'
         : sofar + ' you were caught outside in a solar storm for about ' + esc(plural(Math.round(out), 'second')) + '.') + '</p>';
     }
-    return '<h3>🗓️ Your mission, day by real day</h3>' +
-      '<p class="sunwatch-how">Each mission ' + esc(m.dayWord.toLowerCase()) + ' replays one real day. The chart above shows the flares: flashes of light. Each row says what really reached ' + esc(m.s && m.s.site && m.s.site.id === 'mars' ? 'Mars' : 'the Moon') + ': a storm of fast particles, or nothing.</p>' +
+    var how = m.star ? 'Each mission ' + esc(m.dayWord.toLowerCase()) + ' replays one day of ' + esc(m.starName) + '\'s made-up record. The chart above shows the flares: flashes of light. Each row says what reached ' + esc(m.planet) + ': a storm of fast particles, or nothing.'
+      : 'Each mission ' + esc(m.dayWord.toLowerCase()) + ' replays one real day. The chart above shows the flares: flashes of light. Each row says what really reached ' + esc(m.planet || 'the Moon') + ': a storm of fast particles, or nothing.';
+    return '<h3>🗓️ Your mission, day by ' + (m.star ? '' : 'real ') + 'day</h3>' +
+      '<p class="sunwatch-how">' + how + '</p>' +
       '<ol class="sunwatch-days">' + m.days.map(function (d) { return rowHtml(m, d); }).join('') + '</ol>' + sum;
   }
 
   // ---------- 4. how to read this, and the source ----------
   function sourceHtml(m) {
+    if (m && m.star) return '<p class="sunwatch-src">Source: none. ' + esc(m.starName) + ' and its storms are made up by the game, from the same physics as our Sun. This is not real data.</p>';
     return '<p class="sunwatch-src">Source: <a href="' + DONKI + '" target="_blank" rel="noopener">NASA DONKI</a>, ' +
       'the Space Weather Database Of Notifications, Knowledge, Information.' +
       (m && m.source === 'live' && !m.fallback ? ' Live list.' : m && (m.source === 'archive' || m.fallback) ? ' Saved list, not live.' : '') + '</p>';
   }
   function factsHtml(m) {
+    if (m.star) return starFacts(m);
     return '<h3>🔎 How to read this</h3>' +
       '<div class="info-row"><span class="ic">☀️</span><div><b>What is a solar flare?</b><p>A giant flash on the Sun: light and X-rays. It takes about 8 minutes to reach Earth and the Moon, and about 13 minutes to reach Mars. It is the first sign that something happened.</p></div></div>' +
       '<div class="info-row"><span class="ic">☁️</span><div><b>What is a CME?</b><p>A coronal mass ejection: a giant cloud of solar gas thrown into space. It takes one to three days to cross to Earth or Mars. A fast one pushes a shock wave ahead of it, like a boat’s bow wave.</p></div></div>' +
@@ -368,6 +397,18 @@
       '<div class="info-row"><span class="ic">🔠</span><div><b>What do the letters mean?</b><p>Scientists sort flares by strength: A, B, C, M and X. Each letter is 10 times stronger than the one before. The number counts steps inside a letter: an M2 is twice as strong as an M1.</p></div></div>' +
       '<div class="info-row"><span class="ic">🌙</span><div><b>Why is the Moon hit harder than Mars?</b><p>The Moon has no air at all, so nothing slows a solar storm down. Mars has thin air that soaks up part of it. In this game a storm on Mars is half as strong as on the Moon. That half is a game number.</p></div></div>' +
       '<p class="sunwatch-how"><b>Real:</b> every flare, particle storm, CME, date and time here (NASA DONKI). On the Moon, the particle storms are the ones NASA’s satellites measured near Earth. On Mars, no detector reports to DONKI, so the game checks each fast CME against where Mars really was and how well it was linked to the eruption. <b>Game:</b> how many badge points a storm costs.</p>' +
+      sourceHtml(m);
+  }
+
+  function starFacts(m) {
+    var P = m.s && m.s.site ? m.s.site : null, soak = P && P.stormMult < 1 ? Math.round((1 - P.stormMult) * 100) : 0;
+    return '<h3>🔎 How to read this</h3>' +
+      '<div class="info-row"><span class="ic">☀️</span><div><b>What is a flare?</b><p>A giant flash on a star: light and X-rays. On our own Sun, scientists see thousands every year. A flash takes minutes to cross to a planet. It is the first sign that something happened.</p></div></div>' +
+      '<div class="info-row"><span class="ic">☁️</span><div><b>What is a CME?</b><p>A coronal mass ejection: a giant cloud of hot gas thrown off a star. It takes a few days to reach a planet. A fast one pushes a shock wave ahead of it, like a boat’s bow wave.</p></div></div>' +
+      '<div class="info-row"><span class="ic">☢️</span><div><b>So what is a radiation storm?</b><p>Protons sped up to huge speeds, mostly by that shock wave. They race along the star’s spiral magnetic field, so they only reach a planet linked to the right part of the star. That is why ' + esc(m.planet) + ' can miss a big flare and be hit by a smaller one.</p></div></div>' +
+      '<div class="info-row"><span class="ic">🔠</span><div><b>What do the letters mean?</b><p>Scientists sort our Sun’s flares by strength: A, B, C, M and X. Each letter is 10 times stronger than the one before. The game sorts ' + esc(m.starName) + '’s made-up flares the same way.</p></div></div>' +
+      (soak ? '<div class="info-row"><span class="ic">🌫️</span><div><b>Why does ' + esc(m.planet) + ' get off lightly?</b><p>Its air is thick, and thick air soaks up fast particles, the way Earth’s air protects us. In this game it stops about ' + soak + '% of a storm. That number is a game number.</p></div></div>' : '') +
+      '<p class="sunwatch-how"><b>Made up:</b> ' + esc(m.starName) + ', and every flare, CME, particle storm and day here. <b>Real:</b> the physics behind them, which works the same way on our Sun. <b>Game:</b> how many badge points a storm costs.</p>' +
       sourceHtml(m);
   }
 
@@ -388,7 +429,7 @@
     var dots = Array.prototype.slice.call(svg.querySelectorAll('[data-tip]')), at = -1;
     if (!dots.length) return;
     dots.sort(function (a, b) { return a.getAttribute('data-x') - b.getAttribute('data-x'); });
-    read.textContent = 'Point at a dot, or tap it, to see that real flare.';
+    read.textContent = 'Point at a dot, or tap it, to see that ' + (svg.getAttribute('data-made') ? 'made-up' : 'real') + ' flare.';
     function show(i) {
       var d = dots[i];
       if (!d) return;

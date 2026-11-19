@@ -20,21 +20,26 @@
   var OK = { ok: true };
 
   function makeEnv(site, level, rng) {
-    var n = level.sols, mars = site.id === 'mars', kinds = [];
-    var calm = mars ? 'clear' : 'sun', mid = mars ? 'dusty' : 'lowsun', bad = mars ? 'storm' : 'shadow';
+    var n = level.sols, wk = site.weatherKinds, kinds = [];
+    var calm = wk.calm, mid = wk.mid, bad = wk.bad;
     for (var i = 0; i < n; i++) kinds.push(calm);
     // one spell of bad weather early on, and more of them on longer missions
     var bads = [3 + Math.floor(rng() * 2)];
     if (n >= 8) bads.push(6 + Math.floor(rng() * 2));
     if (n >= 10) bads.push(9);
-    if (!mars && n >= 8) bads[1] = 7;       // on the Moon the second spell is the long dark, the day after the "Sun chaser" lesson
+    if (wk.dark && n >= 8) bads[1] = 7;       // with a long dark (the Moon) the second spell is the dark day, the day after the "Sun chaser" lesson
     bads.forEach(function (b) {
       if (kinds[b - 2] === calm) kinds[b - 2] = mid;
       kinds[b - 1] = bad;
       if (b < n && kinds[b] === calm) kinds[b] = mid;
     });
-    if (!mars && n >= 8) kinds[bads[1] - 1] = 'dark';       // the long dark: a mountain hides the Sun all day
-    return kinds.map(function (k) { return { kind: k, cells: site.env[k].cells + level.cellBonus }; });
+    if (wk.dark && n >= 8) kinds[bads[1] - 1] = wk.dark;       // the long dark: a mountain hides the Sun all day
+    return kinds.map(function (k) {
+      var e = { kind: k, cells: site.env[k].cells + level.cellBonus }, w = site.env[k];
+      if (w.heat) e.heat = w.heat;                 // a hot day: the crew sweats and drinks more (Sahrun)
+      if (w.dew != null) e.dew = w.dew;            // how much dew the night after brings (a planet with a dew catcher)
+      return e;
+    });
   }
 
   // ---------- every day is a little harder than the one before ----------
@@ -60,8 +65,8 @@
     sol = sol || s.sol;
     var d = sol >= s.totalSols ? JA.LAUNCH_DAY : JA.DAYS[Math.min(sol, JA.DAYS.length) - 1], id = s.site.id;
     return { key: sol >= s.totalSols ? 'launch' : String(Math.min(sol, JA.DAYS.length) - 1),      // its page in the Field Journal
-      icon: d.icon, title: d.title, topic: d.topic, goal: d.goal || null,
-      learn: typeof d.learn === 'string' ? d.learn : d.learn[id], src: typeof d.src === 'string' ? d.src : d.src[id] };
+      icon: d.icon, title: d.title, topic: d.topic, goal: d.goal ? Object.assign({}, d.goal, { text: JA.siteText(d.goal.text, id) }) : null,
+      learn: JA.siteText(d.learn, id), src: JA.siteText(d.src, id) };
   }
   // What got harder since yesterday, in words a player can check against the meters.
   function harderList(s, sol) {
@@ -82,10 +87,11 @@
   function newGame(opts) {
     var site = JA.SITES[opts.site], level = JA.LEVELS[opts.level];
     var seed = opts.seed || Math.floor(Math.random() * 1e9), rng = rng32(seed);
+    var wx = site.spaceWeather === 'star' && opts.weather.source !== 'star' ? JA.weather.star(site.id, seed, opts.weather.source === 'archive') : opts.weather;
     var s = {
       seed: seed, rng: rng, site: site, level: level, dayLength: opts.dayLength || R.dayLength,
-      weatherSource: opts.weather.source, weatherFallback: !!opts.weather.fallback,
-      weather: JA.weather.pickWindow(opts.weather, level.sols, level.id, rng, site.id),
+      weatherSource: wx.source, weatherFallback: !!wx.fallback,
+      weather: JA.weather.pickWindow(wx, level.sols, level.id, rng, site.id),
       env: makeEnv(site, level, rng),
       sol: 0, totalSols: level.sols, t: 0,
       air: level.id === 'cadet' ? 50 : 60, food: level.id === 'cadet' ? 28 : 45, dose: 0, bags: 0,
@@ -123,16 +129,17 @@
     if (s.pioneer) {                              // the hard start: fewer supplies, and the land has to make up for it
       s.air -= R.pioneerAir; s.food -= R.pioneerFood; s.water = Math.max(12, s.water - R.pioneerWater);
     }
+    if (site.dew) s.dew = 0;                      // water in the dew catcher's can (a planet with a dew catcher)
     if (JA.crisis) JA.crisis.plan(s);
     s.devil = planDevil(site, level, seed);
     startSol(s);
     return s;
   }
 
-  // At most one lucky dust devil per Mars mission crosses the solar panels (never on the first or the last day).
+  // At most one lucky dust devil per mission on a dusty planet (Mars) crosses the solar panels (never on the first or the last day).
   // It has its own random stream, so it does not shift the breakdowns and crises planned from the same seed.
   function planDevil(site, level, seed) {
-    if (site.id !== 'mars' || level.sols < 4) return null;
+    if (!site.dusty || level.sols < 4) return null;
     var r = rng32((seed ^ 0x5eed0de1) >>> 0);
     if (r() >= R.devilChance) return null;
     return { sol: 2 + Math.floor(r() * (level.sols - 2)), at: 0.3 + r() * 0.4, state: 'pending', gain: 0 };
@@ -172,6 +179,13 @@
     s.day = dayInfo(s);
     s.morning = { air: s.air, food: s.food, dose: s.dose, water: s.water, filter: s.filter };
     s.whyQ = []; s.whyAt = 14;                    // yesterday's unshown notes are in the night report already
+    // the dew catcher: dew forms on the night before, and a clear, still night gives the most (a sandstorm gives none)
+    if (s.site.dew && s.sol > 1) {
+      var night = R.dewWater * (s.env[s.sol - 2].dew || 0);
+      s.today.dewNight = night;
+      if (night > 0) s.dew = Math.min(R.dewWater, (s.dew || 0) + night);
+    }
+    if (env.heat > 1 && s.sol > 1) note(s, 'heat');          // not on day 1: that day has enough to learn
     if (s.colony.fresh) { s.colony.fresh = false; note(s, 'town'); }
     if (s.darkSol > s.sol && s.darkSol - s.sol <= 2) note(s, 'longdark');
     if (JA.crisis) JA.crisis.startSol(s);
@@ -254,8 +268,8 @@
   }
   // What one boulder gives when it is broken up. The same boulder always gives the same on one mission.
   function rockYield(s, k, r) {
-    var h = Math.abs(Math.sin(((s.seed || 1) % 997 + 1) * 12.9898 + (k + 1) * 78.233) * 43758.5453) % 1, mars = s.site.id === 'mars';
-    return { rock: 2 + Math.round(Math.min(3, r || 1)), metal: h < (mars ? 0.5 : 0.4) ? (h < 0.15 ? 2 : 1) : 0, glass: h > 0.55 ? (h > 0.88 ? 2 : 1) : 0 };
+    var h = Math.abs(Math.sin(((s.seed || 1) % 997 + 1) * 12.9898 + (k + 1) * 78.233) * 43758.5453) % 1, metalOdds = JA.pick(s, { moon: 0.4, mars: 0.5, sahrun: 0.45 });
+    return { rock: 2 + Math.round(Math.min(3, r || 1)), metal: h < metalOdds ? (h < 0.15 ? 2 : 1) : 0, glass: h > 0.55 ? (h > 0.88 ? 2 : 1) : 0 };
   }
   function breakRock(s, k) { if (s.broken[k]) return false; s.broken[k] = 1; s.stats.rocks = (s.stats.rocks || 0) + 1; note(s, 'isru'); return true; }
   function addMat(s, kind, n) { if (!JA.MATS[kind]) return 0; s.mats[kind] = (s.mats[kind] || 0) + (n || 1); return s.mats[kind]; }
@@ -300,7 +314,7 @@
     if (want > c.stage) { c.stage = want; c.arrive = want; c.people = R.townPeople[want] || 0; c.fresh = want >= 2; }
     if (c.stage < 2) return;
     if (c.spirit >= R.spiritHelp) {
-      if (m.air.queue < R.hopperMax) { m.air.queue++; c.gifts.push('an ice chunk for the Air Maker'); }
+      if (m.air.queue < R.hopperMax) { m.air.queue++; c.gifts.push(JA.waterWords(s).a + ' for the Air Maker'); }
       if (s.water < waterCap(s) - 15) { s.water += 15; c.gifts.push('water for the tank'); }
     }
     if (c.spirit >= R.spiritGift && c.stage >= 3 && s.rack.cells < rackMax(s)) { s.rack.cells++; c.gifts.push('a charged power cell'); }
@@ -347,7 +361,9 @@
     if (run > 0) s.stats.sprint += dt * run;
     // the crew drinks and washes; the recycler gives most of it back
     if (s.water > 0) {
-      var sip = R.crewWater / D * dt, back = sip * s.mods.recycle;
+      var sip = R.crewWater / D * dt, hot = s.env[s.sol - 1].heat, back = sip * s.mods.recycle;
+      // a hot day: the suits cool the crew by letting water evaporate away, so that extra water never reaches the recycler
+      if (hot) { var sweat = sip * (hot - 1); td.water.sweat = (td.water.sweat || 0) + sweat; sip += sweat; }
       td.water.crew += sip; td.water.back += back;
       s.water = Math.max(0, s.water - (sip - back));
     } else td.noWater += dt;
@@ -523,6 +539,22 @@
     s.today.ice++; s.stats.ice++;
     return OK;
   }
+  // The dew catcher (a planet with one): take its can of water, then pour it into the water tank.
+  function takeDew(s) {
+    if (!s.site.dew) return no('There is no dew catcher here.');
+    if (!(s.dew >= 1)) return no('The dew catcher is empty. Dew forms on clear, still nights.');
+    var w = Math.round(s.dew); s.dew = 0;
+    return { ok: true, water: w };
+  }
+  function feedDew(s, water) {
+    water = Math.max(0, +water || 0);
+    if (s.water > waterCap(s) - water / 2) return no('The water tank is full.');
+    var add = Math.min(water, waterCap(s) - s.water);
+    s.water += add; s.today.water.dew = (s.today.water.dew || 0) + add;
+    s.stats.dew = (s.stats.dew || 0) + add;
+    note(s, 'dew');
+    return { ok: true, add: add };
+  }
   function addBag(s) {
     if (s.bags >= R.shieldSlots) return no('The dome is fully covered!');
     s.bags++; s.today.bags++;
@@ -551,7 +583,7 @@
   function drillCore(s, i, quality) { var core = { site: i, n: s.cores[i], quality: quality }; s.cores[i]++; s.stats.cores++; return core; }
   function submitCore(s, core) { if (s.m.lab.queue.length >= R.labQueue) return no('The Lab tray is full. It needs a power cell to study the cores.'); s.m.lab.queue.push(core); return OK; }
   function discover(s, core) {
-    var site = JA.GEO[s.site.id][core.site], f = site.finds[core.n] || site.finds[0];
+    var site = JA.pick(s, JA.GEO)[core.site], f = site.finds[core.n] || site.finds[0];
     var find = { title: f.title, text: f.text, src: f.src, quality: core.quality, place: site.name, icon: site.icon, sol: s.sol, kind: 'core',
       key: core.site + '-' + (site.finds[core.n] ? core.n : 0) };
     // the first core studied from each site teaches something useful for good
@@ -562,7 +594,7 @@
   }
   function deploy(s, id) {
     if (s.inst[id]) return null;
-    var def = JA.INSTRUMENTS[s.site.id].filter(function (x) { return x.id === id; })[0];
+    var def = JA.pick(s, JA.INSTRUMENTS).filter(function (x) { return x.id === id; })[0];
     s.inst[id] = true;
     didScience(s);
     var find = { title: def.name + ' is working!', text: def.text, src: def.src, perk: def.perk, icon: def.icon, sol: s.sol, kind: 'inst', key: id };
@@ -571,7 +603,7 @@
   }
   function photo(s, i) {
     if (s.photos[i]) return null;
-    var def = JA.PHOTOS[s.site.id][i];
+    var def = JA.pick(s, JA.PHOTOS)[i];
     s.photos[i] = true;
     didScience(s);
     var find = { title: 'Postcard: ' + def.name, text: def.text, src: def.src, icon: '📸', sol: s.sol, kind: 'photo', key: String(i) };
@@ -593,7 +625,9 @@
 
   // ---------- repairs and the radio delay ----------
   function commInfo(s) {
-    if (s.site.id === 'moon') return { oneWay: '1.3 seconds', round: 'about 3 seconds', wait: 3, minutes: 0 };
+    if (s.site.comms === 'near') return { oneWay: '1.3 seconds', round: 'about 3 seconds', wait: 3, minutes: 0 };
+    // a relay ship in orbit answers in seconds; Earth itself is out of reach (a made-up planet far beyond the solar system)
+    if (s.site.comms === 'relay') return { oneWay: 'about 2 seconds', round: 'about 4 seconds', wait: 4, minutes: 0, relay: true };
     var date = weather(s).date || new Date().toISOString().slice(0, 10);
     var one = JA.weather.marsDelayMin(date), round = one * 2;
     return { oneWay: 'about ' + Math.round(one) + ' minutes', round: 'about ' + Math.round(round) + ' minutes', wait: clamp(round * 1.4, 14, 60), minutes: Math.round(round) };
@@ -601,7 +635,7 @@
   function askEarth(s) {
     var g = s.glitch;
     if (!g || g.state !== 'broken') return no('');
-    if (!s.m.comms.on) return no('The Radio Dish has no power today, so you cannot call Earth.');
+    if (!s.m.comms.on) return no('The Radio Dish has no power today, so you cannot call ' + JA.homeName(s) + '.');
     var info = commInfo(s);
     g.state = 'asked'; g.asked = true; g.replyAt = s.t + info.wait;
     note(s, 'delay');
@@ -652,7 +686,7 @@
     function extra(res) { return t.extra.filter(function (x) { return x.res === res; }).map(function (x) { return { text: x.text, v: x.v }; }); }
     var lines = [];
     lines.push({ res: 'air', icon: '💨', parts: [
-      t.airMade ? { text: 'Air Maker turned ice into oxygen', v: t.airMade } : { text: 'Air Maker made nothing', v: 0 },
+      t.airMade ? { text: 'Air Maker turned ' + JA.waterWords(s).stuff + ' into oxygen', v: t.airMade } : { text: 'Air Maker made nothing', v: 0 },
       { text: 'Crew breathing', v: -Math.round(t.breath - t.staleAir) },
       t.staleAir >= 0.5 ? { text: 'Extra air to push out the stale air', v: -Math.round(t.staleAir) } : null,
       t.leaked >= 0.5 ? { text: 'Leaked out through the hole', v: -Math.round(t.leaked) } : null,
@@ -666,8 +700,9 @@
       shared ? { text: 'Shared with the town, which is short of food', v: -shared } : null
     ].filter(Boolean).concat(extra('food')) });
     lines.push({ res: 'water', icon: '💧', parts: [
-      t.water.ice ? { text: 'Ice melted into the tank', v: Math.round(t.water.ice) } : null,
-      t.water.crew >= 0.5 ? { text: 'The crew drank and washed', v: -Math.round(t.water.crew) } : { text: 'The tank was empty', v: 0 },
+      t.water.ice ? { text: JA.iceWell(s) ? 'Well water poured into the tank' : 'Ice melted into the tank', v: Math.round(t.water.ice) } : null,
+      t.water.dew ? { text: 'Dew from the dew catcher', v: Math.round(t.water.dew) } : null,
+      t.water.crew >= 0.5 ? { text: t.water.sweat >= 0.5 ? 'The crew drank and washed (more in the heat)' : 'The crew drank and washed', v: -Math.round(t.water.crew) } : { text: 'The tank was empty', v: 0 },
       t.water.back >= 0.5 ? { text: 'The recycler gave back', v: Math.round(t.water.back) } : null,
       t.water.plants >= 0.5 ? { text: 'Kept by the growing plants', v: -Math.round(t.water.plants) } : null
     ].filter(Boolean).concat(extra('water')) });
@@ -699,7 +734,7 @@
     if (!fail && !last) {
       var e2 = s.env[s.sol], w2 = s.weather[s.sol] || null;
       if (s.m.comms.on) report.forecast = { env: e2, weather: w2, full: true };
-      else if (s.inst.beam && s.site.id === 'mars') report.forecast = { env: e2, weather: null, full: false };
+      else if (s.inst.beam && s.site.dusty) report.forecast = { env: e2, weather: null, full: false };      // the Weather Station forecasts sunlight where dust changes it
     }
     s.forecast = s.m.comms.on;
     s.night = true;
@@ -751,6 +786,7 @@
     if (s.stats.bestThrow >= 15) b.push({ icon: '🎯', name: 'Sharpshooter', text: 'Landed a throw from ' + Math.round(s.stats.bestThrow) + ' m away' });
     if (s.stats.drive >= 150) b.push({ icon: '🚙', name: 'Road Tripper', text: 'Drove the rover for ' + Math.round(s.stats.drive) + ' seconds' });
     if (s.sky && s.sky.found) b.push({ icon: '☄️', name: 'Space Rock Hunter', text: 'Picked up ' + s.sky.found + ' meteorite' + (s.sky.found > 1 ? 's' : '') + ' from a fresh crater' });
+    if (s.ray && s.ray.seen) b.push({ icon: '🪁', name: 'Ray Spotter', text: 'Saw a sand ray leap out of the dunes (sand rays are made up)' });
     if (s.colony && s.colony.stage) b.push({ icon: '🏘️', name: 'Town Founder', text: 'Your outpost looked after itself so well that ' + (s.colony.stage > 1 ? 'settlers came' : 'a supply ship came') + ' from Earth' });
     if (s.stats.cores >= 3 && !s.wear.drill && !s.wear.rover) b.push({ icon: '🔧', name: 'Gentle Hands', text: 'Never overheated the drill or ran the rover battery flat' });
     if (s.stats.drive >= 60 && !s.stats.hardCrashes) b.push({ icon: '🛞', name: 'Safe Driver', text: 'Drove the rover without one real crash' });
@@ -765,15 +801,18 @@
 
   // Mission Control's advice: the most urgent thing right now, the reason behind it, and the hologram that explains it.
   function hintInfo(s) {
-    var m = s.m, L = s.level, left = (s.dayLength - s.t) / s.dayLength, mars = s.site.id === 'mars';
+    var m = s.m, L = s.level, left = (s.dayLength - s.t) / s.dayLength, dusty = s.site.dusty;
     function say(text, why, topic) { return { text: text, why: why || '', topic: topic || '' }; }
     var airNeed = airDrain(s) * stale(s) * left + s.leak * left;
     if (s.glitch && s.glitch.state === 'broken') return say('Something is broken! Look for the sparks and fix it.');
     if (s.filter <= 0 && s.stale <= 1) return say('The CO₂ filter is full, so the air is draining fast. Plug a power cell into the Air Scrubber by the airlock!', 'The heat pushes the trapped gas out, and the filter can soak up more.', 'scrubber');
     if (s.air < airNeed + 8) {
-      if (m.air.queue > 0 && m.air.power === 0) return say('The Air Maker has ice but no power. Bring it a power cell!', 'It takes electricity to pull the oxygen out of water.', 'electrolysis');
-      if (m.air.power > 0 && m.air.queue === 0) return say('The Air Maker is powered but hungry. Bring ice from the ' + s.site.iceName + '!', 'Ice is frozen water, and water is where the oxygen comes from.', 'electrolysis');
-      if (m.air.power === 0) return say('Air is running low. The Air Maker needs a power cell and ice.', 'Ice holds the oxygen. Electricity sets it free.', 'electrolysis');
+      var Wd = JA.waterWords(s), well = JA.iceWell(s);      // ice, or water cans from a well (Sahrun)
+      if (m.air.queue > 0 && m.air.power === 0) return say('The Air Maker has ' + Wd.stuff + ' but no power. Bring it a power cell!', 'It takes electricity to pull the oxygen out of water.', 'electrolysis');
+      // (a well planet's line starts differently: "powered but hungry" is matched to a recording that says "ice")
+      if (m.air.power > 0 && m.air.queue === 0) return well ? say('The Air Maker is powered, but it has no water. Bring a can from the ' + s.site.iceName + '!', 'Water is where the oxygen comes from: every drop holds some.', 'electrolysis')
+        : say('The Air Maker is powered but hungry. Bring ice from the ' + s.site.iceName + '!', 'Ice is frozen water, and water is where the oxygen comes from.', 'electrolysis');
+      if (m.air.power === 0) return say('Air is running low. The Air Maker needs a power cell and ' + Wd.stuff + '.', well ? 'Water holds the oxygen. Electricity sets it free.' : 'Ice holds the oxygen. Electricity sets it free.', 'electrolysis');
     }
     var beds = m.food.beds, planted = beds.filter(function (b) { return b.state !== 'empty'; }).length;
     var ripe = beds.filter(function (b) { return b.state === 'ripe'; }).length;
@@ -781,16 +820,17 @@
     if (s.food < dinner(s) * 2 && s.sol < s.totalSols) {
       if (!planted) return say('Food is getting low. Plant seeds in the Greenhouse beds.', 'Lettuce is ready fastest. Potatoes fill the pantry more.', 'crops');
       if (m.food.lamp <= 0) return say('The plants are in the dark. The Greenhouse needs a power cell for its lamps.', 'Light is the energy a plant uses to grow.', 'plant');
-      if (s.water <= 0) return say('The plants are thirsty. Drop an ice chunk in the Greenhouse water tank.', 'A dry plant closes its pores and stops growing.', 'plant');
+      if (s.water <= 0) return say('The plants are thirsty. Drop ' + JA.waterWords(s).a + ' in the Greenhouse water tank.', 'A dry plant closes its pores and stops growing.', 'plant');
     }
-    if (s.water < R.waterWarn && planted) return say('The water tank is nearly empty. Bring it an ice chunk before the plants go thirsty.', 'The recycler gives back what the crew drinks, but plants keep their water.', 'water');
+    if (s.dew >= 1 && s.water < R.waterWarn + 20) return say('The dew catcher caught water last night. Carry its can to the Greenhouse water tank!', 'On a clear night the cold net turns water vapour from the air into drops.', 'water');
+    if (s.water < R.waterWarn && planted) return say('The water tank is nearly empty. Bring it ' + JA.waterWords(s).a + ' before the plants go thirsty.', 'The recycler gives back what the crew drinks, but plants keep their water.', 'water');
     if (s.filter < R.filterWarn && s.filter > 0) return say('The CO₂ filter is nearly full. A power cell at the Air Scrubber will bake it clean.', 'It soaks up the gas the crew breathes out, like a sponge.', 'scrubber');
     if (s.storm && !s.storm.warned && s.forecast && s.bags < 8 && s.storm.level >= 2) return say('A solar storm is forecast today. Soil bags on the dome will protect the crew!', 'Soil stops the storm\'s particles before they reach anyone.', 'shield');
     if (s.dose > 55 && s.bags < R.shieldSlots) return say('The radiation badge is filling up. More soil bags on the dome would slow it down.', 'Radiation adds up, and the badge never goes back down.', 'dose');
     if (s.darkSol === s.sol + 1 && left < 0.5 && s.rack.cells < 3) return say('Tomorrow is the long dark, with almost no Sun. Leave power cells on the rack tonight!', 'Saved cells are the only power you will have.', 'longdark');
     var charging = !s.rack.broken && s.t <= s.dayLength * R.chargeSpan && s.cellsToday > R.morningCells;      // only then is sunshine being wasted
     if (s.rack.cells >= rackMax(s) && charging) return say('The Solar Rack is full, so the panels are wasting sunshine. Use those power cells!', 'A full rack cannot store any more electricity.');
-    if (Math.min(s.rack.eff[0], s.rack.eff[1], s.rack.eff[2]) < 0.7 && env(s).kind !== 'dark') return mars ? say('Dust is covering the solar panels. Brush them off to charge faster.', 'Dust blocks the sunlight before it reaches the cells.', 'solar')
+    if (Math.min(s.rack.eff[0], s.rack.eff[1], s.rack.eff[2]) < 0.7 && env(s).kind !== 'dark') return dusty ? say('Dust is covering the solar panels. Brush them off to charge faster.', 'Dust blocks the sunlight before it reaches the cells.', 'solar')
       : say('The Sun has moved. Turn the solar panels to face it again.', 'A panel that faces away catches less light.', 'solar');
     if (left < 0.14) return say('The shift is almost over. Head back to the airlock!');
     return null;
@@ -799,7 +839,7 @@
 
   JA.sim = {
     rng32: rng32, newGame: newGame, startSol: startSol, env: env, weather: weather, shield: shield, warnLead: warnLead, stormPhase: stormPhase,
-    tick: tick, takeCell: takeCell, plug: plug, feedIce: feedIce, addBag: addBag, plant: plant, harvest: harvest, storeCrate: storeCrate,
+    tick: tick, takeCell: takeCell, plug: plug, feedIce: feedIce, takeDew: takeDew, feedDew: feedDew, addBag: addBag, plant: plant, harvest: harvest, storeCrate: storeCrate,
     coresLeft: coresLeft, drillCore: drillCore, submitCore: submitCore, deploy: deploy, photo: photo, trick: trick,
     servicePanel: servicePanel, cleanAllPanels: cleanAllPanels, devilClean: devilClean, commInfo: commInfo, askEarth: askEarth, repairMiss: repairMiss, repairDone: repairDone,
     endSol: endSol, finish: finish, rankFor: rankFor, badges: badges, hint: hint, didScience: didScience,

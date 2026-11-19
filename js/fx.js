@@ -318,16 +318,26 @@
   function ease(key, want, dt, speed) { S[key] += (want - S[key]) * Math.min(1, dt * (speed || 3)); }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
+  // The colour grade of each planet. warm blends the shader between a cold Apollo slide film (0) and a warm rover
+  // camera (1); occLo, bloom, streak, tint: lens flare and glow; cold: how blue the night goes; glowFrom, glowCap: what is bright enough to glow.
+  var GRADES = {
+    moon: { warm: 0, occLo: 0.55, bloom: 0.45, streak: 0.9, tint: [0.5, 0.72, 1.0], cold: 0.8, glowFrom: 1.3, glowCap: 1.2 },
+    mars: { warm: 1, occLo: 1.0, bloom: 0.4, streak: 0.55, tint: [1.0, 0.72, 0.45], cold: 0.7, glowFrom: 1.5, glowCap: 0.3 },
+    // Sahrun (made up): sun-bleached and golden, between the two: warm light but neutral shadows, a soft golden glare
+    sahrun: { warm: 0.6, occLo: 1.0, bloom: 0.46, streak: 0.62, tint: [1.0, 0.86, 0.6], cold: 0.55, glowFrom: 1.45, glowCap: 0.35 }
+  };
+  var GR = GRADES.mars;
   function readGame(dt, camera) {
     var W = JA.world, G = JA.game || {}, s = G.s, mode = G.mode || 'title', env = W.env;
-    var mars = W.site !== 'moon', out = mode === 'play';
+    var out = mode === 'play';
+    GR = JA.pick(W.site || 'mars', GRADES);
     var phase = s && JA.sim && JA.sim.stormPhase ? JA.sim.stormPhase(s) : '';
-    S.site = mars ? 1 : 0;
+    S.site = GR.warm;
     ease('storm', env.stormShown * (out ? 1 : mode === 'inside' ? 0.15 : 0.6), dt, 4);
     ease('warn', out && phase === 'warning' ? 1 : 0, dt, 3);
-    ease('dust', mars ? env.dustShown : 0, dt, 2);
+    ease('dust', JA.siteOf(W.site || 'mars').dusty ? env.dustShown : 0, dt, 2);
     ease('air', s && (out || mode === 'inside') ? clamp((28 - s.air) / 24, 0, 1) : 0, dt, 1.5);
-    ease('cold', out ? clamp((env.dark - 0.55) / 0.4, 0, 1) * (mars ? 0.7 : 0.8) : 0, dt, 0.6);
+    ease('cold', out ? clamp((env.dark - 0.55) / 0.4, 0, 1) * GR.cold : 0, dt, 0.6);
     ease('cine', W.cam.mode === 'cine' || mode === 'intro' || mode === 'launch' ? 1 : 0, dt, 2);
     ease('title', mode === 'title' || mode === 'brief' ? 1 : 0, dt, 2);
     ease('inside', mode === 'inside' ? 1 : 0, dt, 2.5);
@@ -344,12 +354,12 @@
   }
 
   function setUniforms(w, h) {
-    var u = M.final.uniforms, moon = S.site === 0, full = FX.level >= 2;
+    var u = M.final.uniforms, full = FX.level >= 2;
     u.uRes.value.set(w, h); u.uTime.value = time; u.uFull.value = full ? 1 : 0;
-    u.uSite.value = S.site; u.uSunVis.value = S.sunVis; u.uOccLo.value = moon ? 0.55 : 1.0;
-    u.uBloom.value = (moon ? 0.45 : 0.4) + 0.15 * S.title + 0.2 * S.cine;
-    u.uStreakAmt.value = (moon ? 0.9 : 0.55) + 0.5 * S.cine;
-    if (moon) u.uStreakTint.value.setRGB(0.5, 0.72, 1.0); else u.uStreakTint.value.setRGB(1.0, 0.72, 0.45);
+    u.uSite.value = S.site; u.uSunVis.value = S.sunVis; u.uOccLo.value = GR.occLo;
+    u.uBloom.value = GR.bloom + 0.15 * S.title + 0.2 * S.cine;
+    u.uStreakAmt.value = GR.streak + 0.5 * S.cine;
+    u.uStreakTint.value.setRGB(GR.tint[0], GR.tint[1], GR.tint[2]);
     u.uStorm.value = S.storm; u.uWarn.value = S.warn; u.uDust.value = S.dust; u.uAir.value = S.air; u.uCold.value = S.cold;
     u.uKick.value = reduce ? 0 : S.kick; u.uCine.value = S.cine; u.uTitle.value = S.title; u.uInside.value = S.inside;
     u.uSnap.value = clamp(snapT / 1.6, 0, 1);
@@ -404,7 +414,7 @@
 
       var ub = M.bright.uniforms;
       ub.tSrc.value = rt.scene.texture; ub.uTexel.value.set(1 / w, 1 / h);
-      ub.uThresh.value = S.site === 0 ? 1.3 : 1.5; ub.uCap.value = S.site === 0 ? 1.2 : 0.3;   // only real lights glow, not bright ground
+      ub.uThresh.value = GR.glowFrom; ub.uCap.value = GR.glowCap;   // only real lights glow, not bright ground
       pass(M.bright, rt.half);
       var ud = M.down.uniforms;
       ud.tSrc.value = rt.half.texture; ud.uTexel.value.set(1 / (w >> 1), 1 / (h >> 1)); pass(M.down, rt.q1);

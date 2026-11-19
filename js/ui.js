@@ -201,10 +201,11 @@
   // Who is talking on the radio. from 'earth': Mission Control on Earth (with the Quindar beeps real NASA radio used).
   // from 'crew': a crewmate inside the habitat — on Mars, Earth is minutes away by radio, so the crewmate inside
   // talks the astronaut through the work (real spacewalks have this job: the "IV" crew member). No beeps: it is local.
-  U.RADIO_FROM = { earth: 'Mission Control · Earth', crew: '🧑‍🚀 Crewmate · in the habitat' };
+  // from 'relay': Mission Control on a relay ship in orbit (Sahrun, a made-up planet far from Earth): seconds away, so with the beeps too.
+  U.RADIO_FROM = { earth: 'Mission Control · Earth', crew: '🧑‍🚀 Crewmate · in the habitat', relay: '🛰️ Mission Control · relay ship in orbit' };
   // vid: the recorded voice line for these words (a list plays one after the other); without one, read-aloud speaks them
   U.say = function (text, vid, why, from) {
-    from = from === 'crew' ? 'crew' : 'earth';
+    from = from === 'crew' || from === 'relay' ? from : 'earth';
     if (!text || text + from === lastSay) return;
     lastSay = text + from;
     var b = $('radio');
@@ -229,7 +230,7 @@
   U.hands = function (item, power, hint) {
     var h = $('hands');
     if (!item) { if (handsKey !== null) { handsKey = null; h.classList.add('hidden'); } return; }
-    var def = JA.ITEMS[item.type], k = item.type + hint;
+    var def = JA.itemDef ? JA.itemDef(item.type, JA.game && JA.game.s) : JA.ITEMS[item.type], k = item.type + hint;
     if (k !== handsKey) {
       handsKey = k; h.classList.remove('hidden');
       $('hands-icon').textContent = def.icon; $('hands-name').textContent = item.data && item.data.name ? item.data.name : def.name; $('hands-hint').textContent = hint;
@@ -367,13 +368,13 @@
   };
 
   // ---------- text helpers shared by the cards ----------
-  U.dataTag = function (s) { return s.weatherSource === 'live' ? '<span class="tagline">Live NASA data</span>' : '<span class="tagline archive">NASA archive</span>'; };
+  U.dataTag = function (s) { return s.weatherSource === 'star' ? '<span class="tagline made">Made-up star</span>' : s.weatherSource === 'live' ? '<span class="tagline">Live NASA data</span>' : '<span class="tagline archive">NASA archive</span>'; };
   U.stormWords = function (level) { return level >= 3 ? 'A BIG solar storm' : level === 2 ? 'A medium solar storm' : 'A small solar storm'; };
   U.weatherRow = function (s, w, known, when) {
     var date = w && w.date ? JA.weather.prettyDate(w.date) : '';
     if (!known) {
       return '<div class="info-row"><span class="ic">❓</span><div><b>No space-weather forecast</b>' +
-        '<p>The Radio Dish was off, so Earth could not send a forecast. Your suit\'s small sensor only gives a few seconds of warning.</p></div></div>';
+        '<p>The Radio Dish was off, so ' + (s.site.comms === 'relay' ? 'the relay ship' : 'Earth') + ' could not send a forecast. Your suit\'s small sensor only gives a few seconds of warning.</p></div></div>';
     }
     var story = esc(JA.weather.describe(w, s.site.id).text);
     if (!w || w.level === 0) {

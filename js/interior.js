@@ -31,7 +31,8 @@
     seat: 'Astronauts launch lying on their backs with their knees up, in couches shaped to fit their bodies, so the huge push of the rocket spreads over their whole back.',
     panel: {
       moon: 'A rocket needs oxygen to burn its fuel. Engineers are studying how to split the ice in the Moon\'s dark polar craters into hydrogen and oxygen, the same two ingredients that powered the Space Shuttle\'s main engines.',
-      mars: 'A rocket needs oxygen to burn its fuel. NASA\'s MOXIE experiment on the Perseverance rover showed that oxygen can be made from the carbon dioxide in Mars air, so a future ship home could fill its tanks on Mars.'
+      mars: 'A rocket needs oxygen to burn its fuel. NASA\'s MOXIE experiment on the Perseverance rover showed that oxygen can be made from the carbon dioxide in Mars air, so a future ship home could fill its tanks on Mars.',
+      sahrun: 'A rocket needs oxygen to burn its fuel. Here the crew splits water from the Deep Well into hydrogen and oxygen, the same two ingredients that powered the Space Shuttle\'s main engines.'
     },
     abort: 'NASA\'s Orion capsule sits under a launch abort tower. If the rocket fails, its powerful little motors pull the crew capsule away from danger in a few seconds.',
     life: 'A spacecraft carries tanks of oxygen and nitrogen and mixes them into air like Earth\'s: about one part oxygen to four parts nitrogen. A scrubber takes out the carbon dioxide the crew breathes out.',
@@ -40,7 +41,7 @@
     scrubber: 'Every breath out is carbon dioxide. On the Space Station it is pulled out of the air by beds of zeolite that are baked clean and used again. When Apollo 13\'s scrubbers ran short, the crew built a new one from a sock, a hose and duct tape.',
     console: 'Mission Control on Earth watches every reading you see here, but their advice travels at the speed of light. Out here, the first decision is always yours.'
   };
-  I.fact = function (id) { var f = FACTS[id]; return !f ? '' : typeof f === 'string' ? f : f[site] || ''; };
+  I.fact = function (id) { var f = FACTS[id]; return !f ? '' : JA.siteText(f, site); };
 
   // ---------- small helpers ----------
   function lerp(a, b, t) { return a + (b - a) * t; }
@@ -113,7 +114,7 @@
     var c = w / 2;
     ctx.fillStyle = '#1b2350'; ellipse(ctx, c, c, c - 6, c - 6); ctx.fill();
     ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 12; ellipse(ctx, c, c, c - 12, c - 12); ctx.stroke();
-    ctx.fillStyle = site === 'mars' ? '#d9774a' : '#b9bac6'; ellipse(ctx, c, w * 0.95, w * 0.62, w * 0.3); ctx.fill();
+    ctx.fillStyle = JA.pick(site, { moon: '#b9bac6', mars: '#d9774a', sahrun: '#d9a04a' }); ellipse(ctx, c, w * 0.95, w * 0.62, w * 0.3); ctx.fill();
     ctx.fillStyle = '#4aa3ff'; ellipse(ctx, w * 0.72, w * 0.3, 26, 26); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(c, w * 0.18); ctx.lineTo(c + 28, w * 0.5); ctx.lineTo(c - 28, w * 0.5); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#ff5f6d'; ctx.fillRect(c - 28, w * 0.5, 56, 50);
@@ -320,8 +321,8 @@
   // Materials carry generated bump maps and a small reflection map of the cabin, and the walls cast the
   // sun's shadow, so daylight only falls in through the windows. Moon and Mars differ in the accent colour,
   // the course screen and how the propellant is made.
-  function accent() { return site === 'mars' ? '#ff9a4d' : '#4fd8ff'; }
-  function accentHex() { return site === 'mars' ? 0xff9a4d : 0x4fd8ff; }
+  function accent() { return JA.pick(site, { moon: '#4fd8ff', mars: '#ff9a4d', sahrun: '#ffb347' }); }
+  function accentHex() { return parseInt(accent().slice(1), 16); }
   var RK_PX = 512 / (RK_TOP - RK_FLOOR), RK_PXU = 1024 / (Math.PI * 2 * RK_R);   // wall texture pixels per metre: up, around
   function wallY(m) { return 512 - m * RK_PX; }                                    // canvas y of a height above the cabin floor
   var MONO = "ui-monospace, Consolas, 'Courier New', monospace";
@@ -385,7 +386,7 @@
         var m = new T.Mesh(new T.PlaneGeometry(0.9, 0.5), new T.MeshBasicMaterial({ color: new T.Color(0xf2f6ff).multiplyScalar(5), side: T.DoubleSide }));
         m.rotation.x = Math.PI / 2; m.position.set(p[0], 2.45, p[1]); sc.add(m);
       });
-      var win = new T.Mesh(new T.CircleGeometry(0.8, 20), new T.MeshBasicMaterial({ color: new T.Color(site === 'mars' ? 0xe0a070 : 0x8a8c96).multiplyScalar(3), side: T.DoubleSide }));
+      var win = new T.Mesh(new T.CircleGeometry(0.8, 20), new T.MeshBasicMaterial({ color: new T.Color(JA.pick(site, { moon: 0x8a8c96, mars: 0xe0a070, sahrun: 0xe8c48a })).multiplyScalar(3), side: T.DoubleSide }));
       win.position.set(0, 0.3, 2.95); sc.add(win);
       var scr = new T.Mesh(new T.PlaneGeometry(2.2, 0.5), new T.MeshBasicMaterial({ color: new T.Color(accentHex()).multiplyScalar(1.2), side: T.DoubleSide }));
       scr.position.set(0, -1.4, 2.7); sc.add(scr);
@@ -499,7 +500,7 @@
       ctx.fillStyle = '#2b3140'; ctx.font = '700 15px ' + FONT;
       // the wall is seen from inside, so its texture is mirrored (see buildRocket): u = 0.75 is the -x side here
       ctx.fillText('LIFE SUPPORT', 0.75 * w, wallY(2.95)); ctx.fillText('STOWAGE', 0.25 * w, wallY(2.95));
-      ctx.font = '700 13px ' + FONT; ctx.fillText('OUTPOST ONE  ·  ' + (site === 'mars' ? 'MARS ASCENT VEHICLE' : 'LUNAR ASCENT VEHICLE'), 0.5 * w, wallY(4.2));
+      ctx.font = '700 13px ' + FONT; ctx.fillText('OUTPOST ONE  ·  ' + JA.pick(site, { moon: 'LUNAR ASCENT VEHICLE', mars: 'MARS ASCENT VEHICLE', sahrun: 'SAHRUN ASCENT VEHICLE' }), 0.5 * w, wallY(4.2));
       [0, w].forEach(function (bx) { ctx.fillText('↑ DOCKING HATCH', bx + (bx ? -70 : 70), wallY(4.2)); });
       // caution label near the hatch
       ctx.fillStyle = '#ffd23f'; rr(ctx, 0.1 * w - 34, wallY(1.45), 68, 22, 3); ctx.fill();
@@ -546,10 +547,16 @@
     if (right) { ctx.textAlign = 'right'; ctx.fillStyle = AV.dim; ctx.font = '600 16px ' + MONO; ctx.fillText(right, w - 14, 21); }
     ctx.textAlign = 'center';
   }
+  // the fuel each planet can make for the trip home: [formula, name, "made from" (two lines)]
+  var PROPELLANT = {
+    moon: { fuel: ['LH₂', 'hydrogen'], from: ['made from', 'polar ice'] },
+    mars: { fuel: ['CH₄', 'methane'], from: ['oxygen made from', 'Mars air'] },
+    sahrun: { fuel: ['LH₂', 'hydrogen'], from: ['made from', 'well water'] }
+  };
   function drawFuel(ctx, w, h, info) {
-    var mars = info.site === 'mars', full = info.fuel >= 100;
+    var P = JA.pick(info.site, PROPELLANT), full = info.fuel >= 100;
     avFrame(ctx, w, h, 'PROPELLANT', full ? 'FULL' : 'LOADING');
-    [['LOX', 'oxygen'], [mars ? 'CH₄' : 'LH₂', mars ? 'methane' : 'hydrogen']].forEach(function (t, i) {
+    [['LOX', 'oxygen'], P.fuel].forEach(function (t, i) {
       var x = 70 + i * 120, top = 70, bh = h - 150;
       ctx.strokeStyle = AV.dim; ctx.lineWidth = 2; rr(ctx, x - 30, top, 60, bh, 10); ctx.stroke();
       var fh = (bh - 8) * info.fuel / 100, g = ctx.createLinearGradient(0, top + bh, 0, top);
@@ -561,8 +568,8 @@
     });
     ctx.fillStyle = full ? AV.green : AV.amber; ctx.font = '700 64px ' + MONO; ctx.fillText(info.fuel + '%', w * 0.73, h * 0.42);
     ctx.fillStyle = AV.white; ctx.font = '600 17px ' + FONT;
-    ctx.fillText(mars ? 'oxygen made from' : 'made from', w * 0.73, h * 0.62);
-    ctx.fillText(mars ? 'Mars air' : 'polar ice', w * 0.73, h * 0.62 + 22);
+    ctx.fillText(P.from[0], w * 0.73, h * 0.62);
+    ctx.fillText(P.from[1], w * 0.73, h * 0.62 + 22);
     ctx.fillStyle = AV.dim; ctx.font = '600 15px ' + FONT; ctx.fillText(full ? 'tanks full: go' : 'full on launch day', w * 0.73, h * 0.85);
   }
   // where Earth and Mars are on a real date (mean orbits, as in js/spaceweather.js), for the course map
@@ -577,7 +584,7 @@
   function drawCourse(ctx, w, h, info) {
     avFrame(ctx, w, h, 'COURSE HOME', info.date || '');
     var cx = w * 0.36, cy = h * 0.56;
-    if (info.site === 'mars' && info.date) {
+    if (JA.siteOf(info.site).comms === 'orbit' && info.date) {      // the real positions of Earth and Mars
       var P = planetsOn(info.date), k = 72;
       ctx.strokeStyle = AV.line; ctx.lineWidth = 2; ellipse(ctx, cx, cy, k, k); ctx.stroke(); ellipse(ctx, cx, cy, k * 1.52, k * 1.52); ctx.stroke();
       var sg = ctx.createRadialGradient(cx, cy, 2, cx, cy, 18); sg.addColorStop(0, '#fff6c8'); sg.addColorStop(1, 'rgba(255,170,60,0)');
@@ -643,21 +650,21 @@
     });
     ctx.fillStyle = AV.white; ctx.font = '700 18px ' + MONO; ctx.fillText('CO₂ SCRUB', 16, 214);
     for (var k = 0; k < 8; k++) { ctx.fillStyle = (Math.floor(clock * 4) % 8) === k ? AV.green : '#123322'; ellipse(ctx, w - 150 + k * 18, 214, 6, 6); ctx.fill(); }
-    ctx.fillStyle = AV.dim; ctx.font = '600 15px ' + FONT; ctx.fillText(s.site.id === 'mars' ? 'outside: thin CO₂ air' : 'outside: no air at all', 16, 250);
+    ctx.fillStyle = AV.dim; ctx.font = '600 15px ' + FONT; ctx.fillText(JA.pick(s, { moon: 'outside: no air at all', mars: 'outside: thin CO₂ air', sahrun: 'outside: hot, dry, thick air' }), 16, 250);
   }
   function ascentPanel(ctx, w, h) {
     avFrame(ctx, w, h, 'ASCENT', 'GUIDANCE x3');
     var cx = w * 0.2, cy = h * 0.58, r = h * 0.33, k;
     ctx.save(); ellipse(ctx, cx, cy, r, r); ctx.clip();
     ctx.fillStyle = '#2f62c8'; ctx.fillRect(cx - r, cy - r, r * 2, r);
-    ctx.fillStyle = site === 'mars' ? '#8a4428' : '#55565f'; ctx.fillRect(cx - r, cy, r * 2, r);
+    ctx.fillStyle = JA.pick(site, { moon: '#55565f', mars: '#8a4428', sahrun: '#a8763a' }); ctx.fillRect(cx - r, cy, r * 2, r);
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
     for (k = -2; k <= 2; k++) if (k) { ctx.beginPath(); ctx.moveTo(cx - 16, cy + k * 18); ctx.lineTo(cx + 16, cy + k * 18); ctx.stroke(); }
     ctx.restore();
     ctx.strokeStyle = AV.dim; ctx.lineWidth = 3; ellipse(ctx, cx, cy, r, r); ctx.stroke();
     ctx.fillStyle = AV.amber; ctx.fillRect(cx - 36, cy - 3, 26, 6); ctx.fillRect(cx + 10, cy - 3, 26, 6); ctx.fillRect(cx - 3, cy - 3, 6, 6);
     ctx.textAlign = 'left'; ctx.font = '600 17px ' + MONO;
-    [['ENGINE', 'READY', AV.green], ['GUIDANCE', '3 COMPUTERS', AV.green], ['TARGET', (site === 'mars' ? 'MARS' : 'MOON') + ' ORBIT', AV.white], ['CREW', '2', AV.white]].forEach(function (t, i) {
+    [['ENGINE', 'READY', AV.green], ['GUIDANCE', '3 COMPUTERS', AV.green], ['TARGET', JA.siteOf(site).short.toUpperCase() + ' ORBIT', AV.white], ['CREW', '2', AV.white]].forEach(function (t, i) {
       ctx.fillStyle = AV.dim; ctx.fillText(t[0], w * 0.42, 74 + i * 34); ctx.fillStyle = t[2]; ctx.fillText(t[1], w * 0.66, 74 + i * 34);
     });
   }
@@ -1009,7 +1016,8 @@
     var last = s.sol >= s.totalSols, D = s.dayLength || 1;
     var fuel = last ? 100 : Math.max(0, Math.min(99, Math.round(100 * ((s.sol - 1) + s.t / D) / Math.max(1, s.totalSols - 1))));
     var w = JA.sim.weather(s), date = (w && w.date) || new Date().toISOString().slice(0, 10), km, oneWay, trip;
-    if (s.site.id === 'mars') {
+    if (s.site.comms === 'relay') { km = 'light-years'; oneWay = '2 s to the relay'; trip = 'made up: no real rocket goes so far'; }
+    else if (s.site.comms !== 'near') {
       var mins = JA.weather && JA.weather.marsDelayMin ? JA.weather.marsDelayMin(date) : 12;
       km = Math.round(mins * 60 * 299792.458 / 1e6) + ' million km'; oneWay = Math.round(mins) + ' min'; trip = 'about 7 months';
     } else { km = '384,400 km'; oneWay = '1.3 s'; trip = 'about 3 days'; }

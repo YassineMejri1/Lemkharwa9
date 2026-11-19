@@ -32,6 +32,15 @@
         text: 'Apollo astronauts left moonquake sensors on the Moon. For years those sensors felt space rocks hitting the ground, which helped scientists work out what the inside of the Moon is like.' },
       { title: 'Crumbs older than the Moon', src: 'moon',
         text: 'Most meteorites are crumbs left over from when the planets formed, about 4.6 billion years ago. Tiny ones hit the Moon all the time and slowly grind its rocks into the grey dust under your boots.' }
+    ],
+    // Sahrun is made up: these cards tell what real deserts and real planets show about falling space rocks
+    sahrun: [
+      { title: 'Space rocks love deserts', src: 'earthobs',
+        text: 'Most meteorites ever found on Earth were picked up in deserts and in Antarctica. On bare sand or ice a dark space rock is easy to spot, and dry air keeps it from rusting away.' },
+      { title: 'A fireball in thick air', src: 'insight',
+        text: 'Thick air slows a falling space rock and heats it until it glows: a fireball. Even Mars\'s thin air does this, and NASA\'s InSight lander felt the ground shake and picked up the boom when meteorites hit.' },
+      { title: 'A chip off an asteroid', src: 'msl',
+        text: 'Most meteorites are chips knocked off asteroids long ago. NASA\'s Curiosity rover has found iron meteorites on Mars: one, nicknamed Cacao, is about 30 centimetres wide.' }
     ]
   };
 
@@ -68,15 +77,15 @@
     return DIRS[Math.round(deg / 45) % 8];
   }
   function sensorName(s) {
-    var list = (JA.INSTRUMENTS && JA.INSTRUMENTS[s.site.id]) || [], i;
+    var list = (JA.INSTRUMENTS && JA.pick(s, JA.INSTRUMENTS)) || [], i;
     for (i = 0; i < list.length; i++) if (list[i].id === 'seismo') return list[i].name;
     return 'quake sensor';
   }
-  function dustColor(s) { return s.site.id === 'mars' ? 0xd9a070 : 0xb8b9c4; }
+  function dustColor(s) { return s.site.colors.dust; }
 
   // ---------- the crater ----------
   function buildMesh(s) {
-    var st = s.sky.site, g = new T.Group(), mars = s.site.id === 'mars', i, k;
+    var st = s.sky.site, g = new T.Group(), i, k;
     g.position.set(st.x, st.y, st.z);
     // a scorch mark that follows the shape of the ground and fades out at its edge
     var rings = 5, segs = 28, R = 4.6, pos = [], col = [], idx = [];
@@ -96,11 +105,11 @@
     var scorch = new T.Mesh(sg, new T.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: T.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3 }));
     scorch.renderOrder = 1; g.add(scorch);
     // the raised rim
-    var rimMat = W.mat(mars ? 0x6a3420 : 0x4a4b56);
+    var rimMat = W.mat(JA.pick(s, { moon: 0x4a4b56, mars: 0x6a3420, sahrun: 0x8a6a40 }));
     var rim = new T.Mesh(new T.TorusGeometry(2.25, 0.6, 5, 15), rimMat);
     rim.rotation.x = Math.PI / 2; rim.scale.set(1, 1, 0.42); rim.position.y = 0.05; rim.castShadow = true; rim.receiveShadow = true; g.add(rim);
     // the dark bowl inside it
-    var bowl = new T.Mesh(new T.CircleGeometry(2.05, 15), W.mat(mars ? 0x24120c : 0x15161b));
+    var bowl = new T.Mesh(new T.CircleGeometry(2.05, 15), W.mat(JA.pick(s, { moon: 0x15161b, mars: 0x24120c, sahrun: 0x3a2a18 })));
     bowl.rotation.x = -Math.PI / 2; bowl.position.y = 0.14; bowl.receiveShadow = true; g.add(bowl);
     // chunks thrown out by the blast
     for (i = 0; i < 9; i++) {
@@ -122,10 +131,10 @@
 
   // ---------- the fall ----------
   function startFall(s, ctx) {
-    var k = s.sky, spot = pickSpot(ctx.pos), a = Math.random() * Math.PI * 2, mars = s.site.id === 'mars';
+    var k = s.sky, spot = pickSpot(ctx.pos), a = Math.random() * Math.PI * 2, air = JA.hasAir(s);      // only air makes a fireball
     k.done[s.sol] = true;
-    k.fall = { t: 0, dur: mars && ctx.outside ? 1.6 : 0.05, spot: spot,
-      sx: spot.x + Math.cos(a) * 210, sy: spot.y + 190, sz: spot.z + Math.sin(a) * 210, streak: mars && ctx.outside };
+    k.fall = { t: 0, dur: air && ctx.outside ? 1.6 : 0.05, spot: spot,
+      sx: spot.x + Math.cos(a) * 210, sy: spot.y + 190, sz: spot.z + Math.sin(a) * 210, streak: air && ctx.outside };
   }
   function stepFall(dt, s, ctx) {
     var k = s.sky, f = k.fall;
@@ -143,7 +152,7 @@
     if (u >= 1) impact(s, ctx);
   }
   function impact(s, ctx) {
-    var k = s.sky, sp = k.fall.spot, mars = s.site.id === 'mars', me = ctx.pos, dist = Math.hypot(sp.x - me.x, sp.z - me.z);
+    var k = s.sky, sp = k.fall.spot, air = JA.hasAir(s), me = ctx.pos, dist = Math.hypot(sp.x - me.x, sp.z - me.z);
     k.fall = null;
     k.site = { x: sp.x, y: sp.y, z: sp.z, sol: s.sol, exact: !!s.inst.seismo, age: 0 };
     buildMesh(s);
@@ -152,11 +161,11 @@
     W.burst(sp.x, sp.y + 0.4, sp.z, 80, 12, dustColor(s), { life: 3.4, size: 1.7, grow: 3, alpha: 0.5, up: 1, lift: 5, grav: W.gravity * 0.4 });
     W.cam.shake = Math.max(W.cam.shake, clamp(1.1 - dist / 170, 0.18, 0.85));
     if (JA.fx && JA.fx.pulse && ctx.outside) { JA.fx.pulse('flash', clamp(0.9 - dist / 260, 0.15, 0.7)); JA.fx.pulse('shock', clamp(1.1 - dist / 200, 0.2, 0.9)); }
-    if (mars) k.boom = Math.max(0.05, dist / 240);                 // the boom arrives late: sound is slow in thin air
+    if (air) k.boom = Math.max(0.05, dist / JA.pick(s, { mars: 240, sahrun: 340 }));      // the boom arrives late: sound travels at about 240 m/s in Mars's thin air (Sahrun: about 340, as on Earth)
     var rough = Math.max(10, Math.round(dist / 10) * 10), dir = dirWord(me, sp), sensor = sensorName(s), line;
     if (!ctx.outside) line = 'Thump! The floor just shook. A meteorite has hit the ground outside, about ' + rough + ' metres to the ' + dir + '!';
-    else if (mars) line = 'Whoa, a fireball! A meteorite just hit Mars, about ' + rough + ' metres to the ' + dir + '!';
-    else line = 'Did you see that flash? A space rock just hit the Moon, about ' + rough + ' metres to the ' + dir + '. No air here, so no fireball and no sound!';
+    else if (air) line = 'Whoa, a fireball! A meteorite just hit ' + s.site.name + ', about ' + rough + ' metres to the ' + dir + '!';
+    else line = 'Did you see that flash? A space rock just hit ' + s.site.name + ', about ' + rough + ' metres to the ' + dir + '. No air here, so no fireball and no sound!';
     line += k.site.exact ? ' Your ' + sensor + ' felt it and pinpointed the crater. Follow the ☄️ marker!'
       : ' Look for the glowing crater. A ' + sensor + ' would have pinpointed it for you.';
     if (JA.audio) JA.audio.play('page');
@@ -189,7 +198,7 @@
     var pulse = (st.age * 0.55) % 1;
     mesh.ring.scale.setScalar(1 + pulse * 1.6); mesh.ring.material.opacity = 0.9 * (1 - pulse);
     mesh.rock.material.emissiveIntensity = 0.3 + 0.8 * Math.exp(-st.age / 70) + Math.sin(st.age * 3) * 0.08;      // it slowly cools
-    if (s.site.id === 'mars' && st.age < 60) {               // smoke hangs in the air on Mars; on the Moon there is no air to hold it
+    if (JA.hasAir(s) && st.age < 60) {               // smoke hangs in the air on Mars; on the Moon there is no air to hold it
       mesh.smoke -= dt;
       if (mesh.smoke <= 0) {
         mesh.smoke = 0.16;
@@ -222,7 +231,7 @@
   // Pick the meteorite up. Returns the discovery (the game shows its card).
   K.collect = function (s) {
     var k = s && s.sky, st = k && k.site; if (!st) return null;
-    var defs = FINDS[s.site.id] || FINDS.mars, d = defs[k.found % defs.length];
+    var defs = JA.pick(s, FINDS), d = defs[k.found % defs.length];
     var find = { title: d.title, text: d.text, src: d.src, icon: '☄️', sol: s.sol, kind: 'meteor', place: 'the fresh crater' };
     s.finds.push(find);
     JA.sim.didScience(s);

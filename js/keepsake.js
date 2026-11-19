@@ -194,31 +194,36 @@
     var g = ctx.createLinearGradient(0, 0, 0, CH);
     g.addColorStop(0, '#050816'); g.addColorStop(0.6, '#0b1232'); g.addColorStop(1, '#131d47');
     ctx.fillStyle = g; ctx.fillRect(0, 0, CW, CH);
-    glow(ctx, 250, 210, 560, mars ? '255, 150, 110' : '79, 216, 255', 0.1);
+    glow(ctx, 250, 210, 560, mars === 'sahrun' ? '255, 205, 130' : mars ? '255, 150, 110' : '79, 216, 255', 0.1);
     glow(ctx, 1390, 380, 600, '176, 124, 255', 0.1);
     stars(ctx, 0, 0, CW, 1060, 240, mars ? 4177 : 1969);
     horizon(ctx, mars);
   }
 
-  // The world you lived on, seen from above: grey for the Moon, rust for Mars.
+  // The world you lived on, seen from above: grey for the Moon, rust for Mars, golden sand for Sahrun.
   function horizon(ctx, mars) {
-    var R = 6000, cx = CW / 2, cy = 1006 + R, g, i, m, x, y;
-    if (mars) {   // Mars has thin, dusty air that glows at the edge. The Moon has no air, so its edge stays sharp.
+    var R = 6000, cx = CW / 2, cy = 1006 + R, g, i, m, x, y, sand = mars === 'sahrun';
+    if (sand) {   // Sahrun's thick air glows in a wide golden band
+      g = ctx.createRadialGradient(cx, cy, R, cx, cy, R + 48);
+      g.addColorStop(0, 'rgba(255, 215, 150, 0.55)'); g.addColorStop(1, 'rgba(255, 215, 150, 0)');
+      disc(ctx, cx, cy, R + 48, g);
+    } else if (mars) {   // Mars has thin, dusty air that glows at the edge. The Moon has no air, so its edge stays sharp.
       g = ctx.createRadialGradient(cx, cy, R, cx, cy, R + 30);
       g.addColorStop(0, 'rgba(255, 160, 110, 0.4)'); g.addColorStop(1, 'rgba(255, 160, 110, 0)');
       disc(ctx, cx, cy, R + 30, g);
     }
     g = ctx.createRadialGradient(cx, cy, R - 130, cx, cy, R);
-    if (mars) { g.addColorStop(0, '#12080b'); g.addColorStop(0.7, '#3a1811'); g.addColorStop(0.9, '#8f4326'); g.addColorStop(0.97, '#dd8452'); g.addColorStop(1, '#ffc59a'); }
+    if (sand) { g.addColorStop(0, '#140c05'); g.addColorStop(0.7, '#3d2810'); g.addColorStop(0.9, '#9c6a2c'); g.addColorStop(0.97, '#e3b062'); g.addColorStop(1, '#ffe2a8'); }
+    else if (mars) { g.addColorStop(0, '#12080b'); g.addColorStop(0.7, '#3a1811'); g.addColorStop(0.9, '#8f4326'); g.addColorStop(0.97, '#dd8452'); g.addColorStop(1, '#ffc59a'); }
     else { g.addColorStop(0, '#0a0d19'); g.addColorStop(0.7, '#1c2130'); g.addColorStop(0.9, '#4c5364'); g.addColorStop(0.97, '#a3aaba'); g.addColorStop(1, '#e6e9f1'); }
     disc(ctx, cx, cy, R, g);
     if (!ctx.ellipse) return;
     for (i = 0; i < MARKS.length; i++) {
       m = MARKS[i]; x = m[0]; y = cy - Math.sqrt(R * R - (x - cx) * (x - cx)) + m[1];
       ctx.beginPath(); ctx.ellipse(x, y, m[2], m[2] * 0.2, 0, 0, TAU);
-      ctx.fillStyle = mars ? 'rgba(40, 10, 4, 0.4)' : 'rgba(0, 0, 0, 0.32)'; ctx.fill();
+      ctx.fillStyle = sand ? 'rgba(70, 40, 12, 0.32)' : mars ? 'rgba(40, 10, 4, 0.4)' : 'rgba(0, 0, 0, 0.32)'; ctx.fill();
       ctx.beginPath(); ctx.ellipse(x, y, m[2], m[2] * 0.2, 0, 0.15 * Math.PI, 0.85 * Math.PI);
-      ctx.lineWidth = 1.5; ctx.strokeStyle = mars ? 'rgba(255, 200, 160, 0.25)' : 'rgba(255, 255, 255, 0.25)'; ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = sand ? 'rgba(255, 230, 180, 0.25)' : mars ? 'rgba(255, 200, 160, 0.25)' : 'rgba(255, 255, 255, 0.25)'; ctx.stroke();
     }
   }
 
@@ -340,7 +345,7 @@
   }
   function stormPanel(ctx, info, storms, y) {
     var x = 110, w = CW - 220, cx = CW / 2, n = storms.length, from = tidy(info.from, 24), to = tidy(info.to, 24);
-    var parts = [{ t: '☀️', f: EMOJI }, { t: ' Real solar storms you lived through', w: 700 }];
+    var star = tidy(info.star, 24), parts = [{ t: star ? '⭐' : '☀️', f: EMOJI }, { t: star ? ' Storms you lived through (made up)' : ' Real solar storms you lived through', w: 700 }];
     var cols = stormCols(n), gap = 10, cw = n ? Math.min(280, (w - 56 - gap * (cols - 1)) / cols) : 0, ch = 36, size = 20, brief, big, i, row, inRow, px, py, st, lv;
     function day(s, cutMonth) { var d = tidy(s.date, 24); return cutMonth ? d.replace(MONTH_RE, function (m) { return m.slice(0, 3); }) : d; }
     function flare(s) { var c = tidy(s.cls, 8); return c ? '  ' + c : ''; }
@@ -357,10 +362,11 @@
     roundRect(ctx, x, y, w, stormHeight(n), 22);
     ctx.fillStyle = 'rgba(8, 12, 30, 0.84)'; ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(79, 216, 255, 0.45)'; ctx.stroke();
-    if (from && to) parts.push({ t: '     ' + (from === to ? 'the real Sun on ' + from : 'the real Sun, ' + from + ' to ' + to), c: MUTED, w: 400, k: 0.8 });
+    if (star) parts.push({ t: '     ' + star + ', a made-up star', c: MUTED, w: 400, k: 0.8 });
+    else if (from && to) parts.push({ t: '     ' + (from === to ? 'the real Sun on ' + from : 'the real Sun, ' + from + ' to ' + to), c: MUTED, w: 400, k: 0.8 });
     runs(ctx, parts, cx, y + 40, 26, w - 56, 14);
     if (!n) {
-      put(ctx, 'The real Sun stayed calm for your mission. Astronauts get lucky sometimes too!', cx, y + 78, { weight: 500, size: 24, min: 14, maxW: w - 56 });
+      put(ctx, (star ? star + ' stayed calm' : 'The real Sun stayed calm') + ' for your mission. Astronauts get lucky sometimes too!', cx, y + 78, { weight: 500, size: 24, min: 14, maxW: w - 56 });
       return;
     }
     // every chip gets the same text size; month names are shortened (Sep) only if the long ones do not fit
@@ -382,7 +388,8 @@
     var today = tidy(info.today, 40) || todayText(), o = { weight: 500, size: 18, min: 12, maxW: 1380, color: 'rgba(245, 247, 255, 0.92)' };
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.75)'; ctx.shadowBlur = 6;
-    put(ctx, 'Solar storm dates: NASA DONKI space-weather database' + src + '. SEP = solar particle event, CME = coronal mass ejection shock.', CW / 2, 1052, o);
+    put(ctx, info.star ? 'Storms: made up by the game for ' + tidy(info.star, 24) + ', a made-up star, with the same physics as our Sun. SEP = solar particle event, CME = coronal mass ejection shock.'
+      : 'Solar storm dates: NASA DONKI space-weather database' + src + '. SEP = solar particle event, CME = coronal mass ejection shock.', CW / 2, 1052, o);
     put(ctx, 'Astro Outpost is a student project and is not affiliated with or endorsed by NASA.   ·   ' + today, CW / 2, 1076, o);
     ctx.restore();
   }
@@ -397,7 +404,7 @@
       for (i = from; i >= to; i--) { l = rankLayout(i / 50); if (l.h <= room - gaps * air) return l; }
       return null;
     }
-    backdrop(ctx, site.id === 'mars');
+    backdrop(ctx, JA.pick(site.id, { moon: false, mars: true, sahrun: 'sahrun' }));      // true: a warm horizon of glowing, dusty air; 'sahrun': golden sand
     frame(ctx);
     header(ctx);
     // share out the room that is left: roomy gaps if the seal can stay big, tighter gaps on a full page

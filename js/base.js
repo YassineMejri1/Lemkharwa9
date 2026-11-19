@@ -108,7 +108,7 @@
     // a little telescope beside the airlock (only with the Blender models)
     if (scope && mdl) { scope.position.set(-4.8, 0, 9.2); scope.rotation.y = -0.6; g.add(scope); collide(g, -4.8, 9.2, 0.6); }
     // sixteen soil bags that pile up around the dome
-    var bags = [], bm = mat(site === 'mars' ? 0xa9582f : 0x7b7c87), bm2 = mat(site === 'mars' ? 0x8e4524 : 0x666772);
+    var bags = [], bm = mat(JA.siteOf(site).colors.soil), bm2 = mat(JA.siteOf(site).colors.soil2);
     var rows = [[0.8, 6.05, [135, 165, 195, 225, 255, 285, 315]], [1.95, 5.75, [120, 160, 200, 240, 280, 320]], [3.1, 5.2, [35, 150, 265]]];
     rows.forEach(function (row) {
       row[2].forEach(function (deg) {
@@ -209,7 +209,7 @@
     var rim = hopper(g, 'air', 0, 3.4, 0, 1.25, 0x4fd8ff);
     var ice = [];
     for (var i = 0; i < R.hopperMax; i++) {
-      var c = add(g, new T.OctahedronGeometry(0.34, 0), new T.MeshStandardMaterial({ color: 0xdff7ff, emissive: 0x8fe6ff, emissiveIntensity: 0.8, flatShading: true }), Math.cos(i * 1.7) * 0.45, 3.5 + (i % 2) * 0.2, Math.sin(i * 1.7) * 0.45, true);
+      var c = add(g, JA.iceWell(site) ? new T.CylinderGeometry(0.2, 0.2, 0.46, 10) : new T.OctahedronGeometry(0.34, 0), JA.iceWell(site) ? new T.MeshStandardMaterial({ color: 0x8fa6c4, emissive: 0x2a6aa0, emissiveIntensity: 0.6 }) : new T.MeshStandardMaterial({ color: 0xdff7ff, emissive: 0x8fe6ff, emissiveIntensity: 0.8, flatShading: true }), Math.cos(i * 1.7) * 0.45, 3.5 + (i % 2) * 0.2, Math.sin(i * 1.7) * 0.45, true);
       c.visible = false; ice.push(c);
     }
     // the oxygen tank: the glowing column inside IS the crew's air supply
@@ -290,7 +290,7 @@
 
   // ---------- soil bagger ----------
   function bagger() {
-    var g = group(L.bag), dirt = mat(site === 'mars' ? 0xa9582f : 0x7b7c87);
+    var g = group(L.bag), dirt = mat(JA.siteOf(site).colors.soil);
     add(g, new T.ConeGeometry(3.2, 2.6, 9), dirt, 0.4, 1.3, -3.6);
     add(g, box(2.8, 2.2, 2.4), soft(0xffc533), 0, 1.4, -0.4);
     add(g, box(3.2, 0.3, 2.8), soft(0x3a4058), 0, 0.15, -0.4);
@@ -425,7 +425,9 @@
 
   // ---------- places to do science ----------
   function scienceSites() {
-    var slabColors = site === 'moon' ? [0xe6e3da, 0xc98a4a, 0x6b6c78, 0xbfd6ea] : [0xdba878, 0xe6c49c, 0x4a332b, 0xdff1f8];
+    var slabColors = JA.pick(site, { moon: [0xe6e3da, 0xc98a4a, 0x6b6c78, 0xbfd6ea], mars: [0xdba878, 0xe6c49c, 0x4a332b, 0xdff1f8], sahrun: [0x8a6a4a, 0xe8dcc0, 0xf2eee4, 0xdff1f8] });
+    // what lies around each rock site, by site number: real finds of each place (see JA.GEO)
+    var extras = JA.pick(site, { moon: { 1: 'beads' }, mars: { 1: 'berries', 2: 'veins' }, sahrun: { 1: 'beads', 2: 'veins' } });
     P.geo = [];
     L.geo.forEach(function (p, i) {
       var g = group(p);
@@ -439,18 +441,22 @@
         add(flag, cyl(0.04, 0.04, 2.2, 5), soft(0xf2f3f7), 0, 1.1, 0); add(flag, box(0.8, 0.5, 0.04), soft(0x46d97b), 0.42, 1.9, 0);
       }
       var k;
-      if (site === 'mars' && i === 1) {            // "blueberries"
+      if (extras[i] === 'berries') {            // "blueberries"
         var bb = new T.InstancedMesh(ball(0.07, 6, 5), new T.MeshStandardMaterial({ color: 0x4a5a78, roughness: 0.5 }), 220), d = new T.Object3D();
         for (k = 0; k < 220; k++) { var a = k * 2.4, r = 0.6 + Math.sqrt(k) * 0.55; d.position.set(Math.cos(a) * r, Tn.height(p[0] + Math.cos(a) * r, p[1] + Math.sin(a) * r) - g.position.y + 0.06, Math.sin(a) * r); d.updateMatrix(); bb.setMatrixAt(k, d.matrix); }
         bb.frustumCulled = false; g.add(bb);
       }
-      if (site === 'moon' && i === 1) {            // orange glass beads
+      if (extras[i] === 'beads') {            // orange glass beads
         var gb = new T.InstancedMesh(ball(0.06, 6, 5), glow(0xff9a3a, 0.7), 200), d2 = new T.Object3D();
         for (k = 0; k < 200; k++) { var a2 = k * 2.4, r2 = 0.5 + Math.sqrt(k) * 0.5; d2.position.set(Math.cos(a2) * r2, Tn.height(p[0] + Math.cos(a2) * r2, p[1] + Math.sin(a2) * r2) - g.position.y + 0.05, Math.sin(a2) * r2); d2.updateMatrix(); gb.setMatrixAt(k, d2.matrix); }
         gb.frustumCulled = false; g.add(gb);
       }
-      if (site === 'mars' && i === 2) [[-0.5, 0.2], [0.3, -0.3], [0.1, 0.5]].forEach(function (s, n) { var st = add(g, box(2.2, 0.06, 0.14), glow(0xffffff, 0.35), s[0], 0.68, s[1], true); st.rotation.y = 0.5 + n * 0.5; });
-      if (i === 3) for (k = 0; k < 5; k++) { var ic = add(g, new T.OctahedronGeometry(0.5 + (k % 3) * 0.2, 0), new T.MeshStandardMaterial({ color: 0xdff7ff, emissive: 0x6fcff5, emissiveIntensity: 0.5, flatShading: true }), Math.cos(k * 1.3) * 2.6, 0.2, Math.sin(k * 1.3) * 2.6); ic.rotation.set(k, k * 2, 0); }
+      if (extras[i] === 'veins') [[-0.5, 0.2], [0.3, -0.3], [0.1, 0.5]].forEach(function (s, n) { var st = add(g, box(2.2, 0.06, 0.14), glow(0xffffff, 0.35), s[0], 0.68, s[1], true); st.rotation.y = 0.5 + n * 0.5; });
+      if (i === 3 && JA.iceWell(site)) for (k = 0; k < 5; k++) {      // a well planet: damp, dark stones from deep down, not ice
+        var st2 = add(g, new T.DodecahedronGeometry(0.42 + (k % 3) * 0.16, 0), new T.MeshStandardMaterial({ color: 0x4e3a2a, roughness: 0.35, metalness: 0.05, flatShading: true }), Math.cos(k * 1.3) * 2.6, 0.18, Math.sin(k * 1.3) * 2.6);
+        st2.rotation.set(k, k * 2, 0);
+      }
+      else if (i === 3) for (k = 0; k < 5; k++) { var ic = add(g, new T.OctahedronGeometry(0.5 + (k % 3) * 0.2, 0), new T.MeshStandardMaterial({ color: 0xdff7ff, emissive: 0x6fcff5, emissiveIntensity: 0.5, flatShading: true }), Math.cos(k * 1.3) * 2.6, 0.2, Math.sin(k * 1.3) * 2.6); ic.rotation.set(k, k * 2, 0); }
       P.geo.push({ ring: ring, beam: beam, flag: flag });
       B.spots.drill.push(wp(g, 0, 0.7, 0));
       collide(g, 0, 0, 0.9);
@@ -458,11 +464,20 @@
 
     // ice deposits
     P.ice = [];
+    var well = JA.iceWell(site);      // a well planet (Sahrun): a stone well head over dark water, instead of ice
     Tn.iceNodes.forEach(function (n, i) {
-      var g = group([n.x, n.z]), im = new T.MeshStandardMaterial({ color: 0xdff7ff, emissive: 0x58c8ff, emissiveIntensity: 0.85, roughness: 0.15, flatShading: true, transparent: true, opacity: 0.92 });
-      add(g, new T.IcosahedronGeometry(1.1, 0), im, 0, 0.6, 0).scale.set(1, 0.9, 1);
-      add(g, new T.IcosahedronGeometry(0.7, 0), im, 0.9, 0.4, 0.4).rotation.y = i;
-      add(g, new T.IcosahedronGeometry(0.6, 0), im, -0.7, 0.35, 0.6).rotation.y = i * 2;
+      var g = group([n.x, n.z]), im;
+      if (well) {
+        im = new T.MeshStandardMaterial({ color: 0x163246, emissive: 0x1d6890, emissiveIntensity: 0.75, roughness: 0.05, metalness: 0.3 });
+        add(g, new T.CylinderGeometry(1.2, 1.3, 0.7, 16, 1, true), new T.MeshStandardMaterial({ color: 0x9a7a55, roughness: 0.95, side: T.DoubleSide }), 0, 0.35, 0);
+        add(g, new T.TorusGeometry(1.25, 0.12, 6, 18), soft(0x8a6a48), 0, 0.7, 0).rotation.x = Math.PI / 2;
+        add(g, new T.CircleGeometry(1.15, 16), im, 0, 0.42, 0, true).rotation.x = -Math.PI / 2;
+      } else {
+        im = new T.MeshStandardMaterial({ color: 0xdff7ff, emissive: 0x58c8ff, emissiveIntensity: 0.85, roughness: 0.15, flatShading: true, transparent: true, opacity: 0.92 });
+        add(g, new T.IcosahedronGeometry(1.1, 0), im, 0, 0.6, 0).scale.set(1, 0.9, 1);
+        add(g, new T.IcosahedronGeometry(0.7, 0), im, 0.9, 0.4, 0.4).rotation.y = i;
+        add(g, new T.IcosahedronGeometry(0.6, 0), im, -0.7, 0.35, 0.6).rotation.y = i * 2;
+      }
       // the ice drill: a tripod with a motor box, a warm auger and a lamp. The game starts it; it works by itself (B.rigs).
       var rg = new T.Group(), legM = soft(0xdfe2ea), k;
       for (k = 0; k < 3; k++) {
@@ -500,7 +515,7 @@
         add(m, box(0.8, 0.6, 0.6), soft(0xffc533), 0, 2.0, 0);
         add(m, cyl(0.16, 0.16, 0.5, 8), dark, 0, 2.5, 0);
         spin = add(m, ball(0.12, 8, 8), glow(0xff6fb1, 2), 0.3, 2.35, 0.32, true);
-      } else if (site === 'moon') {                 // laser mirror
+      } else if (JA.pick(site, { moon: 'mirror', mars: 'mast', sahrun: 'mast' }) === 'mirror') {                 // laser mirror
         var pnl = add(m, box(1.5, 1.5, 0.12), new T.MeshStandardMaterial({ color: 0xcfe6ff, metalness: 0.95, roughness: 0.08, emissive: 0x4a7ac0, emissiveIntensity: 0.3 }), 0, 0.95, 0); pnl.rotation.x = -0.75;
         add(m, box(1.7, 0.1, 1.2), dark, 0, 0.1, 0); add(m, cyl(0.05, 0.05, 0.9, 5), steel, 0, 0.5, -0.3);
       } else {                                      // weather mast
@@ -536,11 +551,44 @@
     // every boulder keeps its own collider (b.col), so one that is broken up can stop blocking the way; h is how tall it stands
     Tn.boulders.forEach(function (b) { b.col = { x: b.x, z: b.z, r: b.r * 0.92, h: b.seat ? 0.9 : b.r * (0.5 + b.sy) }; B.colliders.push(b.col); });
     hab(); solar(); airMaker(); greenhouse(); bagger(); lab(); comms(); rocket(); scienceSites();
+    if (JA.siteOf(site).dew) dewCatcher();
     B.repair.rack = B.spots.rack.clone();
     var rackP = new T.Vector3(L.rack[0], 0, L.rack[1]);
     ['air', 'food', 'bag', 'lab', 'comms', 'scrub'].forEach(function (id) { cable(rackP, B.spots.sockets[id], id); });
     B.launch = null;
   };
+
+  // ---------- the dew catcher (a planet with one: Sahrun) ----------
+  // A fine net between two posts, beside the Greenhouse water tank. On a clear night the net gets cold, the water
+  // vapour in the air touching it turns into drops (dew), and the drops run down the gutter into a can (sim.js
+  // startSol). Real: fog nets like this catch drinking water in Chile's Atacama Desert.
+  var DEW_AT = [9, 19];
+  function dewCatcher() {
+    var g = group(DEW_AT), steel = mat(0xb9bcc6, { flatShading: false }), dark = soft(0x3a4058);
+    [-1.9, 1.9].forEach(function (x) {
+      add(g, cyl(0.07, 0.09, 3.4, 8), steel, x, 1.7, 0);
+      add(g, cyl(0.22, 0.28, 0.25, 8), dark, x, 0.12, 0);
+      collide(g, x, 0, 0.3);
+    });
+    add(g, box(4, 0.08, 0.08), steel, 0, 3.35, 0);
+    var tex = W.canvasTex(128, function (ctx, n) {
+      ctx.clearRect(0, 0, n, n); ctx.strokeStyle = 'rgba(235, 242, 255, 0.95)'; ctx.lineWidth = 1.6;
+      for (var k = 0; k <= n; k += 8) { ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k, n); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, k); ctx.lineTo(n, k); ctx.stroke(); }
+    });
+    tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.repeat.set(5, 3);
+    var net = new T.MeshStandardMaterial({ map: tex, transparent: true, side: T.DoubleSide, depthWrite: false, roughness: 0.6, emissive: 0x58c8ff, emissiveIntensity: 0 });
+    add(g, new T.PlaneGeometry(3.7, 2.2), net, 0, 2.2, 0, true);
+    add(g, box(3.9, 0.12, 0.26), steel, 0, 1.04, 0);                       // the gutter under the net
+    add(g, cyl(0.05, 0.05, 0.7, 6), steel, 2.05, 0.75, 0.2).rotation.z = 0.5;    // the spout down to the can
+    add(g, box(0.9, 0.36, 0.9), dark, 2.6, 0.18, 0.4);                     // the can's stand
+    collide(g, 2.6, 0.4, 0.5);
+    var can = new T.Group(); can.position.set(2.6, 0.36, 0.4); g.add(can);
+    add(can, cyl(0.28, 0.28, 0.62, 14), soft(0xdfe7f2), 0, 0.31, 0);
+    var water = add(can, cyl(0.25, 0.25, 0.04, 14), glow(0x58c8ff, 1.2), 0, 0.6, 0, true);
+    add(can, new T.TorusGeometry(0.16, 0.03, 6, 12), steel, 0, 0.74, 0);
+    B.spots.dew = wp(g, 2.6, 0.9, 0.4);
+    P.dew = { can: can, water: water, net: net };
+  }
 
   // ---------- show what the mission rules say ----------
   var demo = { air: 60, bags: 5, filter: 80, water: 60, rack: { charge: 0.5, eff: [1, 1, 1], broken: false },
@@ -565,16 +613,24 @@
     dl.color.set(alarm ? 0xff4d6a : 0x4dff9a); dl.emissive.copy(dl.color);
     dl.emissiveIntensity = alarm ? 2 + Math.sin(t * 12) * 1.5 : 1.6;
     P.hab.beacon.material.emissiveIntensity = 1 + Math.sin(t * 3);
-    P.hab.flag.rotation.y = site === 'mars' ? Math.sin(t * 2) * 0.12 : 0;
+    P.hab.flag.rotation.y = JA.hasAir(site) ? Math.sin(t * 2) * 0.12 : 0;      // the flag only moves where there is wind
+    if (P.dew) {
+      // the can is there while it holds water; the net glints with dew in the morning
+      var full = Math.max(0, Math.min(1, (s.dew || 0) / R.dewWater));
+      P.dew.can.visible = s.dew >= 1;
+      P.dew.water.position.y = 0.08 + 0.5 * full;
+      P.dew.net.emissiveIntensity = s.dew >= 1 ? 0.15 + 0.35 * full * Math.max(0, 1 - (s.t || 0) / Math.max(1, (s.dayLength || 300) * 0.4)) : 0;
+    }
 
-    // solar panels track the Sun; dust (Mars) or a moved Sun (Moon) makes them less useful
+    // solar panels track the Sun; dust (dusty planets) or a moved Sun (the others) makes them less useful
+    var dusty = JA.siteOf(site).dusty;
     for (i = 0; i < 3; i++) {
       var eff = s.rack.eff[i], off = (1 - eff) * 2;
       q.setFromUnitVectors(UP, W.sunDir);
-      if (site === 'moon') { qy.setFromAxisAngle(UP, off * 1.1); q.premultiply(qy); }
+      if (!dusty) { qy.setFromAxisAngle(UP, off * 1.1); q.premultiply(qy); }
       P.solar.pivots[i].quaternion.slerp(q, Math.min(1, dt * 2.5));
       var pm = P.solar.mats[i];
-      if (site === 'mars') pm.color.setRGB(1, 1 - off * 0.3, 1 - off * 0.62); else pm.color.setRGB(1, 1, 1);
+      if (dusty) pm.color.setRGB(1, 1 - off * 0.3, 1 - off * 0.62); else pm.color.setRGB(1, 1, 1);
       pm.emissiveIntensity = 0.3 * eff;
     }
     P.rack.level.scale.y = Math.max(0.02, Math.min(1, s.rack.charge));

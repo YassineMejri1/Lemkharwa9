@@ -172,7 +172,7 @@ function whys(ev) { return ev.filter(function (e) { return e.type === 'why'; }).
 
   // every meter in the night report adds up: morning value + the listed parts = evening value
   var worst = 0, where = '';
-  ['moon', 'mars'].forEach(function (site) { ['cadet', 'commander', 'veteran'].forEach(function (level) { [0, 1, 2].forEach(function (opt) {
+  Object.keys(JA.SITES).forEach(function (site) { ['cadet', 'commander', 'veteran'].forEach(function (level) { [0, 1, 2].forEach(function (opt) {      // every planet
     for (var seed = 1; seed <= 6; seed++) {
       var pick = {}; Object.keys(JA.CRISES).forEach(function (id) { pick[id] = JA.CRISES[id].options[opt].id; });
       var m = H.run(site, level, seed * 104729 + opt, { gap: 8, science: true, pick: pick }).s;

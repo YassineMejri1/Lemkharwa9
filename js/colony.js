@@ -22,7 +22,21 @@
   };
   if (!T) return;
 
-  var TOWN = { moon: 'Rimlight', mars: 'New Arcadia' };
+  var TOWN = { moon: 'Rimlight', mars: 'New Arcadia', sahrun: 'Oasis Station' };
+  // packed ground for the streets, and the bare ground of the imagined city, per planet (a new one falls back on its style)
+  var ROAD = { moon: 0x3d3f4a, mars: 0x5a3a2a, sahrun: 0x8a6a42 }, REGO = { moon: 0x8a8b95, mars: 0xb5643a, sahrun: 0xc08a4c };
+  function roadCol() { return ROAD[planet] != null ? ROAD[planet] : site === 'mars' ? ROAD.mars : ROAD.moon; }
+  function far() { return JA.SITES && JA.SITES[planet] && JA.SITES[planet].comms === 'relay'; }      // Earth is years away: ships come down from orbit
+  var planet = 'mars';      // the real planet (site below is its drawing style: 'moon' or 'mars')
+  function colonyStyle(id) {
+    if (id === 'moon' || id === 'mars') return id;
+    var P = JA.SITES && JA.SITES[id];
+    return P && P.like && P.like !== id ? colonyStyle(P.like) : 'mars';
+  }
+  function townName() { return TOWN[planet] || TOWN[site] || 'New Town'; }
+  function planetName() { return JA.SITES && JA.SITES[planet] ? JA.SITES[planet].name : site === 'moon' ? 'the Moon' : 'Mars'; }
+  // a sentence that differs per planet, with Moon and Mars still told apart by the drawing style
+  function said(t) { return JA.SITES && JA.SITES[planet] && t[planet] != null ? t[planet] : t[site]; }
   var LAST = 5, PEOPLE = [0, 0, 4, 12, 30, 80];      // the last stage, and how many people live there at each stage
   var site = 'mars', grp = null, h0 = 0, CX = 40, CZ = -62, ROT = 0, cosR = 1, sinR = 0;
   var M = null, G = null, units = [], stageNow = 0, arr = null, tm = 0, men = null, fields = [], fx = null, warned = false;
@@ -147,8 +161,8 @@
       groundGlow: new T.MeshBasicMaterial({ map: glowTex, color: 0xffa040, transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false, fog: false })
     };
     m.glass.userData.noShadow = true; m.ice.userData.noShadow = true; m.groundGlow.userData.noShadow = true;
-    m.soil = site === 'mars' ? 0xa9582f : 0x7b7c87; m.soil2 = site === 'mars' ? 0x8e4524 : 0x666772;
-    m.road = site === 'mars' ? 0x5a3a2a : 0x3d3f4a;      // packed, baked soil: the streets and the ring road
+    m.soil = JA.siteOf(planet).colors.soil; m.soil2 = JA.siteOf(planet).colors.soil2;
+    m.road = roadCol();      // packed, baked soil: the streets and the ring road
     return m;
   }
 
@@ -463,7 +477,7 @@
   }
   function signTex() {
     return canvasTex(512, 192, function (ctx, w, h) {
-      var name = TOWN[site] || 'New Town', g = ctx.createLinearGradient(0, 0, 0, h);
+      var name = townName(), g = ctx.createLinearGradient(0, 0, 0, h);
       ctx.clearRect(0, 0, w, h);
       g.addColorStop(0, '#24407e'); g.addColorStop(1, '#152452');
       ctx.fillStyle = g; ctx.beginPath();
@@ -1072,7 +1086,7 @@
   function near(ctx, x, z, r) { return ctx && ctx.pos && Math.hypot(ctx.pos.x - x, ctx.pos.z - z) < r; }
   function sound(ctx, name, r) { if (JA.audio && ctx && (ctx.mode === 'play' || ctx.mode === 'inside') && near(ctx, CX, CZ, r || 140)) JA.audio.play(name); }
   function dustRing(x, z, n, speed, size) {
-    var X = wx(x, z), Z = wz(x, z), col = site === 'mars' ? 0xd9a070 : 0xb8b9c4;
+    var X = wx(x, z), Z = wz(x, z), col = JA.siteOf(planet).colors.dust;
     for (var i = 0; i < n; i++) {
       var a = Math.random() * 6.283, sp = speed * (0.5 + Math.random() * 0.7), r0 = Math.random() * 2;
       W.emit(X + Math.cos(a) * r0, h0 + 0.4, Z + Math.sin(a) * r0, { vx: Math.cos(a) * sp, vy: 0.4 + Math.random() * 1.6, vz: Math.sin(a) * sp, life: 1.6 + Math.random(), size: size, grow: 3.4, color: col, alpha: 0.4, grav: W.gravity * 0.08 });
@@ -1108,7 +1122,7 @@
       fx.beacon.material.emissiveIntensity = 1 + Math.sin(t * 8) * 0.8;
       fx.beacon.rotation.z = t;
       if (alt < 28 && dt > 0) {
-        var gx = wx(sh.g.position.x, sh.g.position.z), gz = wz(sh.g.position.x, sh.g.position.z), dc = site === 'mars' ? 0xd9a070 : 0xb8b9c4;
+        var gx = wx(sh.g.position.x, sh.g.position.z), gz = wz(sh.g.position.x, sh.g.position.z), dc = JA.siteOf(planet).colors.dust;
         for (i = W.rate((1 - alt / 28) * 7, dt); i > 0; i--) {
           var an = Math.random() * 6.283, r0 = 1.5 + Math.random() * 3, v = 9 + Math.random() * 16;
           W.emit(gx + Math.cos(an) * r0, h0 + 0.35, gz + Math.sin(an) * r0, { vx: Math.cos(an) * v, vy: 0.3 + Math.random() * 1.4, vz: Math.sin(an) * v, life: 1.3, size: 1.3, grow: 3.4, color: dc, alpha: 0.4, grav: 0 });
@@ -1151,7 +1165,8 @@
   // ---------- set-up ----------
   function buildAll(rootGroup, siteId) {
     if (vis) endVision(true);
-    site = siteId === 'moon' ? 'moon' : 'mars';
+    // the colony is drawn in a Moon style or a Mars style; another planet uses the style of the planet it is "like" (JA.SITES)
+    planet = siteId; site = colonyStyle(siteId);
     units = []; stageNow = 0; arr = null; men = null; fields = []; tram = null; signT = null; popNow = K.people(3); tm = 0;
     G = makeGeos(); M = makeMats();
     var L = (Tn.L && Tn.L.colony) || [40, -62];
@@ -1271,7 +1286,7 @@
       if (men) stepMen(dt, vis ? {} : ctx);
     } catch (e) { warn(e); }
   };
-  K.town = function () { return TOWN[site]; };
+  K.town = function () { return townName(); };
   K.busy = function () { return !!arr; };
   // where to look: the ship while one is landing, otherwise the middle of the colony
   K.focus = function (out) {
@@ -1280,23 +1295,25 @@
     return out.set(CX, h0 + 4, CZ);
   };
   K.info = function (n) {
-    var moon = site === 'moon', name = TOWN[site];
-    if (n === 1) return { icon: '📦', title: 'A supply ship from Earth!',
-      text: 'You kept the outpost running, so Earth sent a cargo lander. It came down on the flat plain north-east of the habitat with crates of food, tools and spare parts, a garage that holds air and a new rover. ' +
-        (moon ? 'Real Moon plans work like this: robot landers bring supplies first, so everything is ready when more people arrive.'
-          : 'The trip from Earth takes about seven months, so real Mars plans send supplies ahead, long before people need them.') };
+    var moon = site === 'moon', name = townName();
+    if (n === 1) return { icon: '📦', title: far() ? 'A supply ship from orbit!' : 'A supply ship from Earth!',
+      text: 'You kept the outpost running, so ' + (far() ? 'the relay ship sent down a cargo lander' : 'Earth sent a cargo lander') + '. It came down on the flat plain north-east of the habitat with crates of food, tools and spare parts, a garage that holds air and a new rover. ' +
+        said({ moon: 'Real Moon plans work like this: robot landers bring supplies first, so everything is ready when more people arrive.',
+          mars: 'The trip from Earth takes about seven months, so real Mars plans send supplies ahead, long before people need them.',
+          sahrun: 'Sahrun is made up, and so is the ship. But real plans for faraway outposts work this way: supplies are sent ahead, long before people need them.' }) };
     if (n === 2) return { icon: '🧑‍🚀', title: 'The first settlers are here!',
       text: 'Four new crew members moved in next door. Their home inflates like a balloon. A real inflatable room called BEAM was added to the International Space Station in 2016. ' +
         'Their greenhouse glows pink because plants grow well under red and blue light, just like the Veggie garden on the Space Station.' };
     if (n === 3) return { icon: '🏘️', title: 'Welcome to ' + name + '!',
-      text: 'Twelve people now live in ' + name + ', the first little town on ' + (moon ? 'the Moon' : 'Mars') + '! ' +
-        (moon ? 'Its solar panels stand up tall, because near the south pole the Sun always stays low in the sky. '
-          : 'Mars gets less than half the sunlight that Earth does, so the town needs a big solar farm. ') +
+      text: 'Twelve people now live in ' + name + ', the first little town on ' + planetName() + '! ' +
+        said({ moon: 'Its solar panels stand up tall, because near the south pole the Sun always stays low in the sky. ',
+          mars: 'Mars gets less than half the sunlight that Earth does, so the town needs a big solar farm. ',
+          sahrun: 'The desert Sun is strong, but blowing sand covers every panel, so the town sweeps its solar farm every morning. ' }) +
         'A hard landing pad stops rocket blasts from spraying dust and stones at the houses.' };
     if (n === 4) return { icon: '🏫', title: name + ' is growing!',
       text: howMany(4) + ' people live in ' + name + ' now. A big ferry brought whole families, so the town built more homes, a school, a farm of greenhouse tunnels and tall tanks of water and oxygen. ' +
         'This town is imagined, but the idea is real: on the Space Station, about 98 of every 100 drops of water are cleaned and used again.' };
-    if (n === 5) return { icon: '🌆', title: 'The first city on ' + (moon ? 'the Moon' : 'Mars') + '!',
+    if (n === 5) return { icon: '🌆', title: 'The first city on ' + planetName() + '!',
       text: howMany(5) + ' people call ' + name + ' home now. A little tram circles the ring road, a spaceport welcomes big ships, and trees grow around a pond under a clear dome. ' +
         'It is an imagined future built on real ideas: NASA\'s Ice Home design' + (moon ? ', first drawn for Mars,' : ' for Mars') + ' has walls of water ice that let sunlight in and keep space radiation out.' };
     return null;
@@ -1335,7 +1352,7 @@
   function vgroup(era, g, d, puff) { g.visible = false; g.scale.setScalar(0.001); vis.root.add(g); vis.groups.push({ era: era, g: g, d: d || 0, puff: puff || 0, done: false }); return g; }
   function bakeV(kit, parent) { kit.bake(parent).forEach(function (m) { track(m.geometry); }); }
   function puffAt(x, z, n, size) {
-    var col = site === 'mars' ? 0xd9a070 : 0xb8b9c4, y = Tn.height(x, z) + 0.5;
+    var col = JA.siteOf(planet).colors.dust, y = Tn.height(x, z) + 0.5;
     for (var i = 0; i < n; i++) {
       var a = Math.random() * 6.283, sp = 3 + Math.random() * 5;
       W.emit(x + Math.cos(a) * size * 0.8, y, z + Math.sin(a) * size * 0.8, { vx: Math.cos(a) * sp, vy: 0.6 + Math.random() * 1.5, vz: Math.sin(a) * sp, life: 2 + Math.random(), size: size * 0.35 + 0.8, grow: 3, color: col, alpha: 0.35, grav: 0 });
@@ -1381,12 +1398,12 @@
     ], true));
     VG.lights = track(merge([{ g: G.ball, m: mx(-0.65, 1.2, 2.55, 0, 0, 0, 0.2) }, { g: G.ball, m: mx(0.65, 1.2, 2.55, 0, 0, 0, 0.2) }], false));
     VM = {
-      regolith: track(new T.MeshStandardMaterial({ color: moon ? 0x8a8b95 : 0xb5643a, roughness: 1, metalness: 0, flatShading: true })),
+      regolith: track(new T.MeshStandardMaterial({ color: REGO[planet] != null ? REGO[planet] : moon ? REGO.moon : REGO.mars, roughness: 1, metalness: 0, flatShading: true })),
       glass: track(new T.MeshStandardMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.27, roughness: 0.05, metalness: 0.2, emissive: 0x7fc4ff, emissiveIntensity: 0.2, depthWrite: false, side: T.DoubleSide })),
       park: track(W.soft(0x5fbf5a)), tree: track(W.mat(0x2f9a4a)), pad: track(W.soft(0x4a4f63)),
       lake: track(glowMat(0x3aa0ff, 0.55)),
       gh: track(new T.MeshStandardMaterial({ color: 0xffc8ee, transparent: true, opacity: 0.5, roughness: 0.1, emissive: 0xff4fc8, emissiveIntensity: 0.85, depthWrite: false, side: T.DoubleSide })),
-      road: track(W.soft(moon ? 0x3d3f4a : 0x5a3a2a, { roughness: 0.95 })), roadGlow: track(glowMat(0x7fe8ff, 1.7)),
+      road: track(W.soft(roadCol(), { roughness: 0.95 })), roadGlow: track(glowMat(0x7fe8ff, 1.7)),
       tower: track(new T.MeshStandardMaterial({ map: towerTex(false), emissiveMap: towerTex(true), emissive: 0xffd98a, emissiveIntensity: 1.3, roughness: 0.5 }))
     };
   }
@@ -1757,7 +1774,7 @@
       sh.f.scale.set(0.95, 4.8 * fl, 0.95); sh.f.position.y = 0.6 - 2.4 * fl;
       sh.core.scale.set(0.5, 2.6 * fl, 0.5); sh.core.position.y = 0.6 - 1.3 * fl;
       if (alt < 30 && dt > 0) {
-        var col = site === 'mars' ? 0xd9a070 : 0xb8b9c4;
+        var col = JA.siteOf(planet).colors.dust;
         for (var i = W.rate((1 - alt / 30) * 5, dt); i > 0; i--) {
           var a = Math.random() * 6.283, sp = 10 + Math.random() * 16;
           W.emit(sh.x + Math.cos(a) * 3, sh.y + 0.6, sh.z + Math.sin(a) * 3, { vx: Math.cos(a) * sp, vy: 0.4 + Math.random() * 1.5, vz: Math.sin(a) * sp, life: 1.6, size: 2, grow: 3.5, color: col, alpha: 0.38, grav: 0 });
@@ -1801,20 +1818,23 @@
 
   // ---------- the captions ----------
   function words(s) {
-    var moon = site === 'moon', name = TOWN[site], dw = (s && s.site && s.site.dayWord ? s.site.dayWord : moon ? 'Day' : 'Sol').toLowerCase() + 's';
+    var moon = site === 'moon', name = townName(), dw = (s && s.site && s.site.dayWord ? s.site.dayWord : moon ? 'Day' : 'Sol').toLowerCase() + 's';
     var days = s && s.totalSols ? s.totalSols : 0;
     return [
       { tag: 'Imagine…', era: 'What could your outpost become?',
-        text: (days ? 'You kept your outpost on ' + (moon ? 'the Moon' : 'Mars') + ' going for ' + days + ' ' + dw + '. ' : '') + 'Now picture what might grow here one day.' },
+        text: (days ? 'You kept your outpost on ' + planetName() + ' going for ' + days + ' ' + dw + '. ' : '') + 'Now picture what might grow here one day.' },
       { tag: 'Imagined future', era: '10 years later',
         text: moon ? 'Machines dig ice in the dark crater and turn it into water, air and rocket fuel. Small nuclear power units, like the Kilopower reactor NASA tested in 2018, keep the lights on when the Sun is hidden.'
-          : 'In 2021, MOXIE, an experiment on NASA\'s Perseverance rover, made oxygen from the thin Mars air. Here, much bigger machines make air and rocket fuel, and small nuclear power units keep going through dust storms.' },
+          : said({ mars: 'In 2021, MOXIE, an experiment on NASA\'s Perseverance rover, made oxygen from the thin Mars air. Here, much bigger machines make air and rocket fuel, and small nuclear power units keep going through dust storms.',
+            sahrun: 'Fog nets and dew traps, like the real ones in Chile\'s Atacama Desert, catch water from the night air. Every drop the town uses is cleaned and used again.' }) },
       { tag: 'Imagined future', era: '30 years later',
         text: moon ? 'NASA\'s Artemis plans start with a base camp near the Moon\'s south pole. Here it has grown into a town, with homes buried under soil to block radiation and a busy spaceport.'
-          : 'Ships from Earth arrive about every 26 months, when the two planets line up for the shortest trip. The town now has glass greenhouses, workshops and a busy spaceport.' },
+          : said({ mars: 'Ships from Earth arrive about every 26 months, when the two planets line up for the shortest trip. The town now has glass greenhouses, workshops and a busy spaceport.',
+            sahrun: 'The town has grown around the Frost Well, with green gardens under shade domes and walls that turn back the sandstorms.' }) },
       { tag: 'Imagined future', era: '100 years later',
         text: moon ? 'A city on the Moon! Families live under huge shielded domes, and Earth hangs above the hills like a blue marble.'
-          : 'A city on Mars! Under huge domes of thick, shielding glass, people grow forests and food. Children born here are real Martians.' },
+          : said({ mars: 'A city on Mars! Under huge domes of thick, shielding glass, people grow forests and food. Children born here are real Martians.',
+            sahrun: 'A city in the desert! It is only imagined, on a made-up world. But people on Earth already build green cities in real deserts, with water they save and use again and again.' }) },
       { tag: 'Imagined future', era: name,
         text: 'Nobody knows exactly what will be built. But every big city starts small, with a few brave explorers. Just like you.' }
     ];

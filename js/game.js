@@ -49,7 +49,8 @@
   var EARTH_LINES = { 'storm-spotted': 1, 'dish-answer': 1, 'forecast-quiet': 1, 'forecast-small': 1, 'forecast-medium': 1, 'forecast-big': 1, 'bag-storm-day': 1, 'welcome-mars': 1 };
   function radioFrom(vid, from) {
     if (from) return from;
-    if (!G.s || G.s.site.id !== 'mars') return 'earth';
+    if (!G.s || G.s.site.comms === 'near') return 'earth';      // close to Earth, Mission Control talks live
+    if (G.s.site.comms === 'relay') return 'relay';             // Mission Control rides the relay ship in orbit, seconds away
     return EARTH_LINES[vid] ? 'earth' : 'crew';
   }
   function bubble(text, vid, topic, from) { G.topic = holoHas(topic) ? topic : ''; G.topicAt = G.clock; U.say(text, vid, !!G.topic, radioFrom(vid, from)); }
@@ -97,6 +98,8 @@
     if (id === 'electrolysis') d.airPerIce = s ? sim.airPerIce(s) : R.airPerIce;      // the hologram can also open from the title menu
     if (id === 'shield') d.slots = R.shieldSlots;
     if (id === 'shade') { d.free = R.bagsFreeShade; d.bags = R.bagsFreeShade + 1; d.loss = R.bagShade; }
+    if (id === 'dew') d.water = R.dewWater;
+    if (id === 'swave' && JA.ray) { d.vp = JA.ray.VP; d.vs = JA.ray.VS; }
     if (!s) return d;
     if (id === 'scrubber') d.filter = Math.round(s.filter);
     else if (id === 'shield') { d.bags = s.bags; d.shield = sim.shield(s); }
@@ -146,7 +149,7 @@
   function holoMenu() {
     if (!JA.holo) return;
     var S = JA.holo.SCENES || {}, site = G.s ? G.s.site.id : G.opts.site;
-    var ids = Object.keys(S).filter(function (id) { return id !== 'longdark' || site === 'moon'; });
+    var ids = Object.keys(S).filter(function (id) { return id !== 'longdark' || !!JA.siteOf(site).weatherKinds.dark; });
     var root = G.openInfo('<h2>💡 Holo-tablet</h2><p class="sub">The tablet on your wrist can project a moving picture of how each thing works. Pick one. Tip: stand next to a machine and ' + (touch ? 'tap the round radio badge' : 'press T') + ', and it shows that machine.</p>' +
       '<div class="holo-grid">' + ids.map(function (id) {
         var inf = JA.holo.info ? JA.holo.info(id, { site: site }) : S[id], t = inf && typeof inf.title === 'string' ? inf.title : id;      // some titles differ between the Moon and Mars
@@ -175,7 +178,7 @@
   // One more sentence for a "why" card, with this mission's own numbers in it.
   function whyLive(id) {
     var s = G.s, t = s.today, pc = function (v) { return Math.round(v * 100) + '%'; };
-    if (id === 'electro') return 'One ice chunk makes ' + sim.airPerIce(s) + ' air.';
+    if (id === 'electro') return 'One ' + JA.waterWords(s).chunk + ' makes ' + sim.airPerIce(s) + ' air.';
     if (id === 'shield') return 'Your dome now blocks ' + pc(sim.shield(s)) + ' of the radiation indoors.';
     if (id === 'shade') return 'Right now: ' + pc(sim.shield(s)) + ' shield, and ' + pc(sim.shade(s)) + ' less solar power.';
     if (id === 'panel') return 'Yours are working at ' + pc((s.rack.eff[0] + s.rack.eff[1] + s.rack.eff[2]) / 3) + ' right now.';
@@ -220,6 +223,15 @@
     if (c) c.lobby();
   }
 
+  // A made-up planet circles a made-up star, so there is no real Sun to pick: the same two choices (and the same
+  // values, which crew mode sends to everyone) pick an ordinary or a stormy month of the star the game invents.
+  function starCards(P, card) {
+    var n = esc(P.star.name);
+    return '<h3>4 · Which star do you want to face?</h3><p class="sub">' + esc(P.name) + ' circles ' + n + ', a made-up star. NASA has no records of it, so the game invents its storms with the same physics as our Sun.</p><div class="cards">' +
+      card('sun', 'live', '⭐', n + ', an ordinary month', 'Made-up flares, gas clouds and radiation storms, about as busy as our own Sun.') +
+      card('sun', 'archive', '🌩️', n + ', a stormy month', 'More star spots and bigger storms, all made up. Much harder!') + '</div>';
+  }
+
   // these cards redraw themselves after each pick: put the keyboard focus back where it was
   function refocus(sel) { var el = document.querySelector('#modal-root ' + sel); if (el) { try { el.focus({ preventScroll: true }); } catch (e) { /* older browsers */ } } }
   function setupModal() {
@@ -230,15 +242,16 @@
     }
     var lvIcon = { cadet: '🎒', commander: '🧑‍🚀', veteran: '🎖️' };
     var html = '<h2>Plan your mission</h2><p class="sub">A few quick choices, Commander.</p>' +
-      '<h3>1 · Where will you build your outpost?</h3><div class="cards">' +
-      card('site', 'moon', '🌙', 'The Moon', esc(JA.SITES.moon.blurb)) + card('site', 'mars', '🔴', 'Mars', esc(JA.SITES.mars.blurb)) + '</div>' +
+      '<h3>1 · Where will you build your outpost?</h3><div class="cards' + (Object.keys(JA.SITES).length === 3 ? ' three' : '') + '">' +
+      Object.keys(JA.SITES).map(function (id) { var P = JA.SITES[id]; return card('site', id, P.emoji, P.title, esc(P.blurb)); }).join('') + '</div>' +
       '<h3>2 · How long is the mission?</h3><p class="sub">Every day is harder than the one before, and teaches something new.</p><div class="cards three">' +
       Object.keys(JA.LEVELS).map(function (k) { var L = JA.LEVELS[k]; return card('level', k, lvIcon[k], L.name + ' · ' + L.sols + ' days', L.ages + '. ' + esc(L.blurb)); }).join('') + '</div>' +
       '<h3>3 · How much time do you want each day?</h3><p class="sub">You can change this at any moment with the ⏸ button.</p><div class="cards four">' +
       JA.SHIFTS.map(function (sh) { return card('shift', sh.id, sh.icon, sh.name + ' · ' + (sh.id / 60) + ' min', esc(sh.text)); }).join('') + '</div>' +
+      (JA.SITES[o.site] && JA.SITES[o.site].star ? starCards(JA.SITES[o.site], card) :
       '<h3>4 · Which Sun do you want to face?</h3><div class="cards">' +
       card('sun', 'live', '☀️', 'The real Sun, right now', 'Flares, solar gas clouds and radiation storms from the last 30 days, fetched live from NASA.') +
-      card('sun', 'archive', '🌩️', 'The great storms of May 2024', 'A famous stormy month from NASA\'s records. Much harder!') + '</div>' +
+      card('sun', 'archive', '🌩️', 'The great storms of May 2024', 'A famous stormy month from NASA\'s records. Much harder!') + '</div>') +
       (crew() ? '<p class="sub crew-plan">🧑‍🚀 Crew mode: ' + crew().count() + ' astronaut' + (crew().count() > 1 ? 's' : '') + ' will launch together. Pioneer mode is for one player.</p>' : '') +
       (JA.pioneer && !crew() ? '<h3>5 · How do you want to play?</h3><div class="cards">' +
         card('pioneer', 'off', '🧑‍🚀', 'Classic', 'The outpost as the engineers built it. Best for a first mission.') +
@@ -259,10 +272,11 @@
   function launch() {
     if (crew()) { if (guest()) return; G.opts.pioneer = 'off'; JA.net.busy(60000); }
     Au.play('swish');
-    U.modal('<div class="loading"><div class="spinner"></div><h2>Calling NASA…</h2><p class="sub">' +
-      (G.opts.sun === 'live' ? 'Fetching the last 30 days of real space weather.' : 'Opening the May 2024 storm records.') + '</p></div>');
+    var star = JA.SITES[G.opts.site].star;
+    U.modal('<div class="loading"><div class="spinner"></div>' + (star ? '<h2>Watching ' + esc(star.name) + '…</h2><p class="sub">Making up 60 days of storms for a made-up star.</p>'
+      : '<h2>Calling NASA…</h2><p class="sub">' + (G.opts.sun === 'live' ? 'Fetching the last 30 days of real space weather.' : 'Opening the May 2024 storm records.') + '</p>') + '</div>');
     var t0 = Date.now();
-    JA.weather.load(G.opts.sun).then(function (data) { setTimeout(function () { startMission(data); }, Math.max(0, 700 - (Date.now() - t0))); });
+    JA.weather.load(G.opts.sun, G.opts.site).then(function (data) { setTimeout(function () { startMission(data); }, Math.max(0, 700 - (Date.now() - t0))); });
   }
 
   // snap (crew mode, a guest): the host's mission as it is now, instead of a new one
@@ -278,7 +292,7 @@
     G.rigs = snap ? snap.rigs : B.spots.ice.map(function () { return { state: 'idle', p: 0, t: 0 }; }); B.rigs = G.rigs;      // the ice drills (see stepRigs)
     if (snap) { G.tut = Object.assign({}, snap.tut || {}); G.tut.moved = G.tut.jumped = false; }
     if (s.pioneer) ext('pioneer', 'start', s, PIONEER); else ext('pioneer', 'stop');
-    if (!snap) JA.INSTRUMENTS[s.site.id].forEach(function (def, i) { A.spawn('inst', B.spots.pallet[i], { id: def.id, name: def.name }, 'fixed'); });
+    if (!snap) JA.pick(s, JA.INSTRUMENTS).forEach(function (def, i) { A.spawn('inst', B.spots.pallet[i], { id: def.id, name: def.name }, 'fixed'); });
     A.roverCharge = function () { return G.s ? G.s.m.rover.charge : 1; };
     A.roverStuck = function () { return !!(G.s && G.s.m.rover.stuck); };
     A.knockLoose = !snap;
@@ -305,23 +319,28 @@
     if (s.weatherFallback) wx = '<div class="info-row"><span class="ic">📼</span><div><b>Using saved NASA records</b><p><span class="tagline archive">NASA archive</span>We could not reach NASA just now, so the solar storms replay the real Sun from ' + d1 + ' to ' + dN + ' instead. This is not live data.</p></div></div>';
     else wx = '<div class="info-row"><span class="ic">🛰️</span><div><b>The real Sun is in this game</b><p>' + U.dataTag(s) + 'Solar storms replay the real Sun from ' + d1 + ' to ' + dN + (s.weatherSource === 'live' ? ', fetched just now from NASA\'s space-weather database.' : ' — one of the most active months on the Sun in 20 years.') + '</p></div></div>';
     var n = s.totalSols, dw = dayWord().toLowerCase() + 's';
+    var mc = s.site.comms === 'relay' ? 'This is Mission Control, on the relay ship in orbit above you. We are with you on the radio all the way.'
+      : 'This is Mission Control on Earth. We are with you on the radio all the way.';
+    // a made-up planet has a made-up star, whose storms the game invents (spaceweather.js star); the card says so
+    if (s.weatherSource === 'star') wx = '<div class="info-row"><span class="ic">🌞</span><div><b>A made-up star</b><p>' + U.dataTag(s) + esc(s.site.name) + ' circles ' + esc(s.site.star.name) +
+      ', a made-up star, so NASA has no records of it. The game invents its storms with the same physics as our own Sun: spots that grow and fade as the star turns, and storms of fast particles that reach you only from the part of the star linked to ' + esc(s.site.name) + ' by its magnetic field.</p></div></div>';
     flowModal('<h2>Welcome to ' + esc(s.site.name) + ', Commander!</h2>' +
-      '<p class="sub">' + esc(s.site.place) + ' · This is Mission Control on Earth. We are with you on the radio all the way.</p>' +
-      '<div class="info-row"><span class="ic">🎯</span><div><b>Your mission</b><p>Keep the crew alive for ' + n + ' ' + dw + (s.site.id === 'mars' ? ' (a sol is one Mars day)' : '') + ', do real science, then ride the rocket home. ' + esc(s.site.why) + '</p></div></div>' +
+      '<p class="sub">' + esc(s.site.place) + ' · ' + mc + '</p>' +
+      '<div class="info-row"><span class="ic">🎯</span><div><b>Your mission</b><p>Keep the crew alive for ' + n + ' ' + dw + JA.pick(s, { moon: '', mars: ' (a sol is one Mars day)', sahrun: '' }) + ', do real science, then ride the rocket home. ' + esc(s.site.why) + '</p></div></div>' +
       '<div class="info-row"><span class="ic">🔋</span><div><b>You do everything by hand</b><p>The Sun charges only a few power cells a day. YOU carry each one to the machine that needs it most — air, food, shield, science or radio. There is never enough for all of them.</p></div></div>' +
       '<div class="info-row"><span class="ic">📈</span><div><b>Every day is harder, and teaches something new</b><p>The outpost wears down the longer you stay. And ' + s.level.crisisSols.length + ' times, something will go wrong that has no checklist: ' + (crew() ? 'the host makes the call for the whole crew' : 'you alone will choose what to do') + ', and live with what follows.</p></div></div>' +
       wx +
-      '<div class="info-row"><span class="ic">📡</span><div><b>Talking to Earth</b><p>' + esc(commWelcome(s)) + '</p></div></div>' +
+      '<div class="info-row"><span class="ic">📡</span><div><b>' + (s.site.comms === 'relay' ? 'Talking to Mission Control' : 'Talking to Earth') + '</b><p>' + esc(commWelcome(s)) + '</p></div></div>' +
       '<div class="info-row good"><span class="ic">' + day.icon + '</span><div><b>' + esc(dayWord()) + ' 1 · ' + esc(day.title) + ' · ' + esc(day.topic) + '</b><p>' + esc(day.learn) + '</p>' + srcLine(day.src) + '</div></div>' +
       (crew() ? '<div class="info-row good"><span class="ic">🧑‍🚀</span><div><b>Your crew: ' + crew().count() + ' astronauts</b><p>You share everything: the air, the food, the Solar Rack, the rover. Split the jobs, call out storms, and get everyone inside in time!</p></div></div>' : '') +
       '<div class="modal-actions"><button class="btn ghost" data-act="how">How to play</button><button class="btn primary" data-act="ok">Step outside ▶</button></div>',
-      { speak: 'Welcome to ' + s.site.name + ', Commander! This is Mission Control on Earth. We are with you on the radio all the way. Keep the crew alive for ' + n + ' ' + dw + ', do real science, then ride the rocket home.', line: 'welcome-' + s.site.id,
+      { speak: 'Welcome to ' + s.site.name + ', Commander! ' + mc + ' Keep the crew alive for ' + n + ' ' + dw + ', do real science, then ride the rocket home.', line: 'welcome-' + s.site.id,
         actions: { how: howInfo, ok: function () { Au.play('door'); U.closeModal(); beginSol(); } } }, ['ok'], 'welcome');
   }
 
   // The radio delay for this mission's real dates (the same model as the Mission Control screens), and who talks to you.
   function commWelcome(s) {
-    if (s.site.id === 'moon') return s.site.commText + ' That is why Mission Control can talk you through your work live.';
+    if (s.site.comms !== 'orbit') return s.site.commText + ' That is why Mission Control can talk you through your work live.';
     var c = sim.commInfo(s);
     return 'On these mission days Mars is ' + Math.round(JA.weather.planets(s.weather[0].date || new Date().toISOString().slice(0, 10)).km / 1e6) +
       ' million km from Earth, so a radio message takes ' + c.oneWay + ' each way. Earth cannot see what you do right now, so a crewmate inside the habitat talks you through your work. Earth sends storm forecasts and repair help over the Radio Dish.';
@@ -390,8 +409,10 @@
       else {
         line = look.label.replace(/[!.]+$/, '') + ' today. ' + (s.forecast ? (w.level ? U.stormWords(w.level) + ' is coming today. Stay ready to run home!' : 'The Sun is quiet today.') : 'The dish was off, so there is no storm forecast. Listen for your suit sensor!') + (last ? ' Last day: load the sample case and board the rocket!' : '');
         // the morning report is spoken as up to three recorded lines in a row: the weather, the storm forecast, the last-day reminder
-        vox = ['day-' + DAY_VOX[env.kind], s.forecast ? (w.level ? 'forecast-' + (w.level >= 3 ? 'big' : w.level === 2 ? 'medium' : 'small') : 'forecast-quiet') : 'forecast-none'];
+        var dayVox = JA.pick(s, { moon: DAY_VOX, mars: DAY_VOX, sahrun: {} })[env.kind];
+        vox = [dayVox ? 'day-' + dayVox : '', s.forecast ? (w.level ? 'forecast-' + (w.level >= 3 ? 'big' : w.level === 2 ? 'medium' : 'small') : 'forecast-quiet') : 'forecast-none'];
         if (last) vox.push('day-last');
+        vox = vox.filter(Boolean);
       }
       say(line, true, vox);
     }
@@ -403,8 +424,9 @@
       if (!arrive) return;
       ext('colony', 'setStage', arrive, { arrive: true });
       G.colonyVisit = arrive;
-      ext('mission', 'milestone', s, '🌍', 'A ship from Earth has landed at the settlement.');
-      setTimeout(function () { if (G.mode === 'play' || G.mode === 'inside') say('Look to the north-east! A ship from Earth is landing at the new settlement. Go and say hello!', true); }, 2500);
+      var orbit = s.site.comms === 'relay';      // Earth is years away: ships come down from the relay ship in orbit
+      ext('mission', 'milestone', s, orbit ? '🛰️' : '🌍', orbit ? 'A ship from orbit has landed at the settlement.' : 'A ship from Earth has landed at the settlement.');
+      setTimeout(function () { if (G.mode === 'play' || G.mode === 'inside') say(orbit ? 'Look to the north-east! A ship from orbit is landing at the new settlement. Go and say hello!' : 'Look to the north-east! A ship from Earth is landing at the new settlement. Go and say hello!', true); }, 2500);
     }
     if (late) { if (late === 'hello') lateHello(); }
     else if (s.sol === 1) go(); else dayCard(landing);
@@ -413,16 +435,20 @@
   // The morning briefing: one new thing to learn, today's challenge, and what got harder.
   function dayCard(done) {
     var s = G.s, day = s.day, env = sim.env(s), look = s.site.env[env.kind], w = sim.weather(s), hard = sim.harderList(s);
-    var news = G.colonyNews ? '<div class="info-row good"><span class="ic">' + G.colonyNews.icon + '</span><div><b>News from Earth: ' + esc(G.colonyNews.title) + '</b><p>' + esc(G.colonyNews.text) + '</p></div></div>' : '';
+    var news = G.colonyNews ? '<div class="info-row good"><span class="ic">' + G.colonyNews.icon + '</span><div><b>News from ' + (s.site.comms === 'relay' ? 'orbit' : 'Earth') + ': ' + esc(G.colonyNews.title) + '</b><p>' + esc(G.colonyNews.text) + '</p></div></div>' : '';
     var dark = s.darkSol > s.sol && s.darkSol - s.sol <= 2 ? '<div class="info-row alert"><span class="ic">🌚</span><div><b>The long dark comes ' + (s.darkSol - s.sol === 1 ? 'tomorrow' : 'in two days') + '</b><p>A mountain will hide the Sun for a whole day, and the panels will make almost nothing. Leave power cells on the Solar Rack the evening before, and charge the machines that keep the crew alive.</p></div></div>' : '';
     journalAdd('day', day.key);
     var town = townRows(s);
     Au.play('daystart');
     var goal = day.goal ? '<div class="info-row"><span class="ic">🎯</span><div><b>Today\'s challenge</b><p>' + esc(day.goal.text) + '</p></div></div>' : '';
+    // the dew catcher (a planet with one): what last night gave
+    var dew = !s.site.dew || !s.today || s.today.dewNight == null ? '' : s.today.dewNight > 0
+      ? '<div class="info-row good"><span class="ic">💧</span><div><b>Dew last night · the catcher holds ' + Math.round(s.dew) + ' water</b><p>The clear night cooled the net, and water vapour from the air turned into drops that ran into the can. Carry it to the Greenhouse water tank.</p></div></div>'
+      : '<div class="info-row"><span class="ic">💧</span><div><b>No dew last night</b><p>Wind and blowing sand kept the net from getting cold enough for dew to form.</p></div></div>';
     flowModal('<div class="day-head"><span class="big-icon">' + day.icon + '</span><div><small>' + esc(dayWord()) + ' ' + s.sol + ' of ' + s.totalSols + '</small><h2>' + esc(day.title) + '</h2></div></div>' +
       news + town + '<div class="info-row good"><span class="ic">💡</span><div><b>New today: ' + esc(day.topic) + '</b><p>' + esc(day.learn) + '</p>' + srcLine(day.src) + '</div></div>' + goal +
       '<div class="info-row"><span class="ic">' + look.icon + '</span><div><b>' + esc(look.label) + ' · about ' + cellsText(s.cellsToday) + '</b><p>' + esc(look.why) + '</p></div></div>' +
-      U.weatherRow(s, w, s.forecast, 'today') + dark +
+      U.weatherRow(s, w, s.forecast, 'today') + dark + dew +
       (hard.length ? '<h3>📈 Harder than yesterday</h3><ul class="harder">' + hard.map(function (h) { return '<li><span>' + h.icon + '</span>' + esc(h.text) + '</li>'; }).join('') + '</ul>' : '') +
       '<div class="modal-actions"><button class="btn primary" data-act="ok">Start the shift ▶</button></div>',
       { speak: dayWord() + ' ' + s.sol + '. ' + day.title + '. ' + day.learn + (day.goal ? ' Today\'s challenge: ' + day.goal.text + '.' : ''), line: 'day-morning',
@@ -448,7 +474,13 @@
     zone({ id: 'hop-air', pos: sp.hoppers.air, r: 1.9, type: 'ice', name: 'Air Maker', fn: function () { var r = sim.feedIce(G.s, 'air'); if (r.ok) { G.tut.ice = true; Au.play('ice', { at: sp.hoppers.air }); } return r; } });
     zone({ id: 'hop-water', pos: sp.hoppers.water, r: 1.7, type: 'ice', name: 'water tank', fn: function () {
       var r = sim.feedIce(G.s, 'food');
-      if (r.ok) { G.tut.watered = true; Au.play('ice', { at: sp.hoppers.water }); toastAt(sp.hoppers.water, '+' + Math.round(r.add) + ' 💧', '#5aa8ff'); tip('tank', 'Ice in the tank! The crew drinks from it too, and the recycler gives most of that back.', undefined, 'water'); }
+      if (r.ok) { G.tut.watered = true; Au.play('ice', { at: sp.hoppers.water }); toastAt(sp.hoppers.water, '+' + Math.round(r.add) + ' 💧', '#5aa8ff'); tip('tank', (JA.iceWell(G.s) ? 'Water' : 'Ice') + ' in the tank! The crew drinks from it too, and the recycler gives most of that back.', undefined, 'water'); }
+      return r;
+    } });
+    // a can of dew (a planet with a dew catcher) goes into the same water tank
+    zone({ id: 'hop-dew', pos: sp.hoppers.water, r: 1.7, type: 'dew', name: 'water tank', fn: function (it) {
+      var r = sim.feedDew(G.s, it.data && it.data.water);
+      if (r.ok) { G.tut.watered = true; Au.play('ice', { at: sp.hoppers.water }); toastAt(sp.hoppers.water, '+' + Math.round(r.add) + ' 💧', '#5aa8ff'); }
       return r;
     } });
     zone({ id: 'hop-lab', pos: sp.hoppers.lab, r: 1.7, type: 'core', name: 'Lab', fn: function (it) { var r = sim.submitCore(G.s, it.data); if (r.ok) { Au.play('score'); if (G.s.m.lab.power === 0) say('Core loaded! The Lab needs a power cell to study it.', true); } return r; } });
@@ -485,7 +517,7 @@
     if (r.ok) {
       Au.play('plug', { at: pos }); W.burst(pos.x, pos.y, pos.z, 16, 3, 0xffe36a, { life: 0.6, size: 0.26, grav: 0 });
       if (id === 'air') G.tut.airCell = true;
-      if (id === 'comms') tip('comms', 'Radio Dish on! Earth will warn us early about solar storms, and can help with repairs today.');
+      if (id === 'comms') tip('comms', 'Radio Dish on! ' + JA.homeName(G.s, true) + ' will warn us early about solar storms, and can help with repairs today.');
       if (id === 'bag') tip('bagger', 'The Soil Bagger is filling bags. Grab them and throw them onto the dome!');
       if (id === 'scrub') { toastAt(pos, '🫧 Filter 100%', '#8fe8d0'); say('The filter is baking! The heat pushes the trapped carbon dioxide outside, so it can soak up more.', true, undefined, false, 'scrubber'); }
       if (id === 'rover') tip('roverCell', touch ? 'Rover charged! Walk to its side and tap ✋ to drive.' : 'Rover charged! Walk to its side and press E to drive.', 'rover-charged');
@@ -551,7 +583,7 @@
     }
     // loose things, and the cargo in the rover's bed: that is within reach from anywhere beside the bed
     var bedItem = null, bedD = 9;
-    function nameOf(it) { return it.data && it.data.name ? it.data.name : JA.ITEMS[it.type].name; }
+    function nameOf(it) { return it.data && it.data.name ? it.data.name : JA.itemDef(it.type, s).name; }
     for (i = 0; i < A.items.length; i++) {
       var it = A.items[i]; if (it.state === 'held') continue;
       (function (it) {
@@ -564,9 +596,12 @@
     for (i = 0; i < sp.ice.length; i++) (function (i) {
       var rig = G.rigs[i], dd = d2(p, sp.ice[i]) - 0.9;
       // the rig works by itself; a player who likes the skill game can still drill a chunk by hand (Q)
-      if (rig.state === 'idle') offer(dd, 2.6, { id: 'rig:' + i, label: 'Start the ice drill', altLabel: 'drill by hand', altLocal: true, alt: function () { startDrill('ice', i); }, run: function () { startRig(i); } });
-      else offer(dd + 1.6, 3.8, { label: rig.state === 'drill' ? 'Drilling… ' + Math.round(rig.p * 100) + '%' : 'The drill is cooling… ' + Math.ceil(rig.t) + ' s' });
+      var Wd = JA.waterWords(s);      // an ice drill, or a well pump (Sahrun)
+      if (rig.state === 'idle') offer(dd, 2.6, { id: 'rig:' + i, label: 'Start the ' + Wd.rig, altLabel: Wd.hand, altLocal: true, alt: function () { startDrill('ice', i); }, run: function () { startRig(i); } });
+      else offer(dd + 1.6, 3.8, { label: rig.state === 'drill' ? (JA.iceWell(s) ? 'Pumping… ' : 'Drilling… ') + Math.round(rig.p * 100) + '%' : 'The ' + Wd.at + ' is cooling… ' + Math.ceil(rig.t) + ' s' });
     })(i);
+    // the dew catcher (a planet with one): its can holds the water last night gave
+    if (sp.dew && s.dew >= 1) offer(d2(p, sp.dew) - 0.6, 2.6, { id: 'dew', label: 'Take the can of dew (+' + Math.round(s.dew) + ' 💧)', run: takeDew });
     for (i = 0; i < sp.drill.length; i++) (function (i) {
       if (sim.coresLeft(s, i) > 0) offer(d2(p, sp.drill[i]) - 0.6, 2.4, { id: 'geo:' + i, local: true, label: 'Drill a rock core (hold)', hold: true, run: function () { startDrill('geo', i); } });
     })(i);
@@ -584,13 +619,13 @@
       else offer(d, 2.0, { label: grown.name.charAt(0).toUpperCase() + grown.name.slice(1) + ' growing… ' + Math.round(bed.g * 100) + '%' + (s.m.food.lamp <= 0 ? ' · needs light' : s.water <= 0 ? ' · needs water' : '') });
     })(i);
     for (i = 0; i < sp.panels.length; i++) (function (i) {
-      if (s.rack.eff[i] < 0.86) offer(d2(p, sp.panels[i]), 2.8, { id: 'panel:' + i, label: s.site.id === 'mars' ? 'Brush the dust off' : 'Turn the panel to the Sun', run: function () { sim.servicePanel(s, i); Au.play('brush'); W.dust(sp.panels[i].x, sp.panels[i].z - 1.4, 10, 2.5, 0.5); toastAt(sp.panels[i], '☀️ 100%', '#ffd23f'); } });
+      if (s.rack.eff[i] < 0.86) offer(d2(p, sp.panels[i]), 2.8, { id: 'panel:' + i, label: s.site.dusty ? 'Brush the dust off' : 'Turn the panel to the Sun', run: function () { sim.servicePanel(s, i); Au.play('brush'); W.dust(sp.panels[i].x, sp.panels[i].z - 1.4, 10, 2.5, 0.5); toastAt(sp.panels[i], '☀️ 100%', '#ffd23f'); } });
     })(i);
     var g = s.glitch;
     if (g && (g.state === 'broken' || g.state === 'asked' || g.state === 'advised')) {
       d = d2(p, B.repair[g.machine]);
-      if (g.state === 'asked') offer(d, 4, { label: 'Waiting for Earth\'s answer… ' + Math.ceil(g.replyAt - s.t) + ' s' });
-      else offer(d, 4, { id: 'repair', local: true, label: g.state === 'advised' ? 'Fix it with Earth\'s instructions' : 'Fix the ' + JA.MACHINES[g.machine].name, run: function () { if (g.state === 'advised') startRepair(true); else repairModal(); } });
+      if (g.state === 'asked') offer(d, 4, { label: 'Waiting for ' + JA.homeName(s) + '\'s answer… ' + Math.ceil(g.replyAt - s.t) + ' s' });
+      else offer(d, 4, { id: 'repair', local: true, label: g.state === 'advised' ? 'Fix it with ' + JA.homeName(s) + '\'s instructions' : 'Fix the ' + JA.MACHINES[g.machine].name, run: function () { if (g.state === 'advised') startRepair(true); else repairModal(); } });
     }
     // with cargo in the bed, "drive" is only offered at the driver's door, so that taking the cargo is never hidden behind it
     A.roverSpot('door', v1); var dr = bedItem ? d2(p, v1) : Math.min(d2(p, v1), d2(p, A.rover.pos) - 1.4);
@@ -720,13 +755,20 @@
     A.items.forEach(function (it) { if (it.type === 'ice' && it.state !== 'held' && it.state !== 'bed' && d2(it.pos, q) < 3.4) n++; });
     return n;
   }
+  function takeDew() {
+    var r = sim.takeDew(G.s);
+    if (!r.ok) { if (r.msg) say(r.msg, true); Au.play('deny'); return; }
+    A.pick(A.spawn('dew', A.handPos(v1), { water: r.water }, 'rest')); Au.play('ice');
+    tip('dew', 'Water from the air! Pour it into the Greenhouse water tank. Out here, every drop counts.', undefined, 'water');
+  }
   function startRig(i) {
     var rig = G.rigs[i], q = B.spots.ice[i];
-    if (iceNear(i) >= 2) { say('Two ice chunks are already waiting at this drill. Pick them up first!', true); Au.play('deny'); return; }
+    var Wd = JA.waterWords(G.s);
+    if (iceNear(i) >= 2) { say('Two ' + Wd.chunks + ' are already waiting at this ' + Wd.at + '. Pick them up first!', true); Au.play('deny'); return; }
     rig.state = 'drill'; rig.p = 0;
     Au.play('plug', { at: q }); W.burst(q.x, q.y + 0.6, q.z, 10, 2.5, 0xbff4ff, { life: 0.5, size: 0.22, grav: 0 });
     sim.note(G.s, 'icedrill');
-    tip('icerig', 'The drill does the work by itself. Start the other drills too, then come back for the ice!');
+    tip('icerig', 'The ' + Wd.at + ' does the work by itself. Start the other ' + Wd.at + 's too, then come back for the ' + Wd.stuff + '!');
   }
   function stepRigs(dt) {
     var need = R.iceDrillTime / Math.sqrt(G.s.level.ease), i, rig, q;
@@ -740,7 +782,7 @@
         var up = Math.sqrt(2.4 * W.gravity);                  // a hop about 1.2 m high, whatever the gravity, so it lands beside the drill
         chunk.vel.set(Math.cos(ang) * 1.1, up, Math.sin(ang) * 1.1); chunk.spin = 4;
         Au.play('ice', { at: q }); W.burst(q.x, q.y + 0.9, q.z, 14, 3, 0xbff4ff, { life: 0.6, size: 0.24 });
-        if (G.mode === 'play') toastAt(q, '🧊 Ice is ready!', '#4fd8ff');
+        if (G.mode === 'play') toastAt(q, JA.waterWords(G.s).icon + ' ' + JA.waterWords(G.s).Stuff + ' is ready!', '#4fd8ff');
       } else if (rig.state === 'rest') { rig.t -= dt; if (rig.t <= 0) rig.state = 'idle'; }
     }
   }
@@ -775,7 +817,7 @@
       kick: (ice ? 1.8 : 2.0) / Math.sqrt(ease), push: 0, pushT: 0.5,
       slip: 0, slipTime: (ice ? 2.2 : 2.6) * Math.sqrt(ease), out: 0, inside: true, on: false,
       bumpT: 1.5 + Math.random() * 2, bumpWarn: 0, bumpDir: 0, flash: 0,
-      icon: ice ? '🧊' : '🧪', title: ice ? 'Mining ice' : 'Drilling a rock core at ' + JA.GEO[G.s.site.id][idx].name, hint: '' };
+      icon: ice ? JA.waterWords(G.s).icon : '🧪', title: ice ? (JA.iceWell(G.s) ? 'Pumping water' : 'Mining ice') : 'Drilling a rock core at ' + JA.pick(G.s, JA.GEO)[idx].name, hint: '' };
     A.astro.mode = 'busy'; A.astro.vel.set(0, 0, 0);
     var t = ice ? B.spots.ice[idx] : B.spots.drill[idx];
     A.astro.yaw = Math.atan2(t.x - A.astro.pos.x, t.z - A.astro.pos.z);
@@ -791,7 +833,7 @@
     if (m.type === 'drill') {
       if (G.input.jump) { endMini(); return; }
       var hp = A.handPos(v1), ice = m.kind === 'ice', spot = ice ? B.spots.ice[m.idx] : B.spots.drill[m.idx];
-      var dust = ice ? 0xbff4ff : (s.site.id === 'mars' ? 0xd9a070 : 0xc8c9d4);
+      var dust = ice ? 0xbff4ff : JA.pick(s, { moon: 0xc8c9d4, mars: 0xd9a070, sahrun: 0xe8c48a });
       m.lock = Math.max(0, m.lock - dt); m.flash = Math.max(0, m.flash - dt);
       var on = m.on = G.eHeld && m.lock <= 0;
       m.v += clamp(G.input.x, -1, 1) * 7 * dt;                        // steering: A / D, the arrow keys or the stick
@@ -838,8 +880,8 @@
         endMini();
         Au.play('bad'); W.cam.shake = 0.3;
         W.burst(hp.x, a.pos.y + 0.4, hp.z, 18, 4, dust, { life: 0.7, size: 0.26 });
-        toastAt(spot, ice ? 'The ice shattered!' : 'The core crumbled!', '#ff5468');
-        say(ice ? 'The drill slipped out of the ice and smashed it to powder. Try again, and keep the bit in the green!'
+        toastAt(spot, ice ? (JA.iceWell(G.s) ? 'The pump ran dry!' : 'The ice shattered!') : 'The core crumbled!', '#ff5468');
+        say(ice ? (JA.iceWell(G.s) ? 'The pump lost its rhythm and sucked up sand instead of water. Try again, and keep it in the green!' : 'The drill slipped out of the ice and smashed it to powder. Try again, and keep the bit in the green!')
           : 'The drill slipped out of the rock layer and the core crumbled. Try again, and keep the bit in the green!', true);
         simOp('note', ['crumble']);
         return;
@@ -890,7 +932,7 @@
   }
   // a finished drill: the ice chunk or the rock core goes into the driller's hands (on the host, for a guest too)
   function miniReward(kind, idx, q) {
-    if (kind === 'ice') { A.pick(A.spawn('ice', A.handPos(v1), null, 'rest')); Au.play('ice'); tip('ice', 'A chunk of ice! The Air Maker can split it into oxygen. The rover bed carries four at a time.'); return; }
+    if (kind === 'ice') { A.pick(A.spawn('ice', A.handPos(v1), null, 'rest')); Au.play('ice'); tip('ice', JA.iceWell(G.s) ? 'A can of water from deep underground! The Air Maker can split it into oxygen. The rover bed carries four at a time.' : 'A chunk of ice! The Air Maker can split it into oxygen. The rover bed carries four at a time.'); return; }
     if (sim.coresLeft(G.s, idx) <= 0) return;
     var core = sim.drillCore(G.s, idx, q);
     A.pick(A.spawn('core', A.handPos(v1), core, 'rest')); Au.play('core');
@@ -903,7 +945,7 @@
     var s = G.s, g = s.glitch, ease = s.level.ease, wear = s.mods.dial;
     G.mini = { type: 'dial', machine: g.machine, needle: 0, dir: 1, hits: 0, need: 3, lock: 0, c: 0.3 + Math.random() * 0.4,
       speed: (advised ? 0.75 : 1.5 / Math.sqrt(ease)) * wear, w: advised ? 0.34 : 0.13 * ease / Math.sqrt(wear),
-      title: (advised ? '📡 Earth\'s instructions: ' : '🔧 ') + 'Fixing the ' + JA.MACHINES[g.machine].name,
+      title: (advised ? '📡 ' + JA.homeName(G.s, true) + '\'s instructions: ' : '🔧 ') + 'Fixing the ' + JA.MACHINES[g.machine].name,
       hint: (touch ? 'Tap ✋' : 'Press E') + ' when the white line is in the green zone. Three times! (' + (touch ? '⤴' : 'Space') + ' = stop)' };
     A.astro.mode = 'busy'; A.astro.vel.set(0, 0, 0);
     if (G.pov) { var rp0 = B.repair[g.machine]; W.cam.yaw = Math.atan2(rp0.x - A.astro.pos.x, rp0.z - A.astro.pos.z) + Math.PI; W.cam.fpPitch = 0.02; }
@@ -914,7 +956,7 @@
       '<button class="opt" data-act="self"><b>🔧 Fix it myself, right now</b><span>Tricky without instructions: the green zone is small. Every slip wastes half a power cell of charge.</span></button>' +
       '<button class="opt" data-act="ask"' + (dish ? '' : ' disabled') + '><b>📡 Ask Mission Control for the steps</b><span>' +
       (dish ? 'With their instructions the fix is easy. But a radio message takes ' + esc(info.oneWay) + ' each way' + (info.minutes ? ' — ' + esc(info.round) + ' there and back. The machine stays broken while you wait (' + Math.round(info.wait) + ' seconds of game time).' : ' — almost no wait at all!')
-        : 'The Radio Dish has no power today, so you cannot call Earth.') + '</span></button>' +
+        : 'The Radio Dish has no power today, so you cannot call ' + JA.homeName(s) + '.') + '</span></button>' +
       '<div class="modal-actions"><button class="btn ghost" data-act="later">Later</button></div>',
       { noFocus: true, speak: def.title + ' ' + def.text, actions: {
         self: function () { Au.play('tap'); U.closeModal(); startRepair(false); },
@@ -925,8 +967,9 @@
           if (!r.ok) { Au.play('deny'); return; }
           ext('mission', 'repairSent', s);
           Au.play('page'); U.closeModal();
-          say(s.site.id === 'moon' ? 'We got your question! The Moon is only 1.3 light-seconds from Earth, so our answer is on its way.'
-            : 'Your question is on its way to Earth. It takes ' + r.info.oneWay + ' to get there, and the answer takes just as long to come back. Keep working — I will call you when it arrives.', true, s.site.id === 'moon' ? 'dish-sent-moon' : null);
+          say(s.site.comms === 'near' ? 'We got your question! The Moon is only 1.3 light-seconds from Earth, so our answer is on its way.'
+            : s.site.comms === 'relay' ? 'We got your question up here on the relay ship. Radio needs only about 2 seconds to reach our orbit, so the answer is on its way.'
+            : 'Your question is on its way to ' + JA.homeName(s) + '. It takes ' + r.info.oneWay + ' to get there, and the answer takes just as long to come back. Keep working — I will call you when it arrives.', true, JA.pick(s, { moon: 'dish-sent-moon', mars: null, sahrun: null }));
         }
       } });
   }
@@ -951,7 +994,7 @@
       else if (e.type === 'bag') { if (guest()) Au.play('bag', { at: B.pos.bag }); else spawnBag(); }
       else if (e.type === 'ripe') { tip('ripe' + s.sol, 'The veggies are ripe! Pick them at the Greenhouse.'); Au.play('good'); }
       else if (e.type === 'empty') {
-        if (e.machine === 'air' && s.m.air.queue > 0) say('The Air Maker used up its power cell, and there is still ice waiting.', true);
+        if (e.machine === 'air' && s.m.air.queue > 0) say('The Air Maker used up its power cell, and there is still ' + JA.waterWords(s).stuff + ' waiting.', true);
         else if (e.machine === 'lab' && s.m.lab.queue.length) say('The Lab used up its power cell, and cores are still waiting.', true);
         else if (e.machine === 'food') say('The grow lamps ran out of power. Plants stop growing in the dark.', true, undefined, false, 'plant');
       }
@@ -970,7 +1013,8 @@
           // what the warning says depends on what is coming: particles after an eruption, or a CME's shock wave arriving
           var cmeDay = s.storm && s.storm.cause === 'cme';
           say(inside ? 'A solar storm is on its way. Good thing you are inside!'
-            : s.m.comms.on ? (cmeDay ? 'Earth says a cloud of solar gas is about to sweep past. Its shock wave carries fast particles. Head for the airlock!' : 'We just spotted a solar flare! A radiation storm is coming. Head for the airlock!')
+            : s.m.comms.on ? (cmeDay ? JA.homeName(s, true) + ' says a cloud of ' + (s.site.star ? 'hot gas from ' + s.site.star.name : 'solar gas') + ' is about to sweep past. Its shock wave carries fast particles. Head for the airlock!'
+              : (s.site.star ? 'We just spotted a flare on ' + s.site.star.name + '!' : 'We just spotted a solar flare!') + ' A radiation storm is coming. Head for the airlock!')
               : 'Your suit sensor just caught a solar storm! The dish is off, so we could not warn you early. RUN for the airlock!',
             true, inside ? 'storm-inside' : s.m.comms.on ? (cmeDay ? 'storm-countdown' : 'storm-spotted') : 'storm-no-warning', true);
         }
@@ -1008,11 +1052,11 @@
     G.charge = null; A.astro.aim = false; hideAim(); Au.stopAll(); Au.play('alarm');
     W.cam.shake = Math.max(W.cam.shake, 0.3);
     // On Mars the call comes from the crewmate inside: Earth would hear about this crisis only minutes from now.
-    var mars = s.site.id === 'mars';
-    var far = mars ? ' Earth is ' + sim.commInfo(s).oneWay + ' away by radio, far too slow to help in time.' : ' There is no time to talk it through.';
+    var far = s.site.comms === 'orbit';      // too far for Mission Control to talk you through it
+    var farText = far ? ' Earth is ' + sim.commInfo(s).oneWay + ' away by radio, far too slow to help in time.' : ' There is no time to talk it through.';
     flowModal('<div class="day-head crisis-head"><span class="big-icon">' + v.icon + '</span><div><small>⚠ ' + esc(v.alarm) + ' · YOUR CALL</small><h2>' + esc(v.title) + '</h2></div></div>' +
       '<p>' + esc(v.text) + '</p>' +
-      '<div class="crisis-radio"><div class="radio-badge" aria-hidden="true">📡<i></i><i></i></div><p><small>' + esc(U.RADIO_FROM[mars ? 'crew' : 'earth']) + '</small>We have no checklist for this one, Commander.' + esc(far) + ' There is more than one thing you could do. You decide.</p></div>' +
+      '<div class="crisis-radio"><div class="radio-badge" aria-hidden="true">📡<i></i><i></i></div><p><small>' + esc(U.RADIO_FROM[far ? 'crew' : s.site.comms === 'relay' ? 'relay' : 'earth']) + '</small>We have no checklist for this one, Commander.' + esc(farText) + ' There is more than one thing you could do. You decide.</p></div>' +
       v.options.map(function (o) { return '<button class="opt" data-act="pick" data-v="' + o.id + '"><b>' + o.icon + ' ' + esc(o.label) + '</b><span>' + esc(o.text) + '</span></button>'; }).join('') +
       '<p class="sub crisis-foot">⏸ The clock is stopped while you think. Nobody will tell you which choice is best. You will see what yours leads to.</p>',
       { cls: 'crisis', noFocus: true, speak: v.title + ' ' + v.text + ' You decide.' + v.options.map(function (o, i) { return ' Choice ' + (i + 1) + ': ' + o.label + '. ' + o.text; }).join(''), line: 'crisis-your-call', actions: { pick: function (el) { crisisPick(el.getAttribute('data-v')); } } }, ['pick'], 'crisis');
@@ -1138,11 +1182,13 @@
   }
   function certificateInfo() {
     var s = G.s, rank = sim.rankFor(s), storms = [];
-    s.weather.forEach(function (w, i) { if (w && w.level > 0 && i < s.sol) storms.push({ date: JA.weather.prettyDate(w.date), cls: w.cause === 'cme' ? 'CME' : 'SEP', level: w.level }); });
+    var star = s.weatherSource === 'star' ? s.site.star.name : '';      // a made-up star has no real dates: its storms are named by mission day
+    s.weather.forEach(function (w, i) { if (w && w.level > 0 && i < s.sol) storms.push({ date: star ? dayWord() + ' ' + (i + 1) : JA.weather.prettyDate(w.date), cls: w.cause === 'cme' ? 'CME' : 'SEP', level: w.level }); });
     return { name: '', won: true, rank: { icon: rank.icon, name: rank.name }, site: { id: s.site.id, name: s.site.name, place: s.site.place },
       level: s.level.name, days: s.totalSols, dayWord: dayWord().toLowerCase() + 's',
       badges: sim.badges(s).map(function (b) { return { icon: b.icon, name: b.name }; }), storms: storms,
-      source: s.weatherFallback ? 'archive' : s.weatherSource, from: JA.weather.prettyDate(s.weather[0].date), to: JA.weather.prettyDate(s.weather[s.weather.length - 1].date),
+      source: s.weatherFallback ? 'archive' : s.weatherSource, star: star,
+      from: star ? dayWord() + ' 1' : JA.weather.prettyDate(s.weather[0].date), to: star ? dayWord() + ' ' + s.weather.length : JA.weather.prettyDate(s.weather[s.weather.length - 1].date),
       decisions: s.decisions.length, finds: s.finds.length,
       today: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) };
   }
@@ -1158,6 +1204,13 @@
     why: function (id) { if (G.s) sim.note(G.s, id); }, openInfo: function (html) { return G.openInfo(html); }, closeInfo: function () { if (infoOpen()) closeInfo(); },
     sound: function (name, o) { Au.play(name, o); }, sync: function () { if (G.s) syncRack(); } };
   var SKY = { outside: true, pos: null, say: function (t) { say(t, true); }, tip: function (id, t) { return tip(id, t); } };
+  // the sand rays (js/sandray.js, a planet with creature 'ray'): host plans the passes, everyone sees and feels them
+  var RAY = { outside: true, pos: null, host: true, busy: false, astro: null, rover: null, say: function (t) { say(t, true); }, tip: function (id, t) { return tip(id, t); }, drop: function () { putDown(); } };
+  function rayStep(dt, host) {
+    RAY.outside = G.mode === 'play'; RAY.pos = me(); RAY.host = host; RAY.busy = !!(G.crisisOpen || G.mini);
+    RAY.astro = A.astro; RAY.rover = A.rover ? A.rover.pos : null;
+    ext('ray', 'update', dt, G.s, RAY);
+  }
   var POV = { yaw: 0, pos: null, home: null, goal: null, goalIcon: '', air: 0, moving: false, effort: false };
 
   function pauseModal() {
@@ -1180,7 +1233,7 @@
         '<h3>🎒 Extras</h3><div class="cards four">' +
         extra('pov', '👁️', 'Helmet view', touch ? 'See through your own visor.' : 'See through your own visor. Key: V', !!G.pov) +
         (JA.keepsake ? extra('snap', '📷', 'Postcard', touch ? 'Save a picture of what you see.' : 'Save a picture of what you see. Key: C') : '') +
-        (JA.sunwatch ? extra('sun', '☀️', 'Sun Watch', 'The real NASA space weather behind your mission.') : '') +
+        (JA.sunwatch ? (s.weatherSource === 'star' ? extra('sun', '⭐', 'Star Watch', 'The made-up star behind your mission, and its made-up storms.') : extra('sun', '☀️', 'Sun Watch', 'The real NASA space weather behind your mission.')) : '') +
         (JA.music ? extra('music', '🎵', 'Music', musicOn() ? 'On. Pick to switch it off.' : 'Off. Pick to switch it on.', musicOn()) : '') +
         (JA.journal ? extra('journal', '📓', 'Field Journal', JA.journal.count(s.site.id).have + ' of ' + JA.journal.count(s.site.id).total + ' pages found.' + (touch ? '' : ' Key: J')) : '') +
         (JA.holo ? extra('ask', '💡', 'Holo-tablet', touch ? 'Holograms that show how things work.' : 'Holograms that show how things work. Key: T') : '') +
@@ -1262,8 +1315,9 @@
     if (s.leak > 0) tip('leak' + s.sol, 'Air leak! The tanks are losing air.');
     else if (s.stale > 1) tip('stale' + s.sol, 'The air is going stale. It is draining fast!');
     if (s.sol < s.totalSols && s.t > s.dayLength * 0.7 && s.food < sim.dinner(s)) tip('short' + s.sol, 'There is not enough food for tonight\'s dinner!');
-    if (s.sol === 2 && s.t > 20 && !G.mini) tip('hear', s.site.id === 'moon' ? 'Hear how quiet it is? The Moon has no air to carry sound. You only hear what travels through your suit.'
-      : 'Everything sounds faint and muffled out here. The thin Mars air carries sound poorly. The Perseverance rover\'s microphones heard the same thing.');
+    if (s.sol === 2 && s.t > 20 && !G.mini) tip('hear', JA.pick(s, { moon: 'Hear how quiet it is? The Moon has no air to carry sound. You only hear what travels through your suit.',
+      mars: 'Everything sounds faint and muffled out here. The thin Mars air carries sound poorly. The Perseverance rover\'s microphones heard the same thing.',
+      sahrun: 'Hear the wind? Thick air like Sahrun\'s carries sound well, so out here you can hear the sand hissing past.' }));
   }
 
   // Crew mode, on the host: the mission rules run for the whole crew, whoever is where. The air drains faster the
@@ -1503,8 +1557,9 @@
     onSend: function (r, kind) {
       var s = G.s, mdl = JA.mission.model(s), c = crew();
       if (c && c.guest && r && r.msg) c.op('missionSend', [kind || r.msg.kind, r.msg.text]);      // the host's game sends it for real
-      say(s.site.id === 'moon' ? 'We got your message! The Moon is only 1.3 light-seconds from Earth, so our answer is on its way.'
-        : 'Your message is on its way to Earth. It takes ' + mdl.info.oneWay + ' to get there, and the answer takes just as long to come back. Keep working — I will call you when it arrives.', true, s.site.id === 'moon' ? 'dish-sent-moon' : null);
+      say(s.site.comms === 'near' ? 'We got your message! The Moon is only 1.3 light-seconds from Earth, so our answer is on its way.'
+        : s.site.comms === 'relay' ? 'We got your message up here on the relay ship. Radio needs only about 2 seconds to reach our orbit, so the answer is on its way.'
+        : 'Your message is on its way to ' + JA.homeName(s) + '. It takes ' + mdl.info.oneWay + ' to get there, and the answer takes just as long to come back. Keep working — I will call you when it arrives.', true, JA.pick(s, { moon: 'dish-sent-moon', mars: null, sahrun: null }));
       swapCut('send', { kind: 'send', title: 'SIGNAL TRANSMITTED', text: 'OUTPOST-01: ' + (r.msg ? r.msg.text : ''), msg: r.msg, dur: 7 });
     },
     onReply: function (m) {
@@ -1602,9 +1657,10 @@
     var c = r.colony; if (!c) return '';
     var why = c.ok ? 'Your outpost made enough air and food to look after itself today.'
       : 'Not self-sustaining today: ' + (!c.air ? 'the Air Maker made less than half of the air the crew breathed' : '') + (!c.air && !c.food ? ', and ' : '') + (!c.food ? 'there is not enough food for tomorrow\'s dinner' : '') + '.';
-    var more = c.coming ? ' Earth has seen it: a ship is on its way! Look out tomorrow morning.' : c.next ? ' ' + (c.next - c.days) + ' more self-sustaining ' + dayWord().toLowerCase() + (c.next - c.days > 1 ? 's' : '') + ' and Earth will send ' + (c.next === R.townDays[1] ? 'its first supply ship.' : c.next === R.townDays[2] ? 'the first settlers.' : 'more settlers.') : ' Your outpost has grown into a city!';
+    var home = JA.homeName(G.s), Home = JA.homeName(G.s, true);      // Earth, or the relay ship in orbit
+    var more = c.coming ? ' ' + Home + ' has seen it: a ship is on its way! Look out tomorrow morning.' : c.next ? ' ' + (c.next - c.days) + ' more self-sustaining ' + dayWord().toLowerCase() + (c.next - c.days > 1 ? 's' : '') + ' and ' + home + ' will send ' + (c.next === R.townDays[1] ? 'its first supply ship.' : c.next === R.townDays[2] ? 'the first settlers.' : 'more settlers.') : ' Your outpost has grown into a city!';
     if (c.stage >= 2) more += ' Town spirit: ' + Math.round(c.spirit) + '%' + (c.spirit >= R.spiritHelp ? ', so the settlers will lend a hand in the morning.' : c.spirit < R.spiritLow ? '. The town is struggling and will need part of your dinner tomorrow.' : '.');
-    return '<div class="info-row' + (c.ok ? ' good' : '') + '"><span class="ic">🌍</span><div><b>Earth is watching · ' + c.days + ' self-sustaining ' + dayWord().toLowerCase() + (c.days === 1 ? '' : 's') + '</b><p>' + esc(why + more) + '</p></div></div>';
+    return '<div class="info-row' + (c.ok ? ' good' : '') + '"><span class="ic">' + (G.s.site.comms === 'relay' ? '🛰️' : '🌍') + '</span><div><b>' + Home + ' is watching · ' + c.days + ' self-sustaining ' + dayWord().toLowerCase() + (c.days === 1 ? '' : 's') + '</b><p>' + esc(why + more) + '</p></div></div>';
   }
   function nightModal(r) {
     var s = G.s, dw = dayWord();
@@ -1623,14 +1679,14 @@
     var finds = r.finds.length ? '<h3>🔬 What you discovered today</h3>' + r.finds.map(U.findRow).join('') : '';
     var rep = '';
     if (r.repair) rep = '<p class="sub">🔧 ' + (r.repair.overnight ? 'The crew fixed the ' + JA.MACHINES[r.repair.machine].name + ' overnight, but it was out of action for the rest of the day.'
-      : 'You fixed the ' + JA.MACHINES[r.repair.machine].name + (r.repair.asked ? ' with help from Earth' : ' on your own') + (r.repair.misses ? ' (' + r.repair.misses + ' slip' + (r.repair.misses > 1 ? 's' : '') + ').' : ' without a single slip!')) + '</p>';
+      : 'You fixed the ' + JA.MACHINES[r.repair.machine].name + (r.repair.asked ? ' with help from ' + JA.homeName(s) : ' on your own') + (r.repair.misses ? ' (' + r.repair.misses + ' slip' + (r.repair.misses > 1 ? 's' : '') + ').' : ' without a single slip!')) + '</p>';
     var fc = '';
     if (!r.fail) {
       if (r.forecast) {
         var e = s.site.env[r.forecast.env.kind];
         fc = '<h3>📡 Tomorrow\'s forecast</h3><div class="info-row"><span class="ic">' + e.icon + '</span><div><b>' + esc(e.label) + ' · about ' + cellsText(r.forecast.env.cells) + '</b><p>' + esc(e.why) + '</p></div></div>' +
           (r.forecast.full ? U.weatherRow(s, r.forecast.weather, true, 'tomorrow') : '');
-      } else fc = '<div class="info-row"><span class="ic">📡</span><div><b>No forecast for tomorrow</b><p>The Radio Dish had no power today, so Earth could not tell you what is coming.</p></div></div>';
+      } else fc = '<div class="info-row"><span class="ic">📡</span><div><b>No forecast for tomorrow</b><p>The Radio Dish had no power today, so ' + JA.homeName(s) + ' could not tell you what is coming.</p></div></div>';
     }
     // the science of the day: first why things happened (each one is something you did or met today), then real space facts
     var whys = (r.whys || []).map(function (id) { return JA.mechFor(id, s.site.id); }).filter(Boolean);
@@ -1734,16 +1790,18 @@
   function learned(s) {
     var out = [];
     out.push('Power is limited: every cell you carried to one machine was a cell another machine did not get.');
-    if (s.site.id === 'mars') out.push('Mars is so far away that Earth cannot help quickly. Crews there must often decide for themselves.');
-    else out.push('The Moon has no air to block solar storms, so thick soil shielding really matters.');
-    out.push(s.stats.storms ? 'You lived through ' + s.stats.storms + ' solar storm' + (s.stats.storms > 1 ? 's' : '') + ' that really happened on the Sun.' : 'The real Sun stayed calm for your mission. Astronauts get lucky sometimes too!');
-    out.push('Ice is treasure: with electricity it becomes oxygen to breathe, and water for plants.');
+    out.push(JA.pick(s, { mars: 'Mars is so far away that Earth cannot help quickly. Crews there must often decide for themselves.',
+      moon: 'The Moon has no air to block solar storms, so thick soil shielding really matters.',
+      sahrun: 'On a desert world water is life: the crew recycles almost every drop, and every can of water is a choice between air and plants.' }));
+    if (s.weatherSource === 'star') out.push(s.stats.storms ? 'You lived through ' + s.stats.storms + ' storm' + (s.stats.storms > 1 ? 's' : '') + ' from ' + s.site.star.name + ', a made-up star that follows the same physics as our Sun.' : s.site.star.name + ' stayed calm for your mission. Astronauts get lucky sometimes too!');
+    else out.push(s.stats.storms ? 'You lived through ' + s.stats.storms + ' solar storm' + (s.stats.storms > 1 ? 's' : '') + ' that really happened on the Sun.' : 'The real Sun stayed calm for your mission. Astronauts get lucky sometimes too!');
+    out.push(JA.iceWell(s) ? 'Water is treasure: with electricity it becomes oxygen to breathe, and it keeps the plants alive.' : 'Ice is treasure: with electricity it becomes oxygen to breathe, and water for plants.');
     if (s.stats.bestThrow > 7) out.push('Your longest throw flew ' + Math.round(s.stats.bestThrow) + ' m. On Earth the same throw would only go about ' + Math.max(1, Math.round(s.stats.bestThrow * s.site.gravity / 9.81)) + ' m.');
     for (var i = 1; i <= Math.min(s.sol, s.totalSols - 1); i++) { var di = sim.dayInfo(s, i); out.push(dayWord() + ' ' + i + ', ' + di.topic.toLowerCase() + ': ' + di.learn.split('. ')[0] + '.'); }
     if (s.decisions.length) out.push('Some problems have no checklist. You made ' + s.decisions.length + ' big decision' + (s.decisions.length > 1 ? 's' : '') + ' on your own, and saw what each one led to.');
     if (s.stats.baked) out.push('The crew\'s own breath fills the air filter with carbon dioxide. You baked it clean ' + s.stats.baked + ' time' + (s.stats.baked > 1 ? 's' : '') + ', and each time cost a power cell that another machine did not get.');
     if (s.bags > R.bagsFreeShade) out.push('Nothing is free: soil that blocks radiation blocks sunlight too. Your ' + s.bags + ' bags gave a ' + Math.round(sim.shield(s) * 100) + '% shield and cost ' + Math.round(sim.shade(s) * 100) + '% of your solar power.');
-    out.push('Water goes round and round: the recycler gave back most of what the crew drank, and only ice added more.');
+    out.push('Water goes round and round: the recycler gave back most of what the crew drank, and only ' + (JA.iceWell(s) ? 'the well and the dew' : 'ice') + ' added more.');
     return '<ul class="learned">' + out.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
   }
   function decisionsBlock(s) {
@@ -1751,7 +1809,7 @@
   }
   function endButtons(win) {
     return '<div class="modal-actions">' + (win && JA.colony ? '<button class="btn ghost" data-act="future">🔭 See the future again</button>' : '') + (win && JA.keepsake ? '<button class="btn ghost" data-act="cert">🎓 Certificate</button>' : '') +
-      (JA.sunwatch ? '<button class="btn ghost" data-act="sun">☀️ Sun Watch</button>' : '') + (JA.journal ? '<button class="btn ghost" data-act="journal">📓 Field Journal</button>' : '') + '<button class="btn ghost" data-act="science">📚 The real science</button>' +
+      (JA.sunwatch ? '<button class="btn ghost" data-act="sun">' + (G.s && G.s.weatherSource === 'star' ? '⭐ Star Watch' : '☀️ Sun Watch') + '</button>' : '') + (JA.journal ? '<button class="btn ghost" data-act="journal">📓 Field Journal</button>' : '') + '<button class="btn ghost" data-act="science">📚 The real science</button>' +
       (guest() ? '<button class="btn primary" data-act="leave">Leave the crew</button></div><p class="crew-waiting">The host can start the next mission for the whole crew.</p>' : '<button class="btn ghost" data-act="change">Change mission</button><button class="btn primary" data-act="again">' + (crew() ? 'Fly again with the crew ▶' : 'Play again ▶') + '</button></div>');
   }
   function endActions() {
@@ -1801,15 +1859,15 @@
       { cls: 'wide', actions: endActions(), speak: 'Mission complete! You are a ' + rank.name + '. ' + rank.line });
   }
   function failModal(reason) {
-    var s = G.s, f = JA.FAIL[reason];
+    var s = G.s, f = JA.FAIL[reason], tipText = JA.siteText(f.tip, s.site.id);      // the tip may differ per planet
     s.finds.forEach(journalFind);
     hideHud(); Au.play('lose'); endSound('fail-safe');
     U.modal('<div class="rank"><span class="big-icon">' + f.icon + '</span><h2>' + esc(f.title) + '</h2></div>' +
       '<p>' + esc(f.text) + ' You made it to ' + dayWord().toLowerCase() + ' ' + s.sol + ' of ' + s.totalSols + '.</p>' +
-      '<div class="fact"><b>💡 Mission Control\'s tip</b><p>' + esc(f.tip) + '</p><small>Real astronauts practise in simulators for years — and they fail there a lot. That is how they learn.</small></div>' +
+      '<div class="fact"><b>💡 Mission Control\'s tip</b><p>' + esc(tipText) + '</p><small>Real astronauts practise in simulators for years — and they fail there a lot. That is how they learn.</small></div>' +
       journalLine() + decisionsBlock(s) +
       (s.finds.length ? '<h3>🔬 Your discoveries (' + s.finds.length + ')</h3>' + s.finds.map(U.findRow).join('') : '') + endButtons(),
-      { cls: s.decisions.length ? 'wide' : '', actions: endActions(), speak: f.title + '. ' + f.text + ' ' + f.tip });
+      { cls: s.decisions.length ? 'wide' : '', actions: endActions(), speak: f.title + '. ' + f.text + ' ' + tipText });
   }
 
   // =====================================================================
@@ -1821,12 +1879,13 @@
       : '<div class="keys"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><div>Walk · drive the rover (arrow keys work too)</div><span><kbd>Mouse</kbd></span><div>Drag to look around · wheel to zoom</div><span><kbd>E</kbd></span><div>Use, pick up, plug in, drill (hold)</div><span><kbd>F</kbd></span><div>Hold to aim a throw, let go to throw</div><span><kbd>Space</kbd></span><div>Jump</div><span><kbd>Shift</kbd></span><div>Run (uses more air)</div><span><kbd>Q</kbd></span><div>Put down what you are holding</div><span><kbd>V</kbd></span><div>Helmet view: see through your own visor (A and D turn you)</div><span><kbd>C</kbd></span><div>Save a postcard picture</div><span><kbd>L</kbd></span><div>Camera filter: see like a real space camera</div><span><kbd>X</kbd></span><div>Camera effects: full, lite or off</div><span><kbd>T</kbd></span><div>Wrist tablet: a hologram that shows why, about what just happened or the machine next to you</div><span><kbd>J</kbd></span><div>Field Journal: every piece of science you have found</div><span><kbd>M</kbd></span><div>Mini map: the buildings, your jobs and where you are</div><span><kbd>N</kbd></span><div>Music on or off</div></div>';
     openInfo('<h2>How to play</h2>' + keys +
       '<div class="info-row"><span class="ic">🔋</span><div><b>Power cells</b><p>The Solar Rack charges a few cells each day. Carry or throw each one into a machine\'s socket: Air Maker, Greenhouse, Soil Bagger, Lab, Radio Dish or Rover.</p></div></div>' +
-      '<div class="info-row"><span class="ic">🧊</span><div><b>Ice = air and water</b><p>Start the ice drills at the far crater: each one digs out a chunk by itself while you start the next. Drop it in the Air Maker to make oxygen, or in the Greenhouse tank to water the plants. The rover bed carries four things.</p></div></div>' +
+      (G.s && JA.iceWell(G.s) ? '<div class="info-row"><span class="ic">💧</span><div><b>Well water = air and water</b><p>Start the well pumps at the ' + esc(G.s.site.iceName) + ': each one fills a can by itself while you start the next. Pour it into the Air Maker to make oxygen, or into the Greenhouse tank to water the plants. The rover bed carries four things.</p></div></div>'
+        : '<div class="info-row"><span class="ic">🧊</span><div><b>Ice = air and water</b><p>Start the ice drills at the far crater: each one digs out a chunk by itself while you start the next. Drop it in the Air Maker to make oxygen, or in the Greenhouse tank to water the plants. The rover bed carries four things.</p></div></div>') +
       '<div class="info-row"><span class="ic">🫧</span><div><b>Life support: the filter and the water</b><p>The crew\'s breath slowly fills the CO₂ filter. A power cell at the Air Scrubber, beside the airlock, bakes it clean. One water tank serves the crew and the plants: the recycler gives back most of what the crew drinks, plants keep theirs, and only ice adds more.</p></div></div>' +
       '<div class="info-row"><span class="ic">🥔</span><div><b>Two crops</b><p>Lettuce is ready in under a day but fills little. Potatoes take almost two days and fill a lot. At an empty bed, ' + (touch ? 'the 🎯 button' : 'Q') + ' swaps the seeds in your pocket.</p></div></div>' +
       '<div class="info-row"><span class="ic">💡</span><div><b>Why did that happen?</b><p>When something goes right or wrong, a blue card says why. ' + (touch ? 'Tap it, or tap the round radio badge,' : 'Press T, or tap it,') + ' and the tablet on your wrist projects a hologram that shows how it works. Everything you find is kept in the 📓 Field Journal.</p></div></div>' +
       '<div class="info-row"><span class="ic">🚙</span><div><b>The rover</b><p>It carries four things in its bed: stand beside the bed to take one out. Drive carefully! A fast crash throws the cargo out and shakes charge out of the battery.</p></div></div>' +
-      '<div class="info-row"><span class="ic">🏘️</span><div><b>The town</b><p>Keep the outpost looking after itself and ships come from Earth: first supplies, then settlers, in the end a city. The people share your air, and a town in good spirits brings you ice, water and power.</p></div></div>' +
+      '<div class="info-row"><span class="ic">🏘️</span><div><b>The town</b><p>Keep the outpost looking after itself and ships come from ' + (G.s && G.s.site.comms === 'relay' ? 'orbit' : 'Earth') + ': first supplies, then settlers, in the end a city. The people share your air, and a town in good spirits brings you ice, water and power.</p></div></div>' +
       (JA.pioneer ? '<div class="info-row"><span class="ic">⛏️</span><div><b>Pioneer mode</b><p>A hard mode you pick before launch. Supplies are short, but you can break rocks into rubble, metal and glass sand and build with them' + (touch ? '' : ' (key B)') + ': solar panels, a battery bank, a water cistern, brick walls, an ice rig and more.</p></div></div>' : '') +
       '<div class="info-row"><span class="ic">🛡️</span><div><b>Shield and storms</b><p>Throw soil bags onto the dome to block radiation. The solar storms are real ones from NASA records — when the alarm sounds, get inside!</p></div></div>' +
       '<div class="info-row"><span class="ic">🧪</span><div><b>Science</b><p>Drill rock cores at the glowing orange sites and study them in the Lab. Carry the instruments from the rocket pad to the blue rings. On the last day, load the sample case and board the rocket.</p></div></div>' +
@@ -1837,8 +1896,9 @@
   }
   function scienceInfo() {
     var s = G.s, mission = '';
-    if (s && s.weather.length) mission = '<p><b>This mission:</b> ' + (s.weatherSource === 'live' ? 'live data' : 'archived data' + (s.weatherFallback ? ' (NASA could not be reached, so this is not live)' : '')) + ', real dates ' + JA.weather.prettyDate(s.weather[0].date) + ' to ' + JA.weather.prettyDate(s.weather[s.weather.length - 1].date) + '.</p>';
-    var links = Object.keys(JA.SOURCES).map(function (k) { var x = JA.SOURCES[k]; return '<li><a href="' + x.url + '" target="_blank" rel="noopener">' + esc(x.name) + '</a></li>'; }).join('');
+    if (s && s.weather.length && s.weatherSource === 'star') mission = '<p><b>This mission:</b> made-up storms from ' + esc(s.site.star.name) + ', the made-up star of ' + esc(s.site.name) + '. No NASA data: the game invents them with the same physics as our Sun (star spots that turn with the star, CMEs, and particles that follow its spiral magnetic field).</p>';
+    else if (s && s.weather.length) mission = '<p><b>This mission:</b> ' + (s.weatherSource === 'live' ? 'live data' : 'archived data' + (s.weatherFallback ? ' (NASA could not be reached, so this is not live)' : '')) + ', real dates ' + JA.weather.prettyDate(s.weather[0].date) + ' to ' + JA.weather.prettyDate(s.weather[s.weather.length - 1].date) + '.</p>';
+    var links = Object.keys(JA.SOURCES).map(function (k) { var x = JA.SOURCES[k]; return x.url ? '<li><a href="' + x.url + '" target="_blank" rel="noopener">' + esc(x.name) + '</a></li>' : '<li>' + esc(x.name) + '</li>'; }).join('');
     openInfo('<h2>The real science</h2><p class="sub">For curious kids, parents, teachers and judges.</p>' +
       '<h3>Real data inside the game</h3><ul class="src-list">' +
       '<li><b>Space weather — NASA DONKI.</b> Every storm is a real event from NASA\'s Space Weather Database of Notifications, Knowledge, Information: solar flares (the flash), coronal mass ejections (CMEs, clouds of solar gas) and solar energetic particle events (SEPs, the radiation). “Live” mode downloads the last 30 days when the mission starts. “May 2024” mode uses records saved inside the game (22 April – 31 May 2024) and is labelled as an archive. Each mission day replays one real calendar day.</li>' +
@@ -1864,7 +1924,8 @@
       '<li>The long dark (the Moon, on longer missions) is one simulated day with almost no Sun. Real south-pole crater rims are sunlit most of the year, but not all of it.</li>' +
       '<li>Running uses one and a half times the air: a game number for a real effect.</li>' +
       '<li>Rover crashes: it is true that low gravity makes a rover lighter but no easier to stop. The lost battery charge and the flying cargo are game rules.</li>' +
-      '<li>The ice drills are simplified: one press, a few seconds, one clean chunk. Real ice there is mixed into the soil, and no one has mined it yet.</li>' +
+      (s && JA.iceWell(s) ? '<li>The well pumps are simplified: one press, a few seconds, one clean can of water. Real desert wells reach water hundreds of metres down.</li>'
+        : '<li>The ice drills are simplified: one press, a few seconds, one clean chunk. Real ice there is mixed into the soil, and no one has mined it yet.</li>') +
       '<li>The town is imagined, built on real ideas. Its people, the air they share and the "town spirit" meter are game rules, not predictions.</li>' +
       '<li>Pioneer mode: making bricks, metal and glass from local soil is real research ("in-situ resource use"). Getting them by breaking a rock with a hammer, and every cost and benefit, are game rules.</li>' +
       '<li>Power cells, air and food are game units, tuned so that no choice is free.</li>' +
@@ -1885,11 +1946,11 @@
     if (s.sol === 1) {
       add(touch ? 'Walk with the stick, drag to look, and try a jump' : 'Walk (W A S D), drag the mouse to look, jump (Space)', G.tut.moved, null, '👟');
       add('Carry a power cell from the Solar Rack to the Air Maker', G.tut.airCell, has('cell') ? sp.sockets.air : sp.rack, '🔋');
-      add('Fetch ice from the ' + s.site.iceName + ' for the Air Maker (the rover is faster!)', G.tut.ice, airT, '🧊');
+      add('Fetch ' + JA.waterWords(s).stuff + ' from the ' + s.site.iceName + ' for the Air Maker (the rover is faster!)', G.tut.ice, airT, JA.waterWords(s).icon);
       add('Greenhouse: a power cell, ice for water, then plant seeds', G.tut.grow, has('cell') ? sp.sockets.food : has('ice') ? sp.hoppers.water : sp.beds[1], '🥬');
     } else {
       var dinner = sim.dinner(s);
-      add('Air for today: feed the Air Maker ice and power', s.air >= (sim.airDrain(s) * sim.stale(s) + s.leak) * left + 3, airT, '💨');
+      add('Air for today: feed the Air Maker ' + JA.waterWords(s).stuff + ' and power', s.air >= (sim.airDrain(s) * sim.stale(s) + s.leak) * left + 3, airT, '💨');
       if (!last) {
         var ripe = -1; m.food.beds.forEach(function (b, i) { if (b.state === 'ripe' && ripe < 0) ripe = i; });
         add('Dinner tonight needs ' + dinner + ' food', s.food >= dinner, has('crate') ? sp.hoppers.pantry : ripe >= 0 ? sp.beds[ripe] : sp.beds[1], '🥬');
@@ -1911,7 +1972,7 @@
     var instItem = A.items.filter(function (it) { return it.type === 'inst' && it.state !== 'held'; })[0];
     add('Set up the science instruments (' + ni + '/3)', ni >= 3, has('inst') ? sp.inst[c.data.id] : instItem ? instItem.pos : null, '📦', true);
     if (!s.lookout && JA.observe && s.sol >= 2) add('Optional: sit on the lookout rock and watch the sky', false, v2.set(Tn.L.seat[0], Tn.height(Tn.L.seat[0], Tn.L.seat[1]) + 1.2, Tn.L.seat[1]).clone(), '🌄', true);
-    if (G.colonyVisit) add('Visit the new settlement: people from Earth!', false, v2.set(Tn.L.colony[0], Tn.height(Tn.L.colony[0], Tn.L.colony[1]), Tn.L.colony[1]).clone(), '🏘️', true);
+    if (G.colonyVisit) add(s.site.comms === 'relay' ? 'Visit the new settlement: people from far away!' : 'Visit the new settlement: people from Earth!', false, v2.set(Tn.L.colony[0], Tn.height(Tn.L.colony[0], Tn.L.colony[1]), Tn.L.colony[1]).clone(), '🏘️', true);
     var rock = ext('sky', 'goal', s, v3);
     if (rock) add(rock.text, false, rock.target ? rock.target.clone() : null, '☄️', true);
     if (last) {
@@ -1932,9 +1993,16 @@
     'Next: food. The Greenhouse needs light from a power cell, water from ice, and seeds in the beds.',
     'You have got the basics! Now you choose: soil bags for the shield, rock cores for science, or the instruments by the rocket. There is not enough power for everything!'];
   var TUT_VOX = [null, 'rack-intro', 'air-intro', 'food-intro', 'act-basics-done'];
+  // on a well planet (Sahrun) two lines speak of water, not ice; they have no recording, so the read-aloud voice says them
+  var TUT_WELL = { 2: 'Now the Air Maker needs water to turn into oxygen. The well is far away — plug a cell into the back of the rover and drive there!',
+    3: 'Next: food. The Greenhouse needs light from a power cell, water from the well, and seeds in the beds.' };
   function tutorialTalk() {
     var t = G.tut, step = !t.moved ? 0 : !t.airCell ? 1 : !t.ice ? 2 : !t.grow ? 3 : 4;
-    if (step > G.tutStep) { G.tutStep = step; if (TUT_LINES[step]) { say(TUT_LINES[step], true, TUT_VOX[step]); Au.play('good'); } }
+    if (step > G.tutStep) {
+      G.tutStep = step;
+      var well = JA.iceWell(G.s) && TUT_WELL[step];
+      if (TUT_LINES[step]) { say(well || TUT_LINES[step], true, well ? undefined : TUT_VOX[step]); Au.play('good'); }
+    }
   }
 
   function placeMark(list, pos, icon, label, cls, color) {
@@ -1968,7 +2036,7 @@
     W.forward(v1);
     var goals = [], spots = [];
     (G.goalList || []).forEach(function (gl) { if (!gl.done && gl.target) goals.push({ x: gl.target.x, z: gl.target.z, icon: gl.icon, now: !!gl.now }); });
-    for (i = 0; i < sp.drill.length; i++) if (sim.coresLeft(s, i) > 0) spots.push({ x: sp.drill[i].x, z: sp.drill[i].z, icon: JA.GEO[s.site.id][i].icon, color: '#ffb84d' });
+    for (i = 0; i < sp.drill.length; i++) if (sim.coresLeft(s, i) > 0) spots.push({ x: sp.drill[i].x, z: sp.drill[i].z, icon: JA.pick(s, JA.GEO)[i].icon, color: '#ffb84d' });
     Object.keys(sp.inst).forEach(function (id) { if (!s.inst[id]) spots.push({ x: sp.inst[id].x, z: sp.inst[id].z, icon: '📍', color: '#5cf0ff' }); });
     for (i = 0; i < sp.photo.length; i++) if (!s.photos[i]) spots.push({ x: sp.photo[i].x, z: sp.photo[i].z, icon: '📸', color: '#ffd23f' });
     var rk = B.P && B.P.rocket && B.P.rocket.base;
@@ -1976,7 +2044,7 @@
       me: me(), yaw: drive ? A.rover.yaw : A.astro.yaw, fx: v1.x, fz: v1.z, t: G.clock,
       buildings: MAP_BUILD.filter(function (k) { return B.pos[k]; }).map(function (k) { return { key: k, x: B.pos[k].x, z: B.pos[k].z }; }),
       goals: goals, spots: spots, rover: drive ? null : A.rover.pos,
-      ice: { x: Tn.L.ice[0], z: Tn.L.ice[1], r: Tn.iceR }, pad: rk ? { x: rk.x, z: rk.z, r: 12 } : null,
+      ice: { x: Tn.L.ice[0], z: Tn.L.ice[1], r: Tn.iceR, icon: JA.iceWell(s) ? 'water' : 'ice' }, pad: rk ? { x: rk.x, z: rk.z, r: 12 } : null,
       craters: Tn.craters, playR: Tn.PLAY_R
     });
   }
@@ -2006,7 +2074,7 @@
       if (s.sol === 1) { if (!G.tut.grow) checkGrow(); tutorialTalk(); }
       // Mission Control's advice now comes with its reason, and with a hologram when the tablet has one
       if (G.clock > G.hintAt && (s.sol > 1 || G.tutStep >= 4)) { G.hintAt = G.clock + 9; var h = sim.hintInfo(s); if (h) say(h.text + (h.why ? ' ' + h.why : ''), false, JA.voiceFor(h.text), false, h.topic); }
-      if (G.colonyVisit && G.mode === 'play' && d2(pos, { x: Tn.L.colony[0], z: Tn.L.colony[1] }) < 30) { G.colonyVisit = 0; Au.play('discovery'); say('Welcome to the new settlement! People came all the way from Earth because your outpost could look after itself.', true); }
+      if (G.colonyVisit && G.mode === 'play' && d2(pos, { x: Tn.L.colony[0], z: Tn.L.colony[1] }) < 30) { G.colonyVisit = 0; Au.play('discovery'); say(G.s.site.comms === 'relay' ? 'Welcome to the new settlement! People came down from the relay ship because your outpost could look after itself.' : 'Welcome to the new settlement! People came all the way from Earth because your outpost could look after itself.', true); }
       if (G.mode === 'play' && !G.tips.pov && !G.pov && G.clock > (s.sol === 1 ? 80 : 15) && G.clock > G.sayAt + 4) tip('pov', touch ? 'Tap 👁 to look through your own visor!' : 'Press V to look through your own visor. Press V again to come back.');
     }
     if (G.mode !== 'play') { U.tags([]); U.marks([]); return; }
@@ -2015,14 +2083,14 @@
     function tag(p, text, cls) { if (d2(pos, p) > 62) return; var q = W.project(p); if (q.hidden || q.x < 40 || q.x > W.w - 40 || q.y < 110 || q.y > W.h - 60) return; tags.push({ x: q.x, y: q.y, text: text, cls: cls }); }
     var br = function (o) { return o.broken ? 'bad' : ''; };
     tag(B.pos.rack, '☀️ Solar Rack · ' + s.rack.cells + ' 🔋' + (s.rack.broken ? ' · BROKEN' : ''), br(s.rack) || (s.rack.cells >= sim.rackMax(s) ? 'warn' : ''));
-    tag(B.pos.air, '💨 Air Maker · ⚡' + m.air.power + ' 🧊' + m.air.queue + (m.air.broken ? ' · BROKEN' : ''), br(m.air) || (m.air.power === 0 || m.air.queue === 0 ? 'warn' : ''));
+    tag(B.pos.air, '💨 Air Maker · ⚡' + m.air.power + ' ' + JA.waterWords(s).icon + m.air.queue + (m.air.broken ? ' · BROKEN' : ''), br(m.air) || (m.air.power === 0 || m.air.queue === 0 ? 'warn' : ''));
     tag(B.pos.food, '🥬 Greenhouse · 💡' + (m.food.lamp > 0 ? 'on' : 'off') + ' 💧' + (s.water >= 1 ? Math.round(s.water) : 'dry') + (m.food.broken ? ' · BROKEN' : ''), br(m.food) || (s.water < R.waterWarn ? 'warn' : ''));
     tag(B.pos.bag, '🛡️ Soil Bagger' + (m.bag.pending ? ' · making ' + m.bag.pending : ''), '');
     tag(B.pos.lab, '🔬 Lab · ⚡' + m.lab.power + ' 🧪' + m.lab.queue.length + (m.lab.broken ? ' · BROKEN' : ''), br(m.lab) || (m.lab.queue.length && !m.lab.power ? 'warn' : ''));
     tag(B.pos.comms, '📡 Radio Dish · ' + (m.comms.on ? 'on' : 'off'), '');
     tag(B.pos.hab, '🏠 Shield ' + Math.round(sim.shield(s) * 100) + '% · ' + s.bags + '/' + R.shieldSlots + ' bags' + (sim.shade(s) > 0 ? ' · lamps −' + Math.round(sim.shade(s) * 100) + '% ☀️' : ''), '');
     if (B.pos.scrub) tag(B.pos.scrub, '🫧 Air Scrubber · filter ' + Math.round(s.filter) + '%', s.filter < R.filterWarn ? 'warn' : '');
-    G.rigs.forEach(function (rig, k) { if (rig.state !== 'idle') { v2.copy(sp.ice[k]); v2.y += 2.8; tag(v2, rig.state === 'drill' ? '🧊 Drilling ' + Math.round(rig.p * 100) + '%' : '🧊 Cooling ' + Math.ceil(rig.t) + ' s', ''); } });
+    G.rigs.forEach(function (rig, k) { if (rig.state !== 'idle') { v2.copy(sp.ice[k]); v2.y += 2.8; tag(v2, rig.state === 'drill' ? JA.waterWords(s).icon + (JA.iceWell(s) ? ' Pumping ' : ' Drilling ') + Math.round(rig.p * 100) + '%' : JA.waterWords(s).icon + ' Cooling ' + Math.ceil(rig.t) + ' s', ''); } });
     if (!A.rover.driver) { v2.copy(A.rover.pos); v2.y += 5; tag(v2, '🚙 Rover · ' + Math.ceil(m.rover.charge) + ' s', m.rover.charge <= 0 ? 'warn' : ''); }
     if (s.sol >= s.totalSols) tag(B.pos.rocket, '🚀 Rocket' + (s.caseLoaded ? ' · samples on board' : ''), '');
     U.tags(tags);
@@ -2034,12 +2102,15 @@
     if (alarm || far(sp.door, 34)) { v2.copy(sp.door); v2.y += 6; placeMark(marks, v2, '🏠', label(sp.door), alarm ? 'alarm' : '', '#4dff9a'); }
     if (!A.rover.driver && far(A.rover.pos, 22)) { v2.copy(A.rover.pos); v2.y += 4; placeMark(marks, v2, '🚙', label(A.rover.pos), '', '#9fe8ff'); }
     v3.set(Tn.L.ice[0], Tn.height(Tn.L.ice[0], Tn.L.ice[1]) + 6, Tn.L.ice[1]);
-    if (far(v3, 36)) placeMark(marks, v3, '🧊', label(v3), 'small', '#4fd8ff');
-    for (i = 0; i < sp.drill.length; i++) if (sim.coresLeft(s, i) > 0 && far(sp.drill[i], 14)) { v2.copy(sp.drill[i]); v2.y += 4; placeMark(marks, v2, JA.GEO[s.site.id][i].icon, '', 'small', '#ffb84d'); }
+    if (far(v3, 36)) placeMark(marks, v3, JA.waterWords(s).icon, label(v3), 'small', '#4fd8ff');
+    for (i = 0; i < sp.drill.length; i++) if (sim.coresLeft(s, i) > 0 && far(sp.drill[i], 14)) { v2.copy(sp.drill[i]); v2.y += 4; placeMark(marks, v2, JA.pick(s, JA.GEO)[i].icon, '', 'small', '#ffb84d'); }
+    if (sp.dew && s.dew >= 1 && far(sp.dew, 14)) { v2.copy(sp.dew); v2.y += 3; placeMark(marks, v2, '💧', '', 'small', '#5aa8ff'); }
     Object.keys(sp.inst).forEach(function (id) { if (!s.inst[id] && far(sp.inst[id], 14)) { v2.copy(sp.inst[id]); v2.y += 4; placeMark(marks, v2, '📍', '', 'small', '#5cf0ff'); } });
     for (i = 0; i < sp.photo.length; i++) if (!s.photos[i] && far(sp.photo[i], 14)) { v2.copy(sp.photo[i]); v2.y += 4; placeMark(marks, v2, '📸', '', 'small', '#ffd23f'); }
     var crater = ext('sky', 'marker', s, pos, v2);
     if (crater) placeMark(marks, crater, '☄️', label(crater), '', '#ffb347');
+    var ray = ext('ray', 'marker', s, pos, v2);       // the Sandquake Sensor tracks a sand ray under the dunes
+    if (ray) placeMark(marks, ray, '〰️', label(ray), 'alarm', '#ffb347');
     U.marks(marks);
   }
 
@@ -2188,7 +2259,7 @@
     read.addEventListener('click', function () { Au.setReading(!Au.readingOn()); this.classList.toggle('off', !Au.readingOn()); this.classList.toggle('on', Au.readingOn()); if (Au.readingOn()) Au.speak('Read aloud is on. I will read the messages to you.'); });
 
     // little moments from the physics
-    A.onJump = function () { Au.play('jump'); G.tut.jumped = true; if (G.s) tip('jump', G.s.site.id === 'moon' ? 'Wheee! The Moon\'s gravity is only one-sixth of Earth\'s, so you jump six times higher.' : 'Boing! Mars gravity is about 38% of Earth\'s, so you jump more than twice as high.'); };
+    A.onJump = function () { Au.play('jump'); G.tut.jumped = true; if (G.s) tip('jump', JA.pick(G.s, { moon: 'Wheee! The Moon\'s gravity is only one-sixth of Earth\'s, so you jump six times higher.', mars: 'Boing! Mars gravity is about 38% of Earth\'s, so you jump more than twice as high.', sahrun: 'Hop! In this game Sahrun\'s gravity is half of Earth\'s, so you jump about twice as high.' })); };
     A.onLand = function (rover) { Au.play(rover ? 'thud' : 'land'); if (!rover && !G.room) W.dust(A.astro.pos.x, A.astro.pos.z, 8, 2, 0.45); };
     A.onBonk = function () { fxPulse('shock', 0.45); Au.play('thud'); W.cam.shake = Math.max(W.cam.shake, 0.12); tip('bonk', 'Bonk! In low gravity even a small jump reaches the ceiling indoors. Mind your helmet!'); };
     A.onStep = function (p, yaw, side, sprint, who) {
@@ -2247,7 +2318,8 @@
     A.onDevil = function (kind) {
       if (!G.s || (G.mode !== 'play' && G.mode !== 'inside')) return;
       // (cleaning the panels is decided by the mission rules: see the 'devil' event in handleEvents)
-      if (kind === 'astro') tip('devil2', 'Whee! A dust devil! Mars air is so thin that it feels like a gentle breeze.');
+      if (kind === 'astro') tip('devil2', JA.pick(G.s, { moon: 'Whee! A dust devil! Mars air is so thin that it feels like a gentle breeze.', mars: 'Whee! A dust devil! Mars air is so thin that it feels like a gentle breeze.',
+        sahrun: 'Whoa! A dust devil! Sahrun\'s thick air gives it a real push. On Earth, desert dust devils can knock over a tent.' }));
     };
   }
 
@@ -2296,6 +2368,7 @@
         checkZones();
         SKY.outside = G.mode === 'play'; SKY.pos = me();
         ext('sky', 'update', dt, G.s, SKY);
+        rayStep(dt, true);
       }
       if (G.s) {
         WORLD.mode = G.mode; WORLD.pos = me(); WORLD.s = G.s;
@@ -2341,6 +2414,7 @@
     if (A.astro) A.update(dt, !paused && (G.mode === 'play' || G.mode === 'inside') && !G.mini && !G.cut ? G.input : null);
     if (G.s && !still) {
       if (day && (c.host || G.s.sky)) { SKY.outside = G.mode === 'play'; SKY.pos = me(); ext('sky', 'update', dt, G.s, SKY); }
+      if (day && (c.host || G.s.ray)) rayStep(dt, !!c.host);
       WORLD.mode = G.mode; WORLD.pos = me(); WORLD.s = G.s;
       ext('colony', 'update', dt, WORLD);
     }

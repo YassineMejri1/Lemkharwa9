@@ -8,7 +8,9 @@
    Moon: the particle storms NASA's satellites near Earth really measured (DONKI SEP), plus CME shock arrivals at Earth.
    Mars: no particle detector near Mars reports to DONKI, so each fast CME is checked against the real positions of
    Earth and Mars on that date (how well was Mars connected to where it erupted?), plus the WSA-ENLIL model's CME
-   arrivals at Mars. Live data covers the last 30 days; the embedded archive covers 22 Apr – 31 May 2024. */
+   arrivals at Mars. Live data covers the last 30 days; the embedded archive covers 22 Apr – 31 May 2024.
+   Sahrun (a made-up planet): it circles a made-up star, so there are no NASA records. star() invents a record in the
+   same shape, from the same physics as Mars, and every screen that shows it says it is made up. */
 (function (JA) {
   'use strict';
 
@@ -72,11 +74,17 @@
   // the more particles reach the planet (the fall-off with angle follows studies of many SEP events: about 43° wide).
   var OMEGA_SUN = 2.7e-6, V_WIND = 400, SEP_WIDTH = 43;
   function footpointDeg(rAU) { return OMEGA_SUN * rAU * KM_PER_AU / V_WIND * 180 / Math.PI; }
+  // whose storm records a planet replays: 'mars', 'earth' for Earth and the Moon, or 'star' for a made-up star
+  // (the planet's spaceWeather trait)
+  function spaceAt(siteId) { return siteId === 'mars' || siteId === 'earth' ? siteId : JA.siteOf ? JA.siteOf(siteId).spaceWeather : siteId === 'mars' ? 'mars' : 'earth'; }
   function connection(dateStr, lon, speed, siteId) {
-    var p = planets(dateStr), obs = siteId === 'mars' ? p.mars : p.earth;
+    var p = planets(dateStr), obs = spaceAt(siteId) === 'mars' ? p.mars : p.earth;
     var obsLon = wrap180((obs.lon - p.earth.lon) * 180 / Math.PI);          // the site's direction seen from the Sun; 0 = Earth
     var foot = obsLon + footpointDeg(obs.r);
-    var theta = Math.abs(wrap180(lon - foot));
+    return link(Math.abs(wrap180(lon - foot)), speed);
+  }
+  // theta: degrees between the eruption and the spot the planet is linked to; speed: the CME's, in km/s
+  function link(theta, speed) {
     var score = Math.max(0, (speed - 600) / 1000) * Math.exp(-theta * theta / (2 * SEP_WIDTH * SEP_WIDTH));
     return { theta: theta, score: score, level: score >= 1.2 ? 3 : score >= 0.6 ? 2 : score >= 0.3 ? 1 : 0 };
   }
@@ -99,7 +107,8 @@
   // Returns a promise of { source: 'live'|'archive', start, end, flares, sep, cme, arrivals, fallback? }.
   // Live needs the flares, the particle events and the CMEs; the ENLIL arrivals are a bonus. If NASA cannot be
   // reached, the archive is used and marked as a fallback (the game must then say clearly it is not live).
-  function load(mode) {
+  function load(mode, siteId) {
+    if (siteId && spaceAt(siteId) === 'star') return Promise.resolve(star(siteId, Math.floor(Math.random() * 1e9), mode === 'archive'));
     if (mode !== 'live') return Promise.resolve(archive());
     var end = new Date(), start = new Date(end.getTime() - 30 * DAY);
     var key = 'ja-donki2-' + iso(end), q = '?startDate=' + iso(start) + '&endDate=' + iso(end);
@@ -130,13 +139,64 @@
       });
   }
 
+  // ---------- a made-up star, for a made-up planet ----------
+  // A planet whose spaceWeather trait is 'star' (Sahrun) circles a made-up star (its site.star: name, distance in AU,
+  // days to turn once). star() writes it a record of STAR_DAYS days in the same shape as NASA's (flares, CMEs, CME
+  // arrivals), from the same physics this file uses for Mars:
+  //   - active regions (star spots) are born, grow and fade over days to weeks, while the star turns
+  //   - a bigger region flares more often and more strongly; the big flares throw out CMEs, and the stronger the
+  //     flare, the faster the CME
+  //   - particles reach the planet only from the part of the star its spiral magnetic field links it to (link(), the
+  //     same rule as for Mars); a CME aimed at the planet also hits it a few days later with its shock wave
+  // The numbers are made up but close to our Sun's. stormy: the harder choice, a month with more and bigger spots.
+  var STAR_DAYS = 60;
+  function starOf(siteId) { var P = JA.siteOf ? JA.siteOf(siteId) : null; return (P && P.star) || { name: 'the star', au: 1, turn: 25 }; }
+  function starLink(lon, speed, siteId) { return link(Math.abs(wrap180(lon - footpointDeg(starOf(siteId).au || 1))), speed); }
+  function seeded(seed) {
+    var a = seed >>> 0;
+    return function () { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  // log strength (C1 = 0, M1 = 1, X1 = 2) -> a class name like 'M2.4'
+  function flareClass(L) { var i = Math.min(2, Math.floor(L)), n = Math.pow(10, L - i); n = i === 2 ? Math.min(n, 20) : Math.min(n, 9.9); return 'CMX'.charAt(i) + n.toFixed(1); }
+  function star(siteId, seed, stormy) {
+    var S = starOf(siteId), rnd = seeded(seed || 1), turn = S.turn || 25, au = S.au || 1;
+    var now = new Date(), end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()), start = end - (STAR_DAYS - 1) * DAY;
+    var regions = [], flares = [], cme = [], arrivals = [], d, k;
+    function stamp(day) { return new Date(start + day * DAY).toISOString().slice(0, 16) + 'Z'; }
+    function spawn(day) { regions.push({ lon: rnd() * 360 - 180, born: day, life: 5 + rnd() * 15, peak: (0.35 + Math.pow(rnd(), 2.2) * 1.5) * (stormy ? 1.25 : 1), ar: 100 + regions.length }); }
+    for (k = 0; k < 3; k++) spawn(-rnd() * 8);
+    for (d = 0; d < STAR_DAYS; d++) {
+      if (rnd() < 0.28 * (stormy ? 1.6 : 1)) spawn(d + rnd());
+      regions.forEach(function (r) {
+        var age = d + 0.5 - r.born;
+        if (age < 0 || age > r.life) return;
+        var size = r.peak * Math.sin(Math.PI * age / r.life);           // grows, then fades
+        var lon = wrap180(r.lon + 360 * (d + 0.5) / turn);              // where it faces today: 0 = at the planet, + = west
+        for (var n = 0; n < 4 && rnd() < 0.5 * size; n++) {
+          var L = size * 1.45 + (rnd() - 0.55) * 1.1;
+          if (L < 0) continue;                                           // too small to list
+          var t = stamp(d + rnd() * 0.999);
+          if (Math.abs(lon) <= 90) flares.push({ t: t, c: flareClass(L), ar: r.ar, loc: (lon >= 0 ? 'W' : 'E') + Math.round(Math.abs(lon)), link: '' });   // only the near side is seen
+          if (L >= 0.9 && rnd() < 0.3 + 0.25 * (L - 0.9)) {
+            var v = Math.round((380 + 650 * (L - 0.6) * (0.55 + rnd() * 0.9)) / 10) * 10;
+            cme.push({ t: t, lon: Math.round(lon), v: v, link: '' });
+            if (Math.abs(lon) < 55 && v > 500) arrivals.push({ loc: 'star', t: stamp(d + au * KM_PER_AU / (v * 0.8) / 86400), gb: Math.abs(lon) > 35, link: '' });
+          }
+        }
+      });
+    }
+    function byTime(a, b) { return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; }
+    return { source: 'star', star: S.name, stormy: !!stormy, seed: seed, start: iso(new Date(start)), end: iso(new Date(end)),
+      flares: flares.sort(byTime), sep: [], cme: cme.sort(byTime), arrivals: arrivals.sort(byTime), notes: [] };
+  }
+
   // ---------- one entry per real calendar day, for one site ----------
   // level 0–3 is the radiation storm that reached the site that day; cause says what it was:
   //   'sep'   particles measured near Earth (Moon), or a CME well connected to Mars (Mars)
   //   'cme'   a CME's shock wave arriving (a smaller particle storm)
   // cls/time/link/loc describe the day's strongest flare (seen from Earth): the flash, not the dose.
   function byDay(data, siteId) {
-    var mars = siteId === 'mars', days = [], index = {};
+    var who = spaceAt(siteId), mars = who === 'mars', days = [], index = {};
     var t0 = Date.parse(data.start + 'T00:00:00Z'), t1 = Date.parse(data.end + 'T00:00:00Z');
     for (var t = t0; t <= t1; t += DAY) {
       var d = { date: iso(new Date(t)), cls: null, level: 0, strength: 0, link: null, time: null, count: 0, loc: '',
@@ -151,7 +211,7 @@
       if (!d.cls || rank(f.c) > rank(d.cls)) { d.cls = f.c; d.link = f.link; d.time = String(f.t).slice(11, 16); d.loc = f.loc || ''; }
     });
     function raise(d, level, cause) { if (level > d.level) { d.level = level; d.cause = cause; return true; } return false; }
-    if (!mars) {
+    if (who === 'earth') {
       (data.sep || []).forEach(function (e) {
         var d = index[String(e.t).slice(0, 10)], lv = sepLevel(e.inst || []);
         if (d && raise(d, lv, 'sep')) d.sep = { time: String(e.t).slice(11, 16), inst: (e.inst || []).join(', '), link: e.link };
@@ -160,17 +220,17 @@
       (data.cme || []).forEach(function (c) {
         var d = index[String(c.t).slice(0, 10)];
         if (!d) return;
-        var k = connection(d.date, c.lon, c.v, 'mars');
+        var k = who === 'star' ? starLink(c.lon, c.v, siteId) : connection(d.date, c.lon, c.v, 'mars');
         if (raise(d, k.level, 'sep')) d.cme = { time: String(c.t).slice(11, 16), v: c.v, lon: c.lon, theta: Math.round(k.theta), link: c.link };
       });
     }
     (data.arrivals || []).forEach(function (a) {
       var d = index[String(a.t).slice(0, 10)];
-      if (!d || a.gb || a.loc !== (mars ? 'mars' : 'earth')) return;
+      if (!d || a.gb || a.loc !== (who === 'earth' ? 'earth' : who)) return;
       d.arrive = { time: String(a.t).slice(11, 16), link: a.link };
       raise(d, 1, 'cme');
     });
-    (data.notes || []).forEach(function (n) { if (n.site === (mars ? 'mars' : 'moon') && index[n.date]) index[n.date].note = { text: n.text, src: n.src }; });
+    (data.notes || []).forEach(function (n) { if (n.site === (who === 'earth' ? 'moon' : who) && index[n.date]) index[n.date].note = { text: n.text, src: n.src }; });
     days.forEach(function (d) { d.strength = STRENGTH[d.level]; });
     return days;
   }
@@ -183,7 +243,8 @@
     return 'the SOHO and ACE spacecraft counted extra fast protons';
   }
   function describe(d, siteId) {
-    var mars = siteId === 'mars', date = d && d.date ? prettyDate(d.date) : 'that day', text;
+    if (spaceAt(siteId) === 'star') return describeStar(d, siteId);
+    var mars = spaceAt(siteId) === 'mars', date = d && d.date ? prettyDate(d.date) : 'that day', text;
     if (!d) return { text: 'No space-weather data for this day.', flash: '', cause: null };
     var flash = d.cls ? 'The strongest flare seen from Earth that day was class ' + d.cls + (d.time ? ', at ' + d.time + ' UTC' : '') + '.' : 'Earth saw no big solar flares that day.';
     if (!d.level) {
@@ -200,13 +261,29 @@
     return { text: text + ' ' + flash, flash: flash, cause: d.cause };
   }
 
+  // The same, for a made-up star: no dates (they are not real), and the star's own name.
+  function describeStar(d, siteId) {
+    var name = starOf(siteId).name, planet = JA.siteOf(siteId).name, text;
+    if (!d) return { text: 'No space-weather data for this day.', flash: '', cause: null };
+    var flash = d.cls ? 'Its strongest flare that day was class ' + d.cls + '.' : name + ' made no big flares that day.';
+    if (!d.level) {
+      text = d.cls ? 'That day ' + name + ' flashed, but no storm of particles reached ' + planet + '. A flare is a flash of light and X-rays; the danger for the crew is the fast particles, and none came.'
+        : 'That day ' + name + ' was quiet, with no particle storm.';
+      return { text: text + ' ' + flash, flash: flash, cause: null };
+    }
+    if (d.cause === 'sep') text = 'That day a cloud of hot gas (a CME) left ' + name + ' at ' + (d.cme ? d.cme.v.toLocaleString('en-US') + ' km/s' : 'high speed') +
+      ' from the part of the star that is magnetically linked to ' + planet + ', so its fast particles raced along the field to ' + planet + '.';
+    else text = 'That day a cloud of hot gas (a CME) from ' + name + ' swept past ' + planet + '. The shock wave at its front carries extra fast particles: a small radiation storm.';
+    return { text: text + ' ' + flash, flash: flash, cause: d.cause };
+  }
+
   // Choose a run of consecutive real days for the mission. The level sets how stormy
   // a window we look for; rng picks among the matching windows so replays differ.
   function pickWindow(data, nSols, levelId, rng, siteId) {
     var days = byDay(data, siteId);
     if (days.length < nSols) return days;
     var lv = JA.LEVELS[levelId] || {};
-    var target = (data.source === 'archive' ? lv.stormsArchive : lv.storms) || [2, 6];
+    var target = (data.source === 'archive' || data.stormy ? lv.stormsArchive : lv.storms) || [2, 6];
     var wins = [];
     for (var i = 0; i + nSols <= days.length; i++) {
       var score = 0;
@@ -284,5 +361,5 @@
     return parseInt(p[2], 10) + ' ' + m[parseInt(p[1], 10) - 1] + ' ' + p[0];
   }
 
-  JA.weather = { load: load, pickWindow: pickWindow, classify: classify, describe: describe, connection: connection, sepLevel: sepLevel, STRENGTH: STRENGTH, marsDelayMin: marsDelayMin, planets: planets, alignment: alignment, orbitPath: orbitPath, prettyDate: prettyDate, byDay: byDay };
+  JA.weather = { load: load, pickWindow: pickWindow, classify: classify, describe: describe, connection: connection, sepLevel: sepLevel, star: star, starLink: starLink, starOf: starOf, spaceAt: spaceAt, STRENGTH: STRENGTH, marsDelayMin: marsDelayMin, planets: planets, alignment: alignment, orbitPath: orbitPath, prettyDate: prettyDate, byDay: byDay };
 })(window.JA);

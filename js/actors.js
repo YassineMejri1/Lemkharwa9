@@ -170,10 +170,10 @@
   // ---------- things you can carry ----------
   var ITEM_MODEL = { cell: 'power_cell', bag: 'soil_bag', core: 'core_sample', crate: 'food_crate', inst: 'instrument', 'case': 'supply_case' };
   function itemModel(type, data) {
-    var name = type === 'ice' ? null : ITEM_MODEL[type] || 'supply_case', m, c;
+    var name = type === 'ice' || type === 'dew' ? null : ITEM_MODEL[type] || 'supply_case', m, c;
     if (!name || !hasModel(name)) return null;
     m = MD.make(name);
-    if (type === 'bag') MD.mat(m, 'Sack').color.setHex(site === 'mars' ? 0xa9582f : 0x7b7c87).convertSRGBToLinear();
+    if (type === 'bag') MD.mat(m, 'Sack').color.setHex(JA.siteOf(site).colors.soil).convertSRGBToLinear();
     else if (type === 'core') { c = MD.mat(m, 'Glow_Core'); c.color.setHex([0xc9824a, 0xdfe2ea, 0xffd23f][data ? data.quality : 1]); c.emissive.copy(c.color); }
     else if (type === 'inst') { c = MD.mat(m, 'Glow_Inst'); c.color.setHex({ seismo: 0x5cf0ff, beam: 0xffd23f, rad: 0xff6fb1 }[data && data.id] || 0xffffff); c.emissive.copy(c.color); }
     return m;
@@ -186,10 +186,18 @@
       add(g, new T.CylinderGeometry(0.3, 0.3, 0.8, 14), glow(0xffe36a, 1.5), 0, 0, 0);
       add(g, new T.CylinderGeometry(0.32, 0.32, 0.14, 14), soft(0x2b3147), 0, 0.37, 0); add(g, new T.CylinderGeometry(0.32, 0.32, 0.14, 14), soft(0x2b3147), 0, -0.37, 0);
       add(g, new T.CylinderGeometry(0.12, 0.12, 0.1, 8), soft(0xdfe2ea), 0, 0.48, 0);
+    } else if (type === 'ice' && JA.iceWell && JA.iceWell(site)) {      // a sealed can of well water (Sahrun)
+      add(g, new T.CylinderGeometry(0.27, 0.27, 0.66, 14), soft(0x8fa6c4), 0, 0, 0);
+      add(g, new T.CylinderGeometry(0.28, 0.28, 0.12, 14), glow(0x58c8ff, 1.0), 0, 0.08, 0);
+      add(g, new T.CylinderGeometry(0.1, 0.1, 0.1, 10), soft(0x2b3147), 0, 0.38, 0);
     } else if (type === 'ice') {
       add(g, new T.IcosahedronGeometry(0.42, 0), new T.MeshStandardMaterial({ color: 0xdff7ff, emissive: 0x58c8ff, emissiveIntensity: 0.9, roughness: 0.15, flatShading: true, transparent: true, opacity: 0.92 }), 0, 0, 0);
+    } else if (type === 'dew') {            // a can of dew from the dew catcher
+      add(g, new T.CylinderGeometry(0.26, 0.26, 0.58, 14), soft(0xdfe7f2), 0, 0, 0);
+      add(g, new T.CylinderGeometry(0.23, 0.23, 0.05, 14), glow(0x58c8ff, 1.2), 0, 0.27, 0);
+      add(g, new T.TorusGeometry(0.15, 0.03, 6, 12), soft(0x8a8fa0), 0, 0.36, 0);
     } else if (type === 'bag') {
-      var b = add(g, new T.SphereGeometry(0.5, 8, 6), mat(site === 'mars' ? 0xa9582f : 0x7b7c87), 0, 0, 0); b.scale.set(1.15, 0.6, 0.8);
+      var b = add(g, new T.SphereGeometry(0.5, 8, 6), mat(JA.siteOf(site).colors.soil), 0, 0, 0); b.scale.set(1.15, 0.6, 0.8);
       add(g, new T.TorusGeometry(0.3, 0.035, 5, 12), soft(0xf2e6c8), 0, 0, 0).rotation.y = Math.PI / 2;
     } else if (type === 'core') {
       add(g, new T.CylinderGeometry(0.13, 0.13, 0.7, 10), new T.MeshStandardMaterial({ color: 0xcfd3de, metalness: 0.8, roughness: 0.25 }), 0, 0, 0);
@@ -209,7 +217,7 @@
     }
     return g;
   }
-  var RADIUS = { cell: 0.4, ice: 0.4, bag: 0.32, core: 0.34, crate: 0.3, inst: 0.38, 'case': 0.28 };
+  var RADIUS = { cell: 0.4, ice: 0.4, dew: 0.32, bag: 0.32, core: 0.34, crate: 0.3, inst: 0.38, 'case': 0.28 };
   // Every thing has a number (id) so that, in crew mode, all the players' games mean the same thing by it.
   // holder: the astronaut carrying it (yours, or a crewmate's: see js/crew.js).
   A.lastId = 0;
@@ -282,10 +290,10 @@
     return n;
   };
 
-  // ---------- dust devils (Mars) ----------
+  // ---------- dust devils (on dusty planets: Mars) ----------
   function buildDevils() {
     A.devils = [];
-    if (site !== 'mars') return;
+    if (!JA.siteOf(site).dusty) return;
     for (var i = 0; i < 2; i++) {
       var g = new T.Group(), m = new T.MeshBasicMaterial({ color: 0xe2b98c, transparent: true, opacity: 0.22, side: T.DoubleSide, depthWrite: false, fog: false });
       for (var k = 0; k < 6; k++) { var c = add(g, new T.CylinderGeometry(1.2 + k * 0.75, 0.6 + k * 0.6, 3.4, 10, 1, true), m, 0, 1.7 + k * 3.3, 0, true); c.userData.k = k; }

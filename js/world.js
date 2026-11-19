@@ -8,7 +8,7 @@
   if (!T) return;
 
   var renderer, scene, camera, root = null, look = null, siteId = 'mars';
-  var sun, hemi, sunSprite, skyMesh, skyU, stars = null, earth = null, earthGlow = null, phobos = null, lamp = null;
+  var sun, hemi, sunSprite, skyMesh, skyU, stars = null, earth = null, earthGlow = null, phobos = null, lamp = null, moons = null;
   var time = 0;
   var sunDir = W.sunDir = new T.Vector3(0.4, 0.5, 0.7).normalize();
   // where Earth hangs in the Moon's sky (it hardly moves there); js/observe.js frames its view on it
@@ -20,12 +20,35 @@
     cine: { pos: new T.Vector3(), look: new T.Vector3(), fov: 52, roll: 0 } };
   var v1 = new T.Vector3(), v2 = new T.Vector3(), c1 = new T.Color(), c2 = new T.Color(), c3 = new T.Color();
 
+  // How each planet looks. Whether the sky is black or coloured (with day, night, fog and shooting stars) comes from the
+  // planet's atmosphere (JA.SITES); everything below is the planet's own scenery:
+  //   rock2            the second rock colour       prints        bootprint and wheel-track colour
+  //   mountainSeed     the random stream for the plain mountains (when there is no Blender range)
+  //   rangeFlat, rangeGlow   how the Blender mountain range is shaded
+  //   volcano          a giant volcano on the horizon          psr     the ice crater never sees the Sun (lunar south pole)
+  //   sunPath          'polar' (low along the horizon) or 'arc' (up over the sky and down)
+  //   sky              what hangs in the sky: 'earth' (a big Earth) or 'mars' (Phobos, Deimos, Earth as the evening star)
+  //   dusk*, dust*     sky colours after sunset and in a dust storm (planets with air)
+  //   deepSkyRef       where the Milky Way band crosses the sky seen from the lookout rock
   var LOOKS = {
     moon: { ground: 0x8b8c96, ground2: 0x5f606b, rock: 0x8a8b95, mountain: 0x4d4e58, range: 0x7d7e88, sunColor: 0xffffff, sunInt: 1.65,
-      hemiSky: 0x9fb2d8, hemiGround: 0x34353f, hemiInt: 0.4, fog: null, zenith: 0x000003, horizon: 0x04050a, glow: 0xffffff, sunSize: 330 },
+      hemiSky: 0x9fb2d8, hemiGround: 0x34353f, hemiInt: 0.4, fog: null, zenith: 0x000003, horizon: 0x04050a, glow: 0xffffff, sunSize: 330,
+      rock2: 0x9a9ba6, prints: 0x2c2d36, mountainSeed: 11, rangeFlat: false, rangeGlow: 0.16, volcano: false, psr: true, sunPath: 'polar', sky: 'earth', paint: 'moon' },
     mars: { ground: 0xc8703f, ground2: 0x9a4a2a, rock: 0x9c5536, mountain: 0x8a4526, range: 0xa5562f, sunColor: 0xfff1df, sunInt: 1.25,
-      hemiSky: 0xf5d1a8, hemiGround: 0x7a3b22, hemiInt: 0.66, fog: 0xdcab78, zenith: 0xa8734a, horizon: 0xe6bc8c, glow: 0xfff0d0, sunSize: 210 }
+      hemiSky: 0xf5d1a8, hemiGround: 0x7a3b22, hemiInt: 0.66, fog: 0xdcab78, zenith: 0xa8734a, horizon: 0xe6bc8c, glow: 0xfff0d0, sunSize: 210,
+      rock2: 0x6e3a26, prints: 0x5a2a12, mountainSeed: 99, rangeFlat: true, rangeGlow: 0.05, volcano: true, psr: false, sunPath: 'arc', sky: 'mars', paint: 'mars',
+      duskHorizon: 0x5b6f92, duskZenith: 0x2c3246, duskGlow: 0x86bcff, dustHorizon: 0x7d4a2a, dustZenith: 0x6a3d22, dustSpeck: 0xe2b98c, deepSkyRef: -1.9 },
+    // Sahrun (made up): golden sand under a pale, hazy sky; thick air gives it orange sunsets (Mars's are blue)
+    //   procedural   its sand tile and its ring of cliffs are made in code (js/desert.js), not in Blender
+    //   fogBase, fogDust   how hazy the air is on a clear day, and how much a sandstorm adds
+    //   drift        sand blowing along the ground even on a calm day     pebbles   loose stones on the ground
+    sahrun: { ground: 0xd9a35b, ground2: 0xb57a3c, rock: 0xb07a4a, mountain: 0x9a6438, range: 0xc89058, sunColor: 0xfff1d8, sunInt: 1.38,
+      hemiSky: 0xe8d4b0, hemiGround: 0x8a5a30, hemiInt: 0.6, fog: 0xe4cc9c, zenith: 0x7f9dbd, horizon: 0xeed6a6, glow: 0xfff4dc, sunSize: 250,
+      rock2: 0x7a5232, prints: 0x8a5a28, mountainSeed: 77, rangeFlat: true, rangeGlow: 0.07, volcano: false, psr: false, sunPath: 'arc', sky: 'sahrun', paint: 'sahrun',
+      duskHorizon: 0x9a6a78, duskZenith: 0x2e3450, duskGlow: 0xff9a50, dustHorizon: 0xc8955a, dustZenith: 0xb08050, dustSpeck: 0xf0d0a0, deepSkyRef: -1.9,
+      procedural: true, fogBase: 0.003, fogDust: 0.021, drift: 2.2, pebbles: 380 }
   };
+  var air = true;      // does this planet have air? (set in W.build from JA.SITES)
 
   // ---------- helpers shared with the other 3D files ----------
   function lerp(a, b, t) { return a + (b - a) * t; }
@@ -67,6 +90,13 @@
     g.computeVertexNormals();
     return g;
   }
+  function canvasTile(canvas, repeat, srgb) {
+    var t = new T.CanvasTexture(canvas);
+    t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(repeat, repeat);
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    if (srgb) t.encoding = T.sRGBEncoding;
+    return t;
+  }
   function tileTex(url, repeat, srgb) {
     var t = new T.TextureLoader().load(url);
     t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(repeat, repeat);
@@ -83,7 +113,7 @@
     var r = Math.hypot(x, z);
     out.multiplyScalar(1 - (1 - smooth(26, 34, r)) * 0.1);                      // packed-down base area
     var di = Math.hypot(x - L.ice[0], z - L.ice[1]) / Tn.iceR;
-    if (siteId === 'moon') {
+    if (look.paint === 'moon') {
       for (i = 1; i < Tn.craters.length; i++) {
         var c = Tn.craters[i]; d = Math.hypot(x - c.x, z - c.z) / c.r;
         if (d < 1) out.multiplyScalar(0.82 + 0.18 * d); else if (d < 1.5) out.multiplyScalar(1 + (1.5 - d) * 0.16);
@@ -94,7 +124,7 @@
       }
       d = Math.hypot(x - L.geo[1][0], z - L.geo[1][1]);
       if (d < 11) out.lerp(c2.set(0xd98a3a), (1 - d / 11) * clamp(Tn.noise(x * 0.5, z * 0.5) * 1.6 - 0.2, 0, 1));
-    } else {
+    } else if (look.paint === 'mars') {
       d = Math.hypot(x - L.mesa[0], z - L.mesa[1]);
       if (d < 22 && h > Tn.height(L.geo[0][0], L.geo[0][1]) + 1.2) {
         var band = Math.floor(h * 1.15 + Tn.noise(x * 0.1, z * 0.1) * 1.2) % 3;
@@ -107,6 +137,26 @@
       if (dc < 14) out.multiplyScalar(0.8 + 0.2 * dc / 14);
       var dune = smooth(40, 110, z) * smooth(20, -60, x);
       out.lerp(c2.set(0xdc9258), dune * 0.5);
+    } else if (look.paint === 'sahrun') {
+      // dune crests are paler; the flat hollows between the dunes are darker and redder
+      var erg = Tn.erg ? Tn.erg(x, z) : 0, far = smooth(36, 66, r);
+      out.lerp(c2.set(0xf2d39c), clamp(erg - 0.35, 0, 1) * 0.6);
+      out.lerp(c2.set(0xa8683a), clamp(0.25 - erg, 0, 0.25) * 1.6 * far);
+      // the butte: layered sandstone
+      d = Math.hypot(x - L.mesa[0], z - L.mesa[1]);
+      if (d < 22 && h > Tn.height(L.geo[0][0], L.geo[0][1]) + 1.2) {
+        var layer = Math.floor(h * 0.6 + Tn.noise(x * 0.1, z * 0.1) * 0.8) % 3;      // beds about 1.7 m thick
+        out.set(layer === 0 ? 0xe2b27a : layer === 1 ? 0xb2683c : 0xf0d6ac);
+      }
+      // the Deep Well: dark rock around the shaft, damp sandstone down on its floor
+      if (di < 1.2) out.lerp(c2.set(0x6e5c4c), (1.2 - di) * 0.75);
+      if (di < 0.5) out.lerp(c2.set(0x4e3a2a), clamp(Tn.noise(x * 0.3, z * 0.3) * 1.8 - 0.4, 0, 1) * 0.7);
+      // the Salt Flat (rock site 3): a cracked white crust
+      d = Math.hypot(x - L.geo[2][0], z - L.geo[2][1]);
+      if (d < 16) out.lerp(c2.set(0xf1ece0), (1 - d / 16) * 0.95 * clamp(0.55 + Tn.noise(x * 0.4, z * 0.4) * 0.7, 0, 1));
+      // the Glass Field (rock site 2): darker, glassy sand
+      d = Math.hypot(x - L.geo[1][0], z - L.geo[1][1]);
+      if (d < 12) out.lerp(c2.set(0x8a6a4a), (1 - d / 12) * 0.5);
     }
     return out;
   }
@@ -154,31 +204,41 @@
       g.computeVertexNormals();
       gm = new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0,
         normalMap: tileTex(tile.n, size / tile.tile, false), normalScale: new T.Vector2(1.5, 1.5), map: tileTex(tile.a, size / tile.tile, true) });
+    } else if (look.procedural && JA.desert) {
+      // the same kind of tile, made in code (js/desert.js): wind ripples in a normal map, their hollows in a shading map
+      var dtile = JA.desert.groundTile();
+      g.computeVertexNormals();
+      gm = new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0,
+        normalMap: canvasTile(dtile.normal, size / dtile.tile, false), normalScale: new T.Vector2(1.4, 1.4), map: canvasTile(dtile.shade, size / dtile.tile, true) });
     } else gm = new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, flatShading: true });
-    if (siteId === 'moon') eternalShadow(gm);
+    if (look.psr) eternalShadow(gm);
     var ground = new T.Mesh(g, gm);
     ground.receiveShadow = true;
     root.add(ground);
     var skirt = W.add(root, new T.RingGeometry(392, 3400, 48, 1), new T.MeshStandardMaterial({ color: look.ground2, roughness: 1 }), 0, 23, 0, true);
     skirt.rotation.x = -Math.PI / 2;
 
-    var rnd = JA.sim.rng32(siteId === 'mars' ? 99 : 11), mm = W.mat(look.mountain), i;
+    var rnd = JA.sim.rng32(look.mountainSeed), mm = W.mat(look.mountain), i;
     if (AS && AS.mountains && AS.mountains[siteId]) {
       // mountain ranges sculpted in Blender, with their hollows shaded
       // (a touch of glow stands in for sunlight bouncing off the ground, so shaded slopes are not pitch black)
       var range = new T.Mesh(assetGeo(AS.mountains[siteId], 0.35), new T.MeshStandardMaterial({ color: look.range, vertexColors: true, roughness: 1, metalness: 0,
-        flatShading: siteId === 'mars', emissive: look.range, emissiveIntensity: siteId === 'moon' ? 0.16 : 0.05 }));
+        flatShading: look.rangeFlat, emissive: look.range, emissiveIntensity: look.rangeGlow }));
       root.add(range);
+    } else if (look.procedural && JA.desert) {
+      // sandstone cliffs and giant dunes, made in code the same way (shading in the vertex colours)
+      root.add(new T.Mesh(JA.desert.range(), new T.MeshStandardMaterial({ color: look.range, vertexColors: true, roughness: 1, metalness: 0,
+        flatShading: look.rangeFlat, emissive: look.range, emissiveIntensity: look.rangeGlow })));
     } else for (i = 0; i < 34; i++) {
       var a = (i / 34) * Math.PI * 2 + rnd() * 0.15, mr = 470 + rnd() * 160, mh = 45 + rnd() * 110;
       var cone = W.add(root, new T.ConeGeometry(mh * (1 + rnd() * 1.1), mh, 5 + Math.floor(rnd() * 4)), mm, Math.cos(a) * mr, 20 + mh * 0.42, Math.sin(a) * mr, true);
       cone.rotation.y = rnd() * 3;
     }
-    if (siteId === 'mars') W.add(root, new T.ConeGeometry(640, 190, 24), mm, 300, 100, -1250, true);   // a giant volcano on the horizon
+    if (look.volcano) W.add(root, new T.ConeGeometry(640, 190, 24), mm, 300, 100, -1250, true);   // a giant volcano on the horizon
 
     // pebbles and rocks
-    var count = 900, dummy = new T.Object3D(), rockGeos = AS && AS.rocks ? AS.rocks.map(function (d) { return assetGeo(d, 0.42); }) : null;
-    var rockMat = W.mat(look.rock, rockGeos ? { vertexColors: true } : null), rockMat2 = W.mat(siteId === 'mars' ? 0x6e3a26 : 0x9a9ba6, rockGeos ? { vertexColors: true } : null);
+    var count = look.pebbles || 900, dummy = new T.Object3D(), rockGeos = AS && AS.rocks ? AS.rocks.map(function (d) { return assetGeo(d, 0.42); }) : null;
+    var rockMat = W.mat(look.rock, rockGeos ? { vertexColors: true } : null), rockMat2 = W.mat(look.rock2, rockGeos ? { vertexColors: true } : null);
     var kinds = rockGeos ? 4 : 1, per = count / kinds, insts = [];
     for (i = 0; i < kinds; i++) {
       var im = new T.InstancedMesh(rockGeos ? rockGeos[i * 2] : new T.DodecahedronGeometry(1, 0), rockMat, per);
@@ -215,7 +275,7 @@
 
   // ---------- sky ----------
   function buildSky() {
-    scene.fog = look.fog ? new T.FogExp2(look.fog, 0.0026) : null;
+    scene.fog = look.fog ? new T.FogExp2(look.fog, look.fogBase || 0.0026) : null;
     skyU = { uZenith: { value: new T.Color(look.zenith) }, uHorizon: { value: new T.Color(look.horizon) },
       uGlow: { value: new T.Color(look.glow) }, uSun: { value: sunDir }, uGlowAmt: { value: 1 } };
     skyMesh = new T.Mesh(new T.SphereGeometry(2600, 32, 16), new T.ShaderMaterial({
@@ -271,13 +331,13 @@
     bright.frustumCulled = false; bright.renderOrder = -9;
     stars.add(bright); stars.userData.bright = bright;
 
-    earth = null; earthGlow = null; phobos = null; deep = null; eStar = null; eMoon = null; deimos = null; sev.list = []; sev.next = 8;
-    if (siteId === 'moon') {
+    earth = null; earthGlow = null; phobos = null; moons = null; deep = null; eStar = null; eMoon = null; deimos = null; sev.list = []; sev.next = 8;
+    if (look.sky === 'earth') {
       buildEarth();
-    } else {
+    } else if (look.sky === 'mars') {
       phobos = W.add(root, new T.DodecahedronGeometry(16, 1), new T.MeshStandardMaterial({ color: 0x8d8478, roughness: 1, flatShading: true, fog: false }), 0, 0, 0, true);
       phobos.scale.set(1.3, 1, 1.05);
-    }
+    } else if (look.sky === 'sahrun') buildMoons();
     // the astronaut's helmet lamp
     lamp = new T.SpotLight(0xdfeeff, 0, 34, 0.62, 0.55, 1.2);
     root.add(lamp); root.add(lamp.target);
@@ -327,7 +387,7 @@
     }
   };
   W.dust = function (x, z, n, speed, size) {
-    W.burst(x, Tn.height(x, z) + 0.15, z, n, speed || 1.6, siteId === 'mars' ? 0xd9a070 : 0xb8b9c4, { life: 1.3, size: size || 0.5, grow: 2.6, alpha: 0.45, up: 0.6, grav: W.gravity * 0.12 });
+    W.burst(x, Tn.height(x, z) + 0.15, z, n, speed || 1.6, JA.siteOf(siteId).colors.dust, { life: 1.3, size: size || 0.5, grow: 2.6, alpha: 0.45, up: 0.6, grav: W.gravity * 0.12 });
   };
   function updateParticles(dt) {
     var changed = false;
@@ -359,7 +419,7 @@
       ctx.globalCompositeOperation = 'source-atop'; ctx.fillStyle = 'rgba(255,255,255,1)';
       for (var y = 4; y < s; y += 9) ctx.fillRect(0, y, s, 4.5);
     });
-    fMesh = new T.InstancedMesh(g, new T.MeshBasicMaterial({ color: siteId === 'mars' ? 0x5a2a12 : 0x2c2d36, map: tread, transparent: true, opacity: 0.62, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), FN);
+    fMesh = new T.InstancedMesh(g, new T.MeshBasicMaterial({ color: look.prints, map: tread, transparent: true, opacity: 0.62, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), FN);
     fDummy.position.set(0, -500, 0); fDummy.updateMatrix();
     for (var i = 0; i < FN; i++) fMesh.setMatrixAt(i, fDummy.matrix);
     fMesh.frustumCulled = false;
@@ -418,7 +478,7 @@
         if (o.isLight && o.shadow && o.shadow.dispose) o.shadow.dispose();
       });
     }
-    siteId = W.site = site; look = LOOKS[site]; W.gravity = JA.SITES[site].gravity;
+    siteId = W.site = site; look = JA.pick(site, LOOKS); air = JA.hasAir(site); W.gravity = JA.SITES[site].gravity;
     Tn.setSite(site);
     root = W.root = new T.Group(); scene.add(root);
     buildGround(); buildSky(); buildParticles(); buildPrints();
@@ -637,7 +697,7 @@
     sev.next -= dt;
     if (sev.next <= 0) {
       sev.next = watching ? 4 + Math.random() * 6 : 22 + Math.random() * 30;
-      if (siteId === 'mars') { if (dark > 0.3 && cam.mode !== 'inside') spawnMeteor(); else sev.next = 5; }   // too bright: look again soon
+      if (air) { if (dark > 0.3 && cam.mode !== 'inside') spawnMeteor(); else sev.next = 5; }   // too bright: look again soon
       else if (cam.mode !== 'inside' && !cam.room) {
         if (Math.random() < 0.6) spawnFlash();
         else if (watching && !sev.list.some(function (e) { return e.kind === 'orbiter'; })) spawnOrbiter();
@@ -679,12 +739,12 @@
   // seen from Mars it always stays fairly close to the Sun, so it is placed a little above and beside it.
   var deep = null, eStar = null, eMoon = null, deimos = null, obsK = 0;
   // how dark the sky is right now (0 = full daylight, 1 = black): always 1 on the airless Moon
-  W.skyDark = function () { return siteId === 'moon' ? 1 : (stars ? Math.min(1, stars.material.opacity / 0.7) : 0); };
+  W.skyDark = function () { return !air ? 1 : (stars ? Math.min(1, stars.material.opacity / 0.7) : 0); };
   W.observe = function (k) { obsK = Math.max(0, Math.min(1, k)); if (obsK > 0 && !deep && root) buildDeepSky(); };
   function buildDeepSky() {
     // the band is tilted so that it climbs the sky through the part you face from the lookout rock
     // (on the Moon it passes behind Earth; on Mars, across the western sky the lookout faces)
-    var ref = siteId === 'mars' ? new T.Vector3(Math.sin(-1.9), 0.3, Math.cos(-1.9)).normalize() : EARTH_DIR;
+    var ref = look.deepSkyRef != null ? new T.Vector3(Math.sin(look.deepSkyRef), 0.3, Math.cos(look.deepSkyRef)).normalize() : EARTH_DIR;
     var rnd = JA.sim.rng32(911), pole = new T.Vector3().crossVectors(ref, new T.Vector3(0.62, 1, 0.12)).normalize();
     var a1 = new T.Vector3(1, 0, 0).cross(pole).normalize(), a2 = pole.clone().cross(a1).normalize(), d = new T.Vector3();
     function gauss() { return (rnd() + rnd() + rnd() + rnd() - 2) / 2; }
@@ -734,7 +794,7 @@
     ring.frustumCulled = false; ring.renderOrder = -9; ring.userData.op = 0.34;
     deep.add(ring);
     root.add(deep);
-    if (siteId === 'mars') {
+    if (look.sky === 'mars') {
       var t = W.canvasTex(64, function (ctx, s) {
         var g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
         g.addColorStop(0, 'rgba(235,245,255,1)'); g.addColorStop(0.18, 'rgba(170,205,255,0.85)'); g.addColorStop(1, 'rgba(120,170,255,0)');
@@ -752,7 +812,7 @@
   }
   function deepSky(t) {
     if (!deep) return;
-    var dark = siteId === 'moon' ? 1 - env.dustShown * 0.6 : Math.min(1, stars.material.opacity / 0.7);
+    var dark = !air ? 1 - env.dustShown * 0.6 : Math.min(1, stars.material.opacity / 0.7);
     deep.position.copy(camera.position); deep.visible = obsK > 0.001;
     deep.children.forEach(function (p) { p.material.opacity = p.userData.op * obsK * dark; });
     if (eStar) {
@@ -777,8 +837,8 @@
   // ---------- every frame ----------
   function updateSky(dt) {
     // on Mars the lookout's sunset time-lapse (js/observe.js) runs the day on past sunset into the night (t > 1)
-    var t = clamp(env.t, 0, siteId === 'mars' ? 1.25 : 1), az, el;
-    if (siteId === 'moon') { az = lerp(1.05, -1.05, t); el = 0.15 + Math.sin(Math.PI * t) * 0.06; }
+    var t = clamp(env.t, 0, air ? 1.25 : 1), az, el;
+    if (look.sunPath === 'polar') { az = lerp(1.05, -1.05, t); el = 0.15 + Math.sin(Math.PI * t) * 0.06; }
     else { az = lerp(1.75, -1.75, t); el = 0.13 + Math.sin(Math.PI * t) * 0.9; }
     sunDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
     var f = cam.target;
@@ -791,15 +851,15 @@
     env.dustShown = lerp(env.dustShown, env.dust, Math.min(1, dt * 0.8));
     env.stormShown = lerp(env.stormShown, env.storm, Math.min(1, dt * 3));
     var d = env.dustShown;
-    var day = siteId === 'moon' ? 1 : smooth(0, 0.14, t) * (1 - smooth(0.86, 1, t));
+    var day = !air ? 1 : smooth(0, 0.14, t) * (1 - smooth(0.86, 1, t));
     var night = smooth(1.0, 1.2, t), up = smooth(-0.1, 0.04, el);      // after sunset: how deep the night is; is the Sun still up
-    if (siteId === 'mars') {
-      skyU.uHorizon.value.set(look.horizon).lerp(c1.set(0x5b6f92), (1 - day) * 0.8).lerp(c1.set(0x030508), night * 0.92).lerp(c1.set(0x7d4a2a), d * 0.8);
-      skyU.uZenith.value.set(look.zenith).lerp(c1.set(0x2c3246), (1 - day) * 0.85).lerp(c1.set(0x000103), night * 0.97).lerp(c1.set(0x6a3d22), d * 0.85);
-      skyU.uGlow.value.set(look.glow).lerp(c1.set(0x86bcff), 1 - day);
+    if (air) {
+      skyU.uHorizon.value.set(look.horizon).lerp(c1.set(look.duskHorizon), (1 - day) * 0.8).lerp(c1.set(0x030508), night * 0.92).lerp(c1.set(look.dustHorizon), d * 0.8);
+      skyU.uZenith.value.set(look.zenith).lerp(c1.set(look.duskZenith), (1 - day) * 0.85).lerp(c1.set(0x000103), night * 0.97).lerp(c1.set(look.dustZenith), d * 0.85);
+      skyU.uGlow.value.set(look.glow).lerp(c1.set(look.duskGlow), 1 - day);
       skyU.uGlowAmt.value = (1 + (1 - day) * 1.6) * (1 - d * 0.8) * smooth(-0.32, 0.02, el);     // the blue glow fades as the Sun sinks further
       scene.fog.color.copy(skyU.uHorizon.value);
-      scene.fog.density = 0.0026 + d * 0.02;
+      scene.fog.density = (look.fogBase || 0.0026) + d * (look.fogDust || 0.02);
       sun.intensity = look.sunInt * (0.4 + 0.6 * day) * (1 - d * 0.66) * up;
       hemi.intensity = look.hemiInt * (0.62 + 0.38 * day) * (1 - d * 0.3) * (1 - night * 0.5);
       sun.color.set(look.sunColor).lerp(c1.set(0xa5c8ff), (1 - day) * 0.6);
@@ -808,23 +868,52 @@
       stars.material.opacity = ((1 - day) * 0.7 + night * 0.25) * (1 - d);
       stars.userData.bright.material.opacity = stars.material.opacity;
       var pt = (time * 0.006 + 0.2) % 1, pa = lerp(-1.9, 1.9, pt), pe = 0.25 + Math.sin(Math.PI * pt) * 0.7;
-      phobos.position.copy(camera.position).add(v1.set(Math.sin(pa) * Math.cos(pe), Math.sin(pe), -Math.cos(pa) * Math.cos(pe) * 0.6 - 0.3).normalize().multiplyScalar(2300));
-      phobos.rotation.y += dt * 0.05;
+      if (phobos) phobos.position.copy(camera.position).add(v1.set(Math.sin(pa) * Math.cos(pe), Math.sin(pe), -Math.cos(pa) * Math.cos(pe) * 0.6 - 0.3).normalize().multiplyScalar(2300));
+      if (phobos) phobos.rotation.y += dt * 0.05;
+      if (moons) moons.forEach(function (m) {
+        // each moon crosses the sky at its own pace; pale by day, bright at night, hidden by a sandstorm
+        var p = (time * m.speed + m.phase) % 1, ma = lerp(-1.7, 1.7, p) + m.az, me = 0.08 + Math.sin(Math.PI * p) * m.el;
+        m.sp.position.copy(camera.position).add(v1.set(Math.sin(ma) * Math.cos(me), Math.sin(me), -Math.cos(ma) * Math.cos(me)).multiplyScalar(2300));
+        m.sp.material.opacity = (0.42 + 0.58 * (1 - day)) * (1 - d * 0.85);
+      });
       env.dark = clamp((1 - day) * 0.8 + d * 0.5, 0, 1);
     } else {
       // down in the ice crater no sunlight ever reaches you (see eternalShadow): only the helmet lamp and starlight
-      var inPsr = 1 - smooth(0.55, 0.9, Math.hypot(f.x - Tn.L.ice[0], f.z - Tn.L.ice[1]) / Tn.iceR);
+      var inPsr = look.psr ? 1 - smooth(0.55, 0.9, Math.hypot(f.x - Tn.L.ice[0], f.z - Tn.L.ice[1]) / Tn.iceR) : 0;
       sun.intensity = look.sunInt * (1 - d * 0.86) * (1 - 0.85 * inPsr);
       hemi.intensity = look.hemiInt * (1 - d * 0.3) * (1 - 0.6 * inPsr);
       sunSprite.material.opacity = 1 - d;
-      earth.position.copy(camera.position).add(v1.copy(EARTH_DIR).multiplyScalar(2350));
-      earth.rotation.y += dt * 0.004;                      // a slow turn (the real one takes a day)
-      earth.material.uniforms.uCloud.value += dt * 0.0012;  // the clouds drift a little faster than the ground
+      if (earth) {
+        earth.position.copy(camera.position).add(v1.copy(EARTH_DIR).multiplyScalar(2350));
+        earth.rotation.y += dt * 0.004;                      // a slow turn (the real one takes a day)
+        earth.material.uniforms.uCloud.value += dt * 0.0012;  // the clouds drift a little faster than the ground
+      }
       if (earthGlow) earthGlow.position.copy(earth.position);
-      var inIce = 1 - smooth(0.55, 1.0, Math.hypot(f.x - Tn.L.ice[0], f.z - Tn.L.ice[1]) / Tn.iceR);
+      var inIce = look.psr ? 1 - smooth(0.55, 1.0, Math.hypot(f.x - Tn.L.ice[0], f.z - Tn.L.ice[1]) / Tn.iceR) : 0;
       env.dark = clamp(d * 0.9 + inIce * 0.8 + 0.25, 0, 1);
     }
     lamp.intensity = lerp(lamp.intensity, cam.mode === 'play' ? env.dark * 2.4 : 0, Math.min(1, dt * 3));
+  }
+
+  // ---------- Sahrun's two moons (made up): a big pale one and a smaller reddish one, both seen as discs ----------
+  function moonTex(base, dark, seed) {
+    return W.canvasTex(128, function (ctx, s) {
+      var c = s / 2, r = s * 0.46, g = ctx.createRadialGradient(c - r * 0.35, c - r * 0.35, r * 0.1, c, c, r), rnd = JA.sim.rng32(seed);
+      g.addColorStop(0, base); g.addColorStop(1, dark);
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c, c, r, 0, Math.PI * 2); ctx.fill();
+      for (var k = 0; k < 18; k++) {                                  // craters and dark plains
+        var a = rnd() * 6.283, dd = Math.sqrt(rnd()) * r * 0.82, cr = 2 + rnd() * r * 0.16;
+        ctx.fillStyle = 'rgba(40, 30, 20, ' + (0.06 + rnd() * 0.12) + ')'; ctx.beginPath(); ctx.arc(c + Math.cos(a) * dd, c + Math.sin(a) * dd, cr, 0, 6.283); ctx.fill();
+      }
+    });
+  }
+  function buildMoons() {
+    moons = [{ tex: moonTex('#f4eee2', '#b8ad9c', 3), size: 120, speed: 0.0021, phase: 0.18, el: 0.55, az: -0.5 },
+      { tex: moonTex('#ecc9aa', '#9a7860', 7), size: 52, speed: 0.0047, phase: 0.62, el: 0.36, az: 1.1 }];
+    moons.forEach(function (m) {
+      m.sp = new T.Sprite(new T.SpriteMaterial({ map: m.tex, transparent: true, depthWrite: false, fog: false }));
+      m.sp.scale.set(m.size, m.size, 1); m.sp.renderOrder = -8; root.add(m.sp);
+    });
   }
 
   function ambientParticles(dt) {
@@ -836,11 +925,20 @@
           { vx: -sunDir.x * 46, vy: -sunDir.y * 46 - 10, vz: -sunDir.z * 46, life: 0.9, size: 0.34, grow: 0.6, color: 0xff48c8, alpha: 0.9 });
       }
     }
-    if (siteId === 'mars' && env.dustShown > 0.03) {
+    if (JA.siteOf(siteId).dusty && env.dustShown > 0.03) {
       n = W.rate(env.dustShown * 12, dt);
       for (i = 0; i < n; i++) {
         W.emit(f.x - 40 + Math.random() * 30, f.y + Math.random() * 14 - 1, f.z + (Math.random() - 0.5) * 80,
-          { vx: 16 + Math.random() * 14, vy: (Math.random() - 0.5) * 2, vz: 3, life: 3, size: 0.9, grow: 2.4, color: 0xe2b98c, alpha: 0.28 });
+          { vx: 16 + Math.random() * 14, vy: (Math.random() - 0.5) * 2, vz: 3, life: 3, size: 0.9, grow: 2.4, color: look.dustSpeck, alpha: 0.28 });
+      }
+    }
+    if (look.drift && cam.mode !== 'inside' && !cam.room) {
+      // sand skipping along the ground in the wind (saltation), even on a calm day; more when it is dusty
+      n = W.rate(look.drift * (1 + env.dustShown * 3), dt);
+      for (i = 0; i < n; i++) {
+        var sx = f.x - 26 + Math.random() * 30, sz = f.z + (Math.random() - 0.5) * 44;
+        W.emit(sx, Tn.height(sx, sz) + 0.12 + Math.random() * 0.5, sz,
+          { vx: 7 + Math.random() * 6, vy: Math.random() * 0.5, vz: 1.2, life: 2.4, size: 0.24, grow: 1.8, color: look.dustSpeck, alpha: 0.15, grav: 0 });
       }
     }
   }

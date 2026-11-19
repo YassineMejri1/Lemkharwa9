@@ -16,7 +16,7 @@
     return data;
   }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* private mode: the journal lasts until the page closes */ } }
-  function pick(v, site) { return typeof v === 'string' ? v : typeof v === 'function' ? v({ site: { id: site } }) : v ? v[site] : ''; }
+  function pick(v, site) { return JA.siteText(v, site); }
 
   var GROUPS = [
     { kind: 'why', icon: '🧠', name: 'Why things happen' },
@@ -32,9 +32,9 @@
   var cache = {};
   J.pages = function (site) {
     if (cache[site]) return cache[site];
-    var out = [], word = site === 'mars' ? 'sol' : 'day';
+    var out = [], word = JA.siteOf(site).dayWord.toLowerCase();
     function add(kind, id, icon, title, text, src, hint, holo) { out.push({ kind: kind, id: String(id), icon: icon, title: title, text: text, src: src, hint: hint, holo: holo || '' }); }
-    (JA.MECHS || []).forEach(function (m) { if (!m.site || m.site === site) add('why', m.id, m.icon, m.title, pick(m.text, site), pick(m.src, site), m.hint, m.holo); });
+    (JA.MECHS || []).forEach(function (m) { if (!m.site || m.site === site) add('why', m.id, m.icon, pick(m.title, site), pick(m.text, site), pick(m.src, site), pick(m.hint, site), m.holo); });
     (JA.GEO[site] || []).forEach(function (place, i) {
       place.finds.forEach(function (f, n) { add('find', i + '-' + n, place.icon, f.title, f.text, f.src, 'Drill ' + (n ? 'a second' : 'a') + ' rock core at the ' + place.name + ' and study it in the Lab.'); });
     });
@@ -68,8 +68,7 @@
     return { have: have, total: pages.length };
   };
   J.totals = function () {
-    var a = J.count('moon'), b = J.count('mars');
-    return { have: a.have + b.have, total: a.total + b.total };
+    return Object.keys(JA.SITES).reduce(function (t, id) { var c = J.count(id); t.have += c.have; t.total += c.total; return t; }, { have: 0, total: 0 });
   };
 
   function pageHtml(site, p, canHolo) {
@@ -80,12 +79,13 @@
       (p.holo && canHolo(p.holo) ? '<button class="jr-holo" data-holo="' + p.holo + '">▶ Play the hologram</button>' : '') + '</div></div>';
   }
   J.html = function (site, canHolo) {
-    var pages = J.pages(site), c = J.count(site), moon = J.count('moon'), mars = J.count('mars');
+    var pages = J.pages(site), c = J.count(site);
     var pct = Math.round(c.have / Math.max(1, c.total) * 100);
     var html = '<h2>📓 Field Journal</h2><p class="sub">Every piece of real science you meet is kept here, mission after mission. Empty pages tell you where to look.</p>' +
-      '<div class="jr-tabs" role="tablist">' +
-      '<button class="jr-tab' + (site === 'moon' ? ' sel' : '') + '" data-site="moon" role="tab" aria-selected="' + (site === 'moon') + '">🌙 Moon <b>' + moon.have + '/' + moon.total + '</b></button>' +
-      '<button class="jr-tab' + (site === 'mars' ? ' sel' : '') + '" data-site="mars" role="tab" aria-selected="' + (site === 'mars') + '">🔴 Mars <b>' + mars.have + '/' + mars.total + '</b></button></div>' +
+      '<div class="jr-tabs" role="tablist">' + Object.keys(JA.SITES).map(function (id) {      // one tab for every planet
+        var P = JA.SITES[id], n = J.count(id);
+        return '<button class="jr-tab' + (site === id ? ' sel' : '') + '" data-site="' + id + '" role="tab" aria-selected="' + (site === id) + '">' + P.emoji + ' ' + esc(P.short) + ' <b>' + n.have + '/' + n.total + '</b></button>';
+      }).join('') + '</div>' +
       '<div class="jr-bar" aria-hidden="true"><i style="width:' + pct + '%"></i></div>' +
       '<p class="jr-count"><b>' + c.have + '</b> of ' + c.total + ' pages found on ' + esc(JA.SITES[site].name) + (c.have >= c.total ? ' · every single one! 🏆' : '') + '</p>';
     GROUPS.forEach(function (g) {

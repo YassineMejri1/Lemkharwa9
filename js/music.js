@@ -60,10 +60,12 @@
     launch: { set: LAUNCH, first: 'C', every: [7, 8], atk: 3, rel: 3.5, lead: 1.5, stag: 0.3, lv: 1.05, shim: 2, bell: [3, 5] }
   };
   // st: key change in half steps   cut: low-pass in Hz   shim: how much of the quiet high notes
+  // hum: a soft low hum under the calm music too (the storm hum, quieter), for a wide empty place
   var PLAIN = { st: 0, cut: 2500, shim: 1 };
   var SITES = {
     moon: { st: 2, cut: 2800, shim: 1.3 },    // a little higher and colder
-    mars: { st: -5, cut: 2000, shim: 0.6 }    // a fifth below the Moon, and warmer
+    mars: { st: -5, cut: 2000, shim: 0.6 },   // a fifth below the Moon, and warmer
+    sahrun: { st: -3, cut: 2300, shim: 0.8, hum: 0.45 }    // between the two, warm, over the hum of the open desert
   };
 
   var ctx = null, lp = null, out = null, timer = null, fails = 0;
@@ -181,15 +183,16 @@
   // The storm hum: a low A (in the key of the site) and the A above it, with the loudness swaying slowly.
   // It is played in long pieces that hand over to each other; each piece holds a whole number of waves,
   // so the hand-over is seamless.
-  function drone(t0) {
+  function drone(t0, k) {
     var len = 20, fade = 4, f = hz(33), tEnd = t0 + len + fade + 0.05, trem, v, i;
+    k = k || 1;
     if (liveAt(t0) + 3 > CAP) return false;
     while (f < 50) f *= 2;
     f = Math.round(f * len) / len;
     trem = ctx.createGain(); trem.gain.value = 1; trem.connect(seq.layer.g);
     for (i = 0; i < 2; i++) {
       v = voice('sine', f * (i + 1), t0, tEnd, 0, false, trem);
-      swell(v.g.gain, HUM * (1 - i * 0.4), t0, fade, t0 + len, fade);
+      swell(v.g.gain, HUM * k * (1 - i * 0.4), t0, fade, t0 + len, fade);
     }
     v = voice('sine', 0.5, t0, tEnd, 0, false, trem.gain);   // sways the hum up and down by 30%
     v.g.gain.value = 0.3; v.x = trem;
@@ -225,9 +228,10 @@
       t = Math.max(seq.nextChord, now + 0.05);
       if (!chord(t)) seq.nextChord = now + 0.3;
     }
-    if (cfg.drone && seq.nextDrone <= now + AHEAD) {
+    var hum = cfg.drone ? 1 : seq.cfg !== MOODS.crisis && site.hum ? site.hum : 0;      // the storm hum, or a planet's own quiet one
+    if (hum && seq.nextDrone <= now + AHEAD) {
       t = Math.max(seq.nextDrone, now + 0.05);
-      if (!drone(t)) seq.nextDrone = now + 0.3;
+      if (!drone(t, hum)) seq.nextDrone = now + 0.3;
     }
     if (cfg.bell && seq.chord && seq.nextBell <= now + AHEAD) {
       t = Math.max(seq.nextBell, now + 0.05);
@@ -291,7 +295,8 @@
     apply();
   }
   function setSite(id) {
-    var s = SITES.hasOwnProperty(id) ? SITES[id] : PLAIN, moved = s.st !== site.st;
+    // a planet without a key of its own plays in the key of the planet it is "like" (JA.SITES); anything else is the title key
+    var s = SITES.hasOwnProperty(id) ? SITES[id] : JA.SITES && JA.SITES[id] ? JA.pick(id, SITES) : PLAIN, moved = s.st !== site.st;
     if (s === site) return;
     site = s;
     if (!ctx) return;
