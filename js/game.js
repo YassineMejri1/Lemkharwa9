@@ -330,6 +330,7 @@
       '<div class="info-row"><span class="ic">🔋</span><div><b>You do everything by hand</b><p>The Sun charges only a few power cells a day. YOU carry each one to the machine that needs it most — air, food, shield, science or radio. There is never enough for all of them.</p></div></div>' +
       '<div class="info-row"><span class="ic">📈</span><div><b>Every day is harder, and teaches something new</b><p>The outpost wears down the longer you stay. And ' + s.level.crisisSols.length + ' times, something will go wrong that has no checklist: ' + (crew() ? 'the host makes the call for the whole crew' : 'you alone will choose what to do') + ', and live with what follows.</p></div></div>' +
       wx +
+      (s.site.worm ? '<div class="info-row alert"><span class="ic">🪱</span><div><b>Deepmaws (made up)</b><p>Giant sand worms hunt on the open sand, far from the outpost. If the ground starts to shake, run for rocks, a building or the rover: they cannot burrow through hard ground.</p></div></div>' : '') +
       '<div class="info-row"><span class="ic">📡</span><div><b>' + (s.site.comms === 'relay' ? 'Talking to Mission Control' : 'Talking to Earth') + '</b><p>' + esc(commWelcome(s)) + '</p></div></div>' +
       '<div class="info-row good"><span class="ic">' + day.icon + '</span><div><b>' + esc(dayWord()) + ' 1 · ' + esc(day.title) + ' · ' + esc(day.topic) + '</b><p>' + esc(day.learn) + '</p>' + srcLine(day.src) + '</div></div>' +
       (crew() ? '<div class="info-row good"><span class="ic">🧑‍🚀</span><div><b>Your crew: ' + crew().count() + ' astronauts</b><p>You share everything: the air, the food, the Solar Rack, the rover. Split the jobs, call out storms, and get everyone inside in time!</p></div></div>' : '') +
@@ -1082,7 +1083,7 @@
       } } }, ['ok'], 'crisisResult');
   }
   // A choice that takes time: the shift clock jumps forward while you work on it indoors.
-  function skipTime(frac, home) {
+  function skipTime(frac, home, why) {      // why: what the time went into (default: the crisis job)
     var s = G.s, secs = frac * s.dayLength, total = secs, ev = [], guard = 0;
     if (home && G.mode === 'play') {
       if (A.rover.driver) exitRoverLocal();
@@ -1090,7 +1091,7 @@
       A.resetAstro(); crewSpot(); W.cam.yaw = 0.45;
     }
     U.fade(true); setTimeout(function () { if (G.mode === 'play' || G.mode === 'inside') U.fade(false); }, 450);
-    U.banner('⏩ ' + clockText(total) + ' of the shift went into the job', 'info'); G.bannerUntil = G.clock + 5;
+    U.banner('⏩ ' + clockText(total) + (why || ' of the shift went into the job'), 'info'); G.bannerUntil = G.clock + 5;
     if (guest()) return;                                // the host's game moves the clock on for the crew
     while (secs > 0 && !s.dayDone && !s.over && guard++ < 4000) { var st = Math.min(0.5, secs); secs -= st; ev = ev.concat(sim.tick(s, st, { outside: false })); }
     if (crew()) crew().events(ev.filter(function (e) { return e.type !== 'dayEnd'; }));
@@ -1206,6 +1207,27 @@
   var SKY = { outside: true, pos: null, say: function (t) { say(t, true); }, tip: function (id, t) { return tip(id, t); } };
   // the sand rays (js/sandray.js, a planet with creature 'ray'): host plans the passes, everyone sees and feels them
   var RAY = { outside: true, pos: null, host: true, busy: false, astro: null, rover: null, say: function (t) { say(t, true); }, tip: function (id, t) { return tip(id, t); }, drop: function () { putDown(); } };
+  // the deepmaw (js/deepmaw.js, a planet with worm: true): the host decides when it hunts; it swallows the astronaut
+  // who is still in its ring, then spits them out at the airlock without their cargo, short of air and time
+  var WORM = { outside: true, driving: false, pos: null, host: true, busy: false, astro: null, say: function (t) { say(t, true); }, tip: function (id, t) { return tip(id, t); },
+    gulp: function () { wormGulp(); }, spit: function () { wormSpit(); } };
+  function wormStep(dt, host) {
+    WORM.outside = G.mode === 'play'; WORM.driving = !!A.rover.driver; WORM.pos = A.astro.pos; WORM.host = host; WORM.busy = !!(G.crisisOpen || G.mini); WORM.astro = A.astro;
+    ext('worm', 'update', dt, G.s, WORM);
+  }
+  function wormGulp() {
+    var a = A.astro;
+    if (a.carrying) { if (guest()) putDown(); else A.remove(a.carrying); }      // what you carried is gone (a guest drops it: the host owns the things)
+    a.vel.set(0, 0, 0); a.mode = 'hidden'; G.mini = null; U.drillUi && U.drillUi(null);
+    Au.play('bad'); fxPulse('glitch', 1);
+  }
+  function wormSpit() {
+    var s = G.s;
+    A.astro.mode = 'walk';
+    if (!guest()) sim.wormBite(s);
+    skipTime(R.wormTime, true, ' of the shift lost inside the deepmaw');
+    say('The deepmaw did not like the taste of your spacesuit and spat you out! The crew dragged you back to the airlock. Refilling your suit took ' + R.wormAir + ' air. Next time, run for the rocks!', true);
+  }
   function rayStep(dt, host) {
     RAY.outside = G.mode === 'play'; RAY.pos = me(); RAY.host = host; RAY.busy = !!(G.crisisOpen || G.mini);
     RAY.astro = A.astro; RAY.rover = A.rover ? A.rover.pos : null;
@@ -2111,6 +2133,8 @@
     if (crater) placeMark(marks, crater, '☄️', label(crater), '', '#ffb347');
     var ray = ext('ray', 'marker', s, pos, v2);       // the Sandquake Sensor tracks a sand ray under the dunes
     if (ray) placeMark(marks, ray, '〰️', label(ray), 'alarm', '#ffb347');
+    var worm = ext('worm', 'marker', s, pos, v2);     // where a deepmaw is about to burst out: run away from it
+    if (worm) placeMark(marks, worm, '⚠️', 'RUN!', 'alarm', '#ff5468');
     U.marks(marks);
   }
 
@@ -2369,6 +2393,7 @@
         SKY.outside = G.mode === 'play'; SKY.pos = me();
         ext('sky', 'update', dt, G.s, SKY);
         rayStep(dt, true);
+        wormStep(dt, true);
       }
       if (G.s) {
         WORLD.mode = G.mode; WORLD.pos = me(); WORLD.s = G.s;
@@ -2415,6 +2440,7 @@
     if (G.s && !still) {
       if (day && (c.host || G.s.sky)) { SKY.outside = G.mode === 'play'; SKY.pos = me(); ext('sky', 'update', dt, G.s, SKY); }
       if (day && (c.host || G.s.ray)) rayStep(dt, !!c.host);
+      if (day && (c.host || G.s.worm)) wormStep(dt, !!c.host);
       WORLD.mode = G.mode; WORLD.pos = me(); WORLD.s = G.s;
       ext('colony', 'update', dt, WORLD);
     }

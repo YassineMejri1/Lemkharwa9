@@ -25,6 +25,7 @@ window.JA = window.JA || {};
     earthobs: { name: 'NASA Earth Observatory — deserts, dust storms and lightning on Earth', url: 'https://earthobservatory.nasa.gov/' },
     // Sahrun itself is not real: anything that is only true in the game says so, and cites this
     grace: { name: 'NASA GRACE and GRACE-FO missions (water seen by gravity)', url: 'https://grace.jpl.nasa.gov/' },
+    shakealert: { name: 'USGS ShakeAlert earthquake early warning', url: 'https://www.shakealert.org/' },
     sandfish: { name: 'Maladen et al., "Undulatory swimming in sand", Science, 2009', url: 'https://www.science.org/doi/10.1126/science.1172490' },
     fiction: { name: 'Made up for this game: Sahrun is a science-fiction planet', url: '' }
   };
@@ -88,6 +89,7 @@ window.JA = window.JA || {};
       star: { name: 'Aster', au: 1.3, turn: 24 },
       dew: true,                     // a dew catcher beside the outpost turns cold nights into drinking water (see RULES.dewWater)
       creature: 'ray',               // MADE UP: sand rays glide under its dunes (js/sandray.js)
+      worm: true,                    // MADE UP: deepmaws, giant sand worms, hunt on its open sand (js/deepmaw.js)
       // its water is not ice: well pumps lift water from deep in the rock, in sealed cans (JA.waterWords)
       waterWords: { chunk: 'water can', chunks: 'water cans', a: 'a water can', stuff: 'water', Stuff: 'Water', rig: 'well pump', rigs: 'well pumps', at: 'pump', hand: 'pump by hand', icon: '💧' },   // MADE UP: its star, how far Sahrun is from it (AU) and how many days the star takes to turn once
       colors: { soil: 0xc9964f, soil2: 0xa8763a, dust: 0xe8c48a },
@@ -116,6 +118,7 @@ window.JA = window.JA || {};
   //   like          (a new planet) the existing planet it borrows from whenever a table has no entry for it
   //   fictional     a made-up planet: every screen that presents it says so
   //   creature      (a made-up planet) the made-up animal that lives there: 'ray' (js/sandray.js)
+  //   worm          (a made-up planet) a giant made-up worm hunts on its open sand (js/deepmaw.js)
   //   waterWords    where its new water comes from, in the words the screens use (see JA.waterWords): left out = ice
   // What the outpost's new water comes out of, in the words every screen uses: ice chunks from ice drills (the Moon,
   // Mars), or a planet's own (Sahrun: sealed cans of underground water from well pumps). Inside, both are the 'ice' item.
@@ -204,6 +207,7 @@ window.JA = window.JA || {};
     filterWarn: 30, filterFull: 85, staleRate: 1.35,    // with a full filter the tanks must push out a third more air
     // --- water: one tank for the crew and the plants; only ice adds new water ---
     waterPerIce: 30, waterWarn: 15, crewWater: 30,      // what the crew uses in a day, before recycling
+    wormAir: 10, wormTime: 0.06,                        // GAME: swallowed by a deepmaw (made up): air used to refill your suit, and the share of the shift lost
     dewWater: 16,                                       // REAL: fog nets in Chile's Atacama Desert catch a few litres per square metre on a good night. GAME: a full can of dew
     recycle: 0.9, recycleMin: 0.75,                     // REAL: the Space Station gets back about 98%. GAME: 90%, wearing down a little each day
     dryDinner: 4,                                       // extra food eaten when there is no water to cook dried food with
@@ -545,6 +549,10 @@ window.JA = window.JA || {};
       text: 'Real animals do swim through sand. The sandfish, a small lizard from the Sahara Desert, dives into a dune and wiggles its body from side to side to move under the surface. Scientists filmed it with X-rays to see how.' },
     { id: 'swave', site: 'sahrun', icon: '〰️', title: 'Two waves tell the distance', holo: 'swave', src: 'insight', hint: 'Feel a sand ray coming with the Sandquake Sensor set up.',
       text: 'Shaking ground sends out two kinds of waves. The fast P wave pushes and pulls the ground; the slow S wave shakes it from side to side. The farther away the shaking, the longer the gap between them. NASA\'s InSight lander used this gap to work out how far away marsquakes were.' },
+    { id: 'worm', site: 'sahrun', icon: '🪱', title: 'Deepmaws are made up', src: 'fiction', hint: 'Meet a deepmaw, and get away!',
+      text: 'Deepmaws are invented for this game, inspired by the giant desert worms of science fiction. A real animal this big could never find enough food in a desert. If the ground starts to shake, run for rocks, a building or the rover: a deepmaw cannot burrow through hard ground.' },
+    { id: 'shakealert', site: 'sahrun', icon: '📳', title: 'Seconds of warning', holo: 'swave', src: 'shakealert', hint: 'Meet a deepmaw, and get away!',
+      text: 'Strong shaking is often led by smaller, faster waves. Earthquake warning systems such as ShakeAlert, run by the U.S. Geological Survey and its partners, feel those first waves and warn people seconds before the strong shaking arrives. A few seconds is enough to get to safety.' },
     { id: 'filterlow', icon: '🫧', title: 'The air filter is filling up', holo: 'scrubber', src: 'apollo', hint: 'Let the CO₂ filter get nearly full.',
       text: 'Every breath out adds carbon dioxide to the air indoors. The filter soaks it up like a sponge, and a sponge can only hold so much. A power cell at the Air Scrubber bakes it clean.' },
     { id: 'stale', icon: '😮‍💨', title: 'The air has gone stale', holo: 'scrubber', src: 'apollo', hint: 'Let the CO₂ filter fill up completely.',

@@ -539,6 +539,15 @@
     s.today.ice++; s.stats.ice++;
     return OK;
   }
+  // Swallowed by a deepmaw (a made-up planet's giant worm, js/deepmaw.js): it spits you out, and refilling your suit
+  // takes air from the tanks. The game also moves the clock on (R.wormTime) and sends you to the airlock.
+  function wormBite(s) {
+    s.air = Math.max(0, s.air - R.wormAir);
+    s.stats.eaten = (s.stats.eaten || 0) + 1;
+    if (s.today) s.today.extra.push({ res: 'air', text: 'Refilling your suit after the deepmaw spat you out', v: -R.wormAir });
+    note(s, 'worm');
+    return { ok: true, air: R.wormAir };
+  }
   // The dew catcher (a planet with one): take its can of water, then pour it into the water tank.
   function takeDew(s) {
     if (!s.site.dew) return no('There is no dew catcher here.');
@@ -787,6 +796,7 @@
     if (s.stats.drive >= 150) b.push({ icon: '🚙', name: 'Road Tripper', text: 'Drove the rover for ' + Math.round(s.stats.drive) + ' seconds' });
     if (s.sky && s.sky.found) b.push({ icon: '☄️', name: 'Space Rock Hunter', text: 'Picked up ' + s.sky.found + ' meteorite' + (s.sky.found > 1 ? 's' : '') + ' from a fresh crater' });
     if (s.ray && s.ray.seen) b.push({ icon: '🪁', name: 'Ray Spotter', text: 'Saw a sand ray leap out of the dunes (sand rays are made up)' });
+    if (s.worm && s.worm.escaped) b.push({ icon: '🪱', name: 'Worm Dodger', text: 'Ran from a deepmaw and got away (deepmaws are made up)' });
     if (s.colony && s.colony.stage) b.push({ icon: '🏘️', name: 'Town Founder', text: 'Your outpost looked after itself so well that ' + (s.colony.stage > 1 ? 'settlers came' : 'a supply ship came') + ' from Earth' });
     if (s.stats.cores >= 3 && !s.wear.drill && !s.wear.rover) b.push({ icon: '🔧', name: 'Gentle Hands', text: 'Never overheated the drill or ran the rover battery flat' });
     if (s.stats.drive >= 60 && !s.stats.hardCrashes) b.push({ icon: '🛞', name: 'Safe Driver', text: 'Drove the rover without one real crash' });
@@ -839,7 +849,7 @@
 
   JA.sim = {
     rng32: rng32, newGame: newGame, startSol: startSol, env: env, weather: weather, shield: shield, warnLead: warnLead, stormPhase: stormPhase,
-    tick: tick, takeCell: takeCell, plug: plug, feedIce: feedIce, takeDew: takeDew, feedDew: feedDew, addBag: addBag, plant: plant, harvest: harvest, storeCrate: storeCrate,
+    tick: tick, takeCell: takeCell, plug: plug, feedIce: feedIce, takeDew: takeDew, feedDew: feedDew, wormBite: wormBite, addBag: addBag, plant: plant, harvest: harvest, storeCrate: storeCrate,
     coresLeft: coresLeft, drillCore: drillCore, submitCore: submitCore, deploy: deploy, photo: photo, trick: trick,
     servicePanel: servicePanel, cleanAllPanels: cleanAllPanels, devilClean: devilClean, commInfo: commInfo, askEarth: askEarth, repairMiss: repairMiss, repairDone: repairDone,
     endSol: endSol, finish: finish, rankFor: rankFor, badges: badges, hint: hint, didScience: didScience,

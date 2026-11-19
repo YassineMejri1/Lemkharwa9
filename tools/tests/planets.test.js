@@ -106,7 +106,18 @@ IDS.forEach(function (id) {
   ok(id + ': its own card says it is made up (source: fiction)', honest && honest.src === 'fiction' && /invented|made up/i.test(honest.text));
   ok(id + ': the real science beside it has a real source', !!JA.SOURCES[JA.mechFor('sandswim', id).src].url && !!JA.SOURCES[JA.mechFor('swave', id).src].url);
 });
-['moon', 'mars'].forEach(function (id) { ok(id + ' has no made-up animal', !JA.SITES[id].creature); });
+['moon', 'mars'].forEach(function (id) { ok(id + ' has no made-up animal', !JA.SITES[id].creature && !JA.SITES[id].worm); });
+// ---- the giant worm: only on a made-up planet, labelled made up, and its bite costs air but never ends the mission by itself
+IDS.filter(function (id) { return JA.SITES[id].worm; }).forEach(function (id) {
+  ok(id + ': only a made-up planet has a giant worm', !!JA.SITES[id].fictional);
+  var w = JA.mechFor('worm', id), sa = JA.mechFor('shakealert', id);
+  ok(id + ': the worm card says it is made up (source: fiction)', w && w.src === 'fiction' && /invented|made up/i.test(w.text));
+  ok(id + ': the warning card has a real source', sa && !!JA.SOURCES[sa.src].url);
+  var s = sim.newGame({ site: id, level: 'cadet', seed: 5, weather: arch }), a0 = s.air;
+  var r = sim.wormBite(s);
+  ok(id + ': being swallowed costs air and is counted', r.ok && s.air === Math.max(0, a0 - JA.RULES.wormAir) && s.stats.eaten === 1 && !s.over);
+  ok(id + ': the night report says why the air went', s.today.extra.some(function (x) { return x.res === 'air' && x.v === -JA.RULES.wormAir; }));
+});
 
 // ---- a planet whose water comes from a well (waterWords) never talks about ice
 IDS.filter(function (id) { return JA.iceWell(id); }).forEach(function (id) {
