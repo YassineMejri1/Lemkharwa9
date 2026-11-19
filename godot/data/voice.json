@@ -1,0 +1,455 @@
+{
+ "voice": {
+  "hud-air-intro": {
+   "w": "capcom",
+   "t": "This is our air. The crew breathes it all day, so keep the Air Maker busy."
+  },
+  "hud-air-low": {
+   "w": "capcom",
+   "t": "Air is running low. The Air Maker needs a power cell and ice."
+  },
+  "hud-air-stale": {
+   "w": "capcom",
+   "t": "The air is going stale. It is draining fast!"
+  },
+  "hud-air-leak": {
+   "w": "capcom",
+   "t": "Air leak! The tanks are losing air."
+  },
+  "hud-air-empty": {
+   "w": "capcom",
+   "t": "The air tanks are empty! Everyone to the rocket!"
+  },
+  "hud-food-intro": {
+   "w": "capcom",
+   "t": "This is our food. Every night, dinner comes out of it."
+  },
+  "hud-food-low": {
+   "w": "capcom",
+   "t": "Food is getting low. Plant seeds in the Greenhouse beds."
+  },
+  "hud-food-short": {
+   "w": "capcom",
+   "t": "There is not enough food for tonight's dinner!"
+  },
+  "hud-food-added": {
+   "w": "capcom",
+   "t": "Fresh food in the pantry!"
+  },
+  "hud-rad-intro": {
+   "w": "capcom",
+   "t": "This is your radiation badge. When it is full, the mission is over."
+  },
+  "hud-rad-rising": {
+   "w": "capcom",
+   "t": "The radiation badge is filling up. More soil bags on the dome would slow it down."
+  },
+  "hud-rad-full": {
+   "w": "capcom",
+   "t": "The radiation badges are full! Everyone to the rocket!"
+  },
+  "hud-shield-full": {
+   "w": "capcom",
+   "t": "The dome is fully covered. Maximum shielding!"
+  },
+  "hud-clock-low": {
+   "w": "capcom",
+   "t": "The shift is almost over. Head back to the airlock!"
+  },
+  "hud-clock-over": {
+   "w": "capcom",
+   "t": "The shift is over! We are calling you home. That rush used extra air."
+  },
+  "hud-challenge-done": {
+   "w": "capcom",
+   "t": "Today's challenge is done. Nice work!"
+  },
+  "rack-intro": {
+   "w": "capcom",
+   "t": "Power cells charge on the Solar Rack. Walk up to one and grab it, then carry it to the Air Maker's socket."
+  },
+  "rack-full": {
+   "w": "capcom",
+   "t": "The Solar Rack is full, so the panels are wasting sunshine. Use those power cells!"
+  },
+  "rack-dusty": {
+   "w": "capcom",
+   "t": "Dust is covering the solar panels. Brush them off to charge faster."
+  },
+  "rack-sun-moved": {
+   "w": "capcom",
+   "t": "The Sun has moved. Turn the solar panels to face it again."
+  },
+  "rack-zap": {
+   "w": "capcom",
+   "t": "Zap! A short circuit wasted some solar charge."
+  },
+  "rack-broken": {
+   "w": "capcom",
+   "t": "Loose solar cable! The Solar Rack cannot charge cells until it is fixed."
+  },
+  "rack-fixed": {
+   "w": "capcom",
+   "t": "Fixed! The Solar Rack is running again."
+  },
+  "air-intro": {
+   "w": "capcom",
+   "t": "Now the Air Maker needs ice to turn into oxygen. The ice is far away, so plug a cell into the back of the rover and drive there!"
+  },
+  "air-no-power": {
+   "w": "capcom",
+   "t": "The Air Maker has ice but no power. Bring it a power cell!"
+  },
+  "air-hungry": {
+   "w": "capcom",
+   "t": "The Air Maker is powered but hungry. Bring it some ice."
+  },
+  "air-cell-empty": {
+   "w": "capcom",
+   "t": "The Air Maker used up its power cell, and there is still ice waiting."
+  },
+  "air-broken": {
+   "w": "capcom",
+   "t": "The Air Maker jammed! A valve froze shut. No new air until it is fixed."
+  },
+  "air-fixed": {
+   "w": "capcom",
+   "t": "Fixed! The Air Maker is running again."
+  },
+  "food-intro": {
+   "w": "capcom",
+   "t": "Next: food. The Greenhouse needs light from a power cell, water from ice, and seeds in the beds."
+  },
+  "food-dark": {
+   "w": "capcom",
+   "t": "The plants are in the dark. The Greenhouse needs a power cell for its lamps."
+  },
+  "food-lamps-out": {
+   "w": "capcom",
+   "t": "The grow lamps ran out of power. Plants stop growing in the dark."
+  },
+  "food-thirsty": {
+   "w": "capcom",
+   "t": "The plants are thirsty. Drop an ice chunk in the Greenhouse water tank."
+  },
+  "food-ripe": {
+   "w": "capcom",
+   "t": "The veggies are ripe! Pick them at the Greenhouse."
+  },
+  "food-crate": {
+   "w": "capcom",
+   "t": "Fresh veggies! Carry the crate to the green food hatch on the dome, or throw it in."
+  },
+  "food-broken": {
+   "w": "capcom",
+   "t": "Greenhouse pump stuck! The plants cannot grow until it is fixed."
+  },
+  "food-fixed": {
+   "w": "capcom",
+   "t": "Fixed! The Greenhouse is running again."
+  },
+  "bag-intro": {
+   "w": "capcom",
+   "t": "The Soil Bagger is filling bags. Grab them and throw them onto the dome!"
+  },
+  "bag-storm-day": {
+   "w": "capcom",
+   "t": "A solar storm is forecast today. Soil bags on the dome will protect the crew!"
+  },
+  "lab-core-loaded": {
+   "w": "capcom",
+   "t": "Core loaded! The Lab needs a power cell to study it."
+  },
+  "lab-cell-empty": {
+   "w": "capcom",
+   "t": "The Lab used up its power cell, and cores are still waiting."
+  },
+  "lab-broken": {
+   "w": "capcom",
+   "t": "The Lab arm is stuck! No rock cores can be studied until it is fixed."
+  },
+  "lab-fixed": {
+   "w": "capcom",
+   "t": "Fixed! The Science Lab is running again."
+  },
+  "dish-on": {
+   "w": "capcom",
+   "t": "Radio Dish on! Now we can warn you early about solar storms, and help with repairs today."
+  },
+  "dish-sent-moon": {
+   "w": "capcom",
+   "t": "We got your question! The Moon is only 1.3 light-seconds from Earth, so our answer is on its way."
+  },
+  "dish-sent-mars": {
+   "w": "capcom",
+   "t": "Your question is on its way to Earth. It takes minutes to get here, and our answer takes just as long to come back. Keep working, we will call you."
+  },
+  "dish-answer": {
+   "w": "mc",
+   "t": "Outpost One, here is your answer. Go back to the broken machine to finish the repair."
+  },
+  "rover-charged": {
+   "w": "capcom",
+   "t": "Rover charged! Hop in and drive."
+  },
+  "rover-drive": {
+   "w": "capcom",
+   "t": "Buckle up! The battery only drains while the rover is moving."
+  },
+  "rover-battery-empty": {
+   "w": "capcom",
+   "t": "The rover battery is empty, so it can only crawl. Plug in a fresh power cell!"
+  },
+  "rover-bed-full": {
+   "w": "capcom",
+   "t": "The rover bed is full. It holds four things."
+  },
+  "rover-edge": {
+   "w": "capcom",
+   "t": "That is as far as the outpost radio can reach. Turn back, Commander!"
+  },
+  "act-welcome": {
+   "w": "capcom",
+   "t": "Welcome outside! Walk around, look around, and try a jump."
+  },
+  "act-grab": {
+   "w": "capcom",
+   "t": "Got it! Use a machine when you are next to it, or aim and throw."
+  },
+  "act-trick-throw": {
+   "w": "capcom",
+   "t": "What a throw! In low gravity things fly much farther than on Earth."
+  },
+  "act-jump-moon": {
+   "w": "capcom",
+   "t": "Wheee! The Moon's gravity is only one-sixth of Earth's, so you jump six times higher."
+  },
+  "act-jump-mars": {
+   "w": "capcom",
+   "t": "Boing! Mars gravity is about 38% of Earth's, so you jump more than twice as high."
+  },
+  "act-ice": {
+   "w": "capcom",
+   "t": "A chunk of ice! The Air Maker can split it into oxygen. The rover bed carries four at a time."
+  },
+  "act-core": {
+   "w": "capcom",
+   "t": "A rock core! Take it to the Science Lab to find out what it is made of."
+  },
+  "act-drill-tip": {
+   "w": "capcom",
+   "t": "Drills get hot! Drill in bursts and let it cool, just like real space drills do."
+  },
+  "act-drill-jam": {
+   "w": "capcom",
+   "t": "Too hot! The drill jammed. Let it cool between bursts."
+  },
+  "act-core-rough": {
+   "w": "capcom",
+   "t": "Rough core."
+  },
+  "act-core-good": {
+   "w": "capcom",
+   "t": "Good core!"
+  },
+  "act-core-perfect": {
+   "w": "capcom",
+   "t": "Perfect core!"
+  },
+  "act-repair-start": {
+   "w": "capcom",
+   "t": "Something is broken! Look for the sparks and fix it."
+  },
+  "act-samples-loaded": {
+   "w": "capcom",
+   "t": "Samples loaded! Scientists on Earth will study them for years."
+  },
+  "act-devil-panels": {
+   "w": "capcom",
+   "t": "A dust devil just blew the dust off the solar panels! That really happened to the Spirit and Opportunity rovers."
+  },
+  "act-devil-hit": {
+   "w": "capcom",
+   "t": "Whee! A dust devil! Mars air is so thin that it feels like a gentle breeze."
+  },
+  "act-basics-done": {
+   "w": "capcom",
+   "t": "You have got the basics! Now you choose: soil bags for the shield, rock cores for science, or the instruments by the rocket. There is not enough power for everything!"
+  },
+  "act-sound-moon": {
+   "w": "capcom",
+   "t": "Hear how quiet it is? The Moon has no air to carry sound. You only hear what travels through your suit."
+  },
+  "act-sound-mars": {
+   "w": "capcom",
+   "t": "Everything sounds faint and muffled out here. The thin Mars air carries sound poorly. The Perseverance rover's microphones heard the same thing."
+  },
+  "storm-spotted": {
+   "w": "capcom",
+   "t": "We just spotted a solar flare! A radiation storm is coming. Head for the airlock!"
+  },
+  "storm-no-warning": {
+   "w": "capcom",
+   "t": "Your suit sensor just caught a solar storm! The dish is off, so we could not warn you early. Run for the airlock!"
+  },
+  "storm-countdown": {
+   "w": "capcom",
+   "t": "Solar storm coming. Get to the airlock!"
+  },
+  "storm-inside": {
+   "w": "capcom",
+   "t": "A solar storm is on its way. Good thing you are inside!"
+  },
+  "storm-active": {
+   "w": "capcom",
+   "t": "Radiation storm! You cannot see it or feel it, but your suit sensor can. Get inside!"
+  },
+  "storm-clicks": {
+   "w": "capcom",
+   "t": "That clicking is your suit's radiation sensor. More clicks mean more radiation."
+  },
+  "storm-safe": {
+   "w": "capcom",
+   "t": "Phew, inside! The walls and the soil bags are soaking up the storm."
+  },
+  "storm-still-going": {
+   "w": "capcom",
+   "t": "Careful! The storm is still going."
+  },
+  "storm-passed": {
+   "w": "capcom",
+   "t": "The storm has passed. All clear!"
+  },
+  "inside-rest": {
+   "w": "capcom",
+   "t": "Back inside. Take a breather. The machines keep working."
+  },
+  "welcome-moon": {
+   "w": "capcom",
+   "t": "Welcome to the Moon, Commander! This is Mission Control on Earth. We are with you on the radio all the way. Keep the crew alive, do real science, then ride the rocket home."
+  },
+  "welcome-mars": {
+   "w": "capcom",
+   "t": "Welcome to Mars, Commander! This is Mission Control on Earth. We are with you on the radio all the way. Keep the crew alive, do real science, then ride the rocket home."
+  },
+  "day-morning": {
+   "w": "capcom",
+   "t": "Good morning, Commander! Here is the plan for today."
+  },
+  "day-bright-sunshine": {
+   "w": "capcom",
+   "t": "Bright sunshine today."
+  },
+  "day-long-shadows": {
+   "w": "capcom",
+   "t": "Long shadows today."
+  },
+  "day-in-shadow": {
+   "w": "capcom",
+   "t": "In the shadow today."
+  },
+  "day-clear-sky": {
+   "w": "capcom",
+   "t": "Clear sky today."
+  },
+  "day-dusty-sky": {
+   "w": "capcom",
+   "t": "Dusty sky today."
+  },
+  "day-dust-storm": {
+   "w": "capcom",
+   "t": "Dust storm today!"
+  },
+  "forecast-quiet": {
+   "w": "capcom",
+   "t": "The Sun is quiet today."
+  },
+  "forecast-small": {
+   "w": "capcom",
+   "t": "A small solar storm is coming today. Stay ready to run home!"
+  },
+  "forecast-medium": {
+   "w": "capcom",
+   "t": "A medium solar storm is coming today. Stay ready to run home!"
+  },
+  "forecast-big": {
+   "w": "capcom",
+   "t": "A big solar storm is coming today. Stay ready to run home!"
+  },
+  "forecast-none": {
+   "w": "capcom",
+   "t": "The dish was off, so there is no storm forecast. Listen for your suit sensor!"
+  },
+  "day-last": {
+   "w": "capcom",
+   "t": "Last day: load the sample case and board the rocket!"
+  },
+  "day-sleep": {
+   "w": "capcom",
+   "t": "Good night, Commander."
+  },
+  "night-report": {
+   "w": "capcom",
+   "t": "Good work today, Commander. Here is how the day added up."
+  },
+  "crisis-your-call": {
+   "w": "capcom",
+   "t": "We have no checklist for this one, Commander. There is more than one thing you could do. You decide."
+  },
+  "launch-time-up": {
+   "w": "capcom",
+   "t": "Time is up, Commander! It is launch time. We are bringing you home!"
+  },
+  "launch-3": {
+   "w": "mc",
+   "t": "Three."
+  },
+  "launch-2": {
+   "w": "mc",
+   "t": "Two."
+  },
+  "launch-1": {
+   "w": "mc",
+   "t": "One."
+  },
+  "launch-liftoff": {
+   "w": "mc",
+   "t": "Liftoff!"
+  },
+  "win-home": {
+   "w": "mc",
+   "t": "Outpost One, you are on course for Earth. Outstanding work, Commander. Mission complete!"
+  },
+  "fail-safe": {
+   "w": "capcom",
+   "t": "The mission is over, but everyone is safe. Real astronauts fail in simulators all the time. That is how they learn."
+  }
+ },
+ "match": [
+  [
+   "todays challenge is done",
+   "hud-challenge-done"
+  ],
+  [
+   "the air maker is powered but hungry",
+   "air-hungry"
+  ],
+  [
+   "veggies are ripe",
+   "food-ripe"
+  ]
+ ],
+ "music": {
+  "title": {
+   "v": 0.5,
+   "loop": true
+  },
+  "vista": {
+   "v": 0.55
+  },
+  "night": {
+   "v": 0.45,
+   "loop": true
+  }
+ }
+}

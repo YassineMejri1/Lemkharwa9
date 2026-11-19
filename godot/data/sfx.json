@@ -1,0 +1,283 @@
+{
+ "tap": {
+  "bus": "ui",
+  "vol": 0.5,
+  "pitch": 0.03,
+  "gap": 0.04
+ },
+ "page": {
+  "bus": "ui",
+  "vol": 0.5
+ },
+ "deny": {
+  "bus": "ui",
+  "vol": 0.5,
+  "gap": 0.2
+ },
+ "swish": {
+  "bus": "fx",
+  "vol": 0.55
+ },
+ "ding": {
+  "bus": "fx",
+  "vol": 0.45,
+  "range": 22
+ },
+ "good": {
+  "bus": "fx",
+  "vol": 0.5
+ },
+ "bad": {
+  "bus": "fx",
+  "vol": 0.5
+ },
+ "score": {
+  "bus": "fx",
+  "vol": 0.5
+ },
+ "discovery": {
+  "bus": "fx",
+  "vol": 0.55
+ },
+ "win": {
+  "bus": "fx",
+  "vol": 0.6
+ },
+ "lose": {
+  "bus": "fx",
+  "vol": 0.5
+ },
+ "photo": {
+  "bus": "fx",
+  "vol": 0.5
+ },
+ "low": {
+  "bus": "fx",
+  "vol": 0.4,
+  "gap": 4
+ },
+ "daystart": {
+  "bus": "fx",
+  "vol": 0.45
+ },
+ "night": {
+  "bus": "fx",
+  "vol": 0.45
+ },
+ "warn": {
+  "bus": "fx",
+  "vol": 0.45,
+  "gap": 0.5
+ },
+ "storm-alert": {
+  "bus": "fx",
+  "vol": 0.5
+ },
+ "alarm": {
+  "bus": "fx",
+  "vol": 0.55
+ },
+ "step": {
+  "bus": "world",
+  "vol": 0.34,
+  "n": 4,
+  "pitch": 0.08,
+  "gap": 0.09
+ },
+ "jump": {
+  "bus": "world",
+  "vol": 0.4,
+  "pitch": 0.05
+ },
+ "land": {
+  "bus": "world",
+  "vol": 0.5,
+  "pitch": 0.06
+ },
+ "breath": {
+  "bus": "fx",
+  "vol": 0.2,
+  "n": 2,
+  "pitch": 0.04
+ },
+ "grab": {
+  "bus": "world",
+  "vol": 0.8,
+  "pitch": 0.05
+ },
+ "drop": {
+  "bus": "world",
+  "vol": 0.45,
+  "pitch": 0.05
+ },
+ "throw": {
+  "bus": "world",
+  "vol": 0.45,
+  "pitch": 0.06
+ },
+ "thud": {
+  "bus": "world",
+  "vol": 0.5,
+  "pitch": 0.08,
+  "gap": 0.08,
+  "range": 16
+ },
+ "plug": {
+  "bus": "world",
+  "vol": 0.55,
+  "range": 16
+ },
+ "ice": {
+  "bus": "world",
+  "vol": 0.5,
+  "pitch": 0.06,
+  "range": 16
+ },
+ "air": {
+  "bus": "world",
+  "vol": 0.5,
+  "range": 20
+ },
+ "pop": {
+  "bus": "world",
+  "vol": 0.45,
+  "pitch": 0.06
+ },
+ "harvest": {
+  "bus": "world",
+  "vol": 0.45
+ },
+ "brush": {
+  "bus": "world",
+  "vol": 0.45
+ },
+ "bag": {
+  "bus": "world",
+  "vol": 0.5,
+  "pitch": 0.06,
+  "range": 16
+ },
+ "spark": {
+  "bus": "world",
+  "vol": 0.45,
+  "n": 2,
+  "pitch": 0.1,
+  "gap": 0.1,
+  "range": 14
+ },
+ "hit": {
+  "bus": "world",
+  "vol": 0.5,
+  "pitch": 0.05
+ },
+ "core": {
+  "bus": "world",
+  "vol": 0.5
+ },
+ "jam": {
+  "bus": "world",
+  "vol": 0.5
+ },
+ "door": {
+  "bus": "world",
+  "vol": 0.55
+ },
+ "rover-start": {
+  "bus": "world",
+  "vol": 0.45
+ },
+ "drill": {
+  "bus": "world",
+  "vol": 0.5,
+  "loop": 1
+ },
+ "rover": {
+  "bus": "world",
+  "vol": 0.5,
+  "loop": 1
+ },
+ "devil": {
+  "bus": "world",
+  "vol": 0.6,
+  "range": 12,
+  "loop": 1
+ },
+ "loop-air-maker": {
+  "bus": "world",
+  "vol": 0.55,
+  "range": 9,
+  "loop": 1
+ },
+ "loop-greenhouse": {
+  "bus": "world",
+  "vol": 0.5,
+  "range": 9,
+  "loop": 1
+ },
+ "loop-solar-rack": {
+  "bus": "world",
+  "vol": 0.4,
+  "range": 7,
+  "loop": 1
+ },
+ "loop-soil-bagger": {
+  "bus": "world",
+  "vol": 0.55,
+  "range": 9,
+  "loop": 1
+ },
+ "loop-lab": {
+  "bus": "world",
+  "vol": 0.5,
+  "range": 8,
+  "loop": 1
+ },
+ "loop-radio-dish": {
+  "bus": "world",
+  "vol": 0.45,
+  "range": 8,
+  "loop": 1
+ },
+ "amb-suit": {
+  "bus": "amb",
+  "vol": 0.5,
+  "loop": 1
+ },
+ "amb-mars-wind": {
+  "bus": "amb",
+  "vol": 0.5,
+  "loop": 1
+ },
+ "amb-mars-dust": {
+  "bus": "amb",
+  "vol": 0.6,
+  "loop": 1
+ },
+ "amb-hab": {
+  "bus": "amb",
+  "vol": 0.5,
+  "loop": 1
+ },
+ "amb-storm": {
+  "bus": "amb",
+  "vol": 0.55,
+  "loop": 1
+ },
+ "descent": {
+  "bus": "fx",
+  "vol": 0.5,
+  "loop": 1
+ },
+ "touchdown": {
+  "bus": "fx",
+  "vol": 0.7
+ },
+ "hiss": {
+  "bus": "fx",
+  "vol": 0.55
+ },
+ "launch": {
+  "bus": "world",
+  "vol": 0.8
+ }
+}

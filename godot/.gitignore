@@ -1,0 +1,5 @@
+# Godot editor cache: rebuilt on open
+.godot/
+# robot test screenshots
+tools/shots/*.png
+tools/shots/*.png.import
