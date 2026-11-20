@@ -50,7 +50,8 @@
   var v1 = new T.Vector3(), v2 = new T.Vector2(), fwd = new T.Vector3();
   var time = 0, playT = 0, snapT = 0, perfT = 0, perfN = 0, perfSum = 0;
   // smoothed game state that drives the look
-  var S = { storm: 0, warn: 0, dust: 0, air: 0, cold: 0, kick: 0, cine: 0, title: 0, inside: 0, site: 1, sunVis: 0 };
+  var S = { storm: 0, warn: 0, dust: 0, air: 0, cold: 0, kick: 0, cine: 0, title: 0, inside: 0, site: 1, sunVis: 0, teal: 0, heat: 0, horizon: 0.5 };
+  var hz = null;
   // short jolts the game asks for: 'flash' (white), 'shock' (the lens is shaken), 'glitch' (the picture tears), 'glow' (a warm swell)
   var PU = { flash: 0, shock: 0, glitch: 0, glow: 0 };
 
@@ -110,6 +111,7 @@
     'uniform float uStorm; uniform float uWarn; uniform float uDust; uniform float uAir; uniform float uCold;',
     'uniform float uKick; uniform float uCine; uniform float uTitle; uniform float uInside; uniform float uSnap;',
     'uniform float uFlash; uniform float uShock; uniform float uGlitch; uniform float uGlow; uniform float uFilter;',
+    'uniform float uTeal; uniform float uHeat; uniform float uHorizon;',
     'varying vec2 vUv;',
     'float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }',
     'float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);',
@@ -134,12 +136,19 @@
     '  float tear = step(0.992 - uStorm * 0.03, noise(vec2(uv.y * 38.0, tq)));',
     '  uv.x += tear * uStorm * uMotion * (hash(vec2(tq, floor(uv.y * 90.0))) - 0.5) * 0.02;',
     '  if (uGlitch > 0.001) { float band = floor(uv.y * 34.0 + uTime * 9.0); float rg = hash(vec2(band, floor(uTime * 22.0))); if (rg > 0.78) uv.x += (rg - 0.89) * 0.5 * uGlitch * uMotion; }',
+    // heat shimmer: hot air near the ground bends light a little differently from moment to moment, so the horizon wobbles
+    '  if (uHeat > 0.001) { float hb = inv(0.0, 0.07, abs(uv.y - uHorizon + 0.01)) * uHeat * uMotion;',
+    '    uv.x += (noise(vec2(uv.y * 170.0, uTime * 3.2)) - 0.5) * 0.003 * hb; uv.y += (noise(vec2(uv.x * 95.0, uTime * 2.5 + 5.0)) - 0.5) * 0.0011 * hb; }',
     '  vec2 cc = uv - 0.5, ca = vec2(cc.x * asp, cc.y);',
     '  float r2 = dot(cc, cc), rr = length(ca);',
     // colour fringing, stronger toward the corners and when something hits hard
     '  float ab = (0.5 + 3.0 * uKick + 4.0 * uShock + 1.6 * uStorm + 0.8 * uCine) * r2 * 0.018;',
     '  vec3 c = vec3(texture2D(tScene, uv + cc * ab).r, texture2D(tScene, uv).g, texture2D(tScene, uv - cc * ab).b);',
     '  if (uShock > 0.001) { vec3 acc = c; for (int i = 1; i < 6; i++) acc += texture2D(tScene, uv - cc * uShock * 0.035 * float(i)).rgb; c = acc / 6.0; }',
+    '  if (uHeat > 0.001) { float below = uHorizon - uv.y;',
+    '    float mw = smoothstep(0.0, 0.008, below) * (1.0 - smoothstep(0.02, 0.045, below)) * uHeat;',
+    '    if (mw > 0.001) { vec2 mu = vec2(uv.x + (noise(vec2(uv.y * 320.0, uTime * 4.0)) - 0.5) * 0.004 * uMotion, uHorizon + below * 1.3 + 0.003);',
+    '      c = mix(c, texture2D(tScene, mu).rgb * vec3(0.94, 0.98, 1.06) + 0.02, mw * 0.42); } }',
     // glow
     '  vec3 bloom = texture2D(tBloomA, uv).rgb * 0.55 + texture2D(tBloomB, uv).rgb * 0.6 * uFull;',
     '  c += bloom * (uBloom + uGlow * 0.8);',
@@ -181,6 +190,11 @@
     '  c = max(mix(vec3(L), c, sat), 0.0);',
     '  float con = mix(1.10, 1.08, uSite);',
     '  c = max((c - 0.16) * con + 0.16, 0.0) * mix(0.97, 1.0, uSite);',
+    '  if (uTeal > 0.001) { float Lt = dot(c, vec3(0.2126, 0.7152, 0.0722));',
+    '    vec3 split = mix(vec3(0.82, 0.97, 1.08), vec3(1.08, 0.98, 0.84), smoothstep(0.06, 0.6, Lt));',
+    '    split = mix(split, vec3(0.92, 1.0, 1.1), clamp((c.b - max(c.r, c.g)) * 4.0, 0.0, 1.0));',     // blue sky stays blue: only warm things are warmed
+    '    c = mix(c, c * split, uTeal);',
+    '    c = max(mix(vec3(Lt), c, 1.0 + 0.14 * uTeal), 0.0); c = max((c - 0.18) * (1.0 + 0.12 * uTeal) + 0.18, 0.0); }',
     // Mars dust: moving sheets of haze
     '  if (uDust > 0.001) {',
     '    float hz = fbm(vec2(uv.x * 2.4 * asp - uTime * 0.22 * uMotion, uv.y * 3.0 + uTime * 0.03));',
@@ -231,7 +245,7 @@
     '  }',
     // soft dark corners
     '  float vig = inv(0.28, 1.05, length(ca * vec2(0.85, 1.0)));',
-    '  c *= mix(1.0, vig, 0.5 + 0.25 * uCine + 0.2 * uSnap);',
+    '  c *= mix(1.0, vig, 0.5 + 0.25 * uCine + 0.2 * uSnap + 0.18 * uTeal);',
     // postcard photo: the black cross marks of an Apollo Hasselblad camera
     '  if (uSnap > 0.001) {',
     '    float sp2 = uRes.y / 5.0; vec2 px = vUv * uRes - uRes * 0.5;',
@@ -291,7 +305,8 @@
       uBloom: { value: 0.8 }, uStreakAmt: { value: 0.6 }, uStreakTint: { value: new T.Color(0.55, 0.75, 1.0) },
       uStorm: { value: 0 }, uWarn: { value: 0 }, uDust: { value: 0 }, uAir: { value: 0 }, uCold: { value: 0 },
       uKick: { value: 0 }, uCine: { value: 0 }, uTitle: { value: 0 }, uInside: { value: 0 }, uSnap: { value: 0 },
-      uFlash: { value: 0 }, uShock: { value: 0 }, uGlitch: { value: 0 }, uGlow: { value: 0 }, uFilter: { value: 0 }
+      uFlash: { value: 0 }, uShock: { value: 0 }, uGlitch: { value: 0 }, uGlow: { value: 0 }, uFilter: { value: 0 },
+      uTeal: { value: 0 }, uHeat: { value: 0 }, uHorizon: { value: 0.5 }
     });
   }
 
@@ -320,11 +335,13 @@
 
   // The colour grade of each planet. warm blends the shader between a cold Apollo slide film (0) and a warm rover
   // camera (1); occLo, bloom, streak, tint: lens flare and glow; cold: how blue the night goes; glowFrom, glowCap: what is bright enough to glow.
+  // teal: a desert-film grade, teal shadows and warm highlights; heat: shimmer and a mirage at the horizon on a hot, clear day;
+  // heatAt: [distance, height] of the far ground where the mirage shows (the foot of Sahrun's dune ring), else the eye-level horizon.
   var GRADES = {
     moon: { warm: 0, occLo: 0.55, bloom: 0.45, streak: 0.9, tint: [0.5, 0.72, 1.0], cold: 0.8, glowFrom: 1.3, glowCap: 1.2 },
     mars: { warm: 1, occLo: 1.0, bloom: 0.4, streak: 0.55, tint: [1.0, 0.72, 0.45], cold: 0.7, glowFrom: 1.5, glowCap: 0.3 },
     // Sahrun (made up): sun-bleached and golden, between the two: warm light but neutral shadows, a soft golden glare
-    sahrun: { warm: 0.6, occLo: 1.0, bloom: 0.46, streak: 0.62, tint: [1.0, 0.86, 0.6], cold: 0.55, glowFrom: 1.45, glowCap: 0.35 }
+    sahrun: { warm: 0.6, occLo: 1.0, bloom: 0.5, streak: 0.7, tint: [1.0, 0.82, 0.55], cold: 0.55, glowFrom: 1.45, glowCap: 0.35, teal: 1, heat: 1, heatAt: [430, 23] }
   };
   var GR = GRADES.mars;
   function readGame(dt, camera) {
@@ -332,10 +349,11 @@
     var out = mode === 'play';
     GR = JA.pick(W.site || 'mars', GRADES);
     var phase = s && JA.sim && JA.sim.stormPhase ? JA.sim.stormPhase(s) : '';
-    S.site = GR.warm;
+    S.site = GR.warm; S.teal = GR.teal || 0;
     ease('storm', env.stormShown * (out ? 1 : mode === 'inside' ? 0.15 : 0.6), dt, 4);
     ease('warn', out && phase === 'warning' ? 1 : 0, dt, 3);
-    ease('dust', JA.siteOf(W.site || 'mars').dusty ? env.dustShown : 0, dt, 2);
+    var dAir = env.dustAir != null ? env.dustAir : env.dustShown;      // a haboob: the air is clear until its wall arrives
+    ease('dust', JA.siteOf(W.site || 'mars').dusty ? dAir : 0, dt, 2);
     ease('air', s && (out || mode === 'inside') ? clamp((28 - s.air) / 24, 0, 1) : 0, dt, 1.5);
     ease('cold', out ? clamp((env.dark - 0.55) / 0.4, 0, 1) * GR.cold : 0, dt, 0.6);
     ease('cine', W.cam.mode === 'cine' || mode === 'intro' || mode === 'launch' ? 1 : 0, dt, 2);
@@ -351,6 +369,16 @@
     var vis = front > 0.05 ? clamp((front - 0.05) * 4, 0, 1) * onScreen : 0;
     M.final.uniforms.uSun.value.set(sx, sy);
     ease('sunVis', vis * (1 - S.dust * 0.85), dt, 6);
+    // a hot, clear day outside: where is the horizon on screen? (a point far ahead, at eye height)
+    ease('heat', out && GR.heat ? GR.heat * clamp(1 - dAir * 3, 0, 1) * clamp(1 - env.dark * 2, 0, 1) : 0, dt, 1);
+    if (S.heat > 0.001) {
+      hz = hz || new T.Vector3();
+      var ha = GR.heatAt || [3000, null];
+      hz.set(fwd.x, 0, fwd.z).normalize().multiplyScalar(ha[0]).add(camera.position);
+      if (ha[1] != null) hz.y = ha[1];
+      hz.project(camera);
+      S.horizon = hz.y * 0.5 + 0.5;
+    }
   }
 
   function setUniforms(w, h) {
@@ -364,6 +392,7 @@
     u.uKick.value = reduce ? 0 : S.kick; u.uCine.value = S.cine; u.uTitle.value = S.title; u.uInside.value = S.inside;
     u.uSnap.value = clamp(snapT / 1.6, 0, 1);
     u.uFlash.value = PU.flash; u.uShock.value = PU.shock; u.uGlitch.value = PU.glitch; u.uGlow.value = PU.glow; u.uFilter.value = FX.filter;
+    u.uTeal.value = S.teal * (1 - 0.7 * S.inside); u.uHeat.value = S.heat; u.uHorizon.value = S.horizon;
   }
 
   // watch the frame rate while playing and step down if it struggles

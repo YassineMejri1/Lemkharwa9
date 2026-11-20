@@ -42,11 +42,16 @@
     //   procedural   its sand tile and its ring of cliffs are made in code (js/desert.js), not in Blender
     //   fogBase, fogDust   how hazy the air is on a clear day, and how much a sandstorm adds
     //   drift        sand blowing along the ground even on a calm day     pebbles   loose stones on the ground
-    sahrun: { ground: 0xd9a35b, ground2: 0xb57a3c, rock: 0xb07a4a, mountain: 0x9a6438, range: 0xc89058, sunColor: 0xfff1d8, sunInt: 1.38,
-      hemiSky: 0xe8d4b0, hemiGround: 0x8a5a30, hemiInt: 0.6, fog: 0xe4cc9c, zenith: 0x7f9dbd, horizon: 0xeed6a6, glow: 0xfff4dc, sunSize: 250,
+    //   sunArc       how high the Sun climbs (the others: 0.9): Sahrun keeps a low, golden sun and long shadows all day
+    //   dustRise     a sandstorm rolls in over this many seconds once you are outside (a haboob), instead of at once
+    //   haboob, giant, milkyWay   a wall of dust before a sandstorm; a ringed planet in the sky (made up); the Milky Way at night
+    //   spindrift    sand streaming off the dune crests in the wind      fill   footprints fill with sand between these ages (s)
+    sahrun: { ground: 0xd9a35b, ground2: 0xb57a3c, rock: 0xb07a4a, mountain: 0x9a6438, range: 0xc89058, sunColor: 0xffd29a, sunInt: 1.6,
+      hemiSky: 0x86b0c6, hemiGround: 0x8a5a30, hemiInt: 0.62, fog: 0xe6c894, zenith: 0x2466a0, horizon: 0xf2c682, glow: 0xffcf8a, sunSize: 280,
+      sunArc: 0.42, dustRise: 1 / 45, haboob: true, giant: true, milkyWay: 1.6, spindrift: 1.2, fill: [40, 110], skyCurve: 0.26,
       rock2: 0x7a5232, prints: 0x8a5a28, mountainSeed: 77, rangeFlat: true, rangeGlow: 0.07, volcano: false, psr: false, sunPath: 'arc', sky: 'sahrun', paint: 'sahrun',
       duskHorizon: 0x9a6a78, duskZenith: 0x2e3450, duskGlow: 0xff9a50, dustHorizon: 0xc8955a, dustZenith: 0xb08050, dustSpeck: 0xf0d0a0, deepSkyRef: -1.9,
-      procedural: true, fogBase: 0.003, fogDust: 0.021, drift: 2.2, pebbles: 380 }
+      procedural: true, fogBase: 0.0019, fogDust: 0.021, drift: 2.2, pebbles: 380 }
   };
   var air = true;      // does this planet have air? (set in W.build from JA.SITES)
 
@@ -142,6 +147,9 @@
       var erg = Tn.erg ? Tn.erg(x, z) : 0, far = smooth(36, 66, r);
       out.lerp(c2.set(0xf2d39c), clamp(erg - 0.35, 0, 1) * 0.6);
       out.lerp(c2.set(0xa8683a), clamp(0.25 - erg, 0, 0.25) * 1.6 * far);
+      // long iron-red streaks drawn out by the wind, and pale patches where it scours the surface
+      out.lerp(c2.set(0xb35e34), clamp(Tn.noise(x * 0.008 + 3, z * 0.035 + 9) * 2.2 - 1.25, 0, 1) * 0.45 * far);
+      out.lerp(c2.set(0xf6e2bc), clamp(Tn.noise(x * 0.025 + 40, z * 0.025 - 12) * 2.4 - 1.5, 0, 1) * 0.5 * far);
       // the butte: layered sandstone
       d = Math.hypot(x - L.mesa[0], z - L.mesa[1]);
       if (d < 22 && h > Tn.height(L.geo[0][0], L.geo[0][1]) + 1.2) {
@@ -277,12 +285,12 @@
   function buildSky() {
     scene.fog = look.fog ? new T.FogExp2(look.fog, look.fogBase || 0.0026) : null;
     skyU = { uZenith: { value: new T.Color(look.zenith) }, uHorizon: { value: new T.Color(look.horizon) },
-      uGlow: { value: new T.Color(look.glow) }, uSun: { value: sunDir }, uGlowAmt: { value: 1 } };
+      uGlow: { value: new T.Color(look.glow) }, uSun: { value: sunDir }, uGlowAmt: { value: 1 }, uCurve: { value: look.skyCurve || 0.45 } };
     skyMesh = new T.Mesh(new T.SphereGeometry(2600, 32, 16), new T.ShaderMaterial({
       uniforms: skyU, side: T.BackSide, depthWrite: false, fog: false,
       vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uGlow; uniform vec3 uSun; uniform float uGlowAmt; varying vec3 vDir;' +
-        'void main(){ vec3 d = normalize(vDir); float h = clamp(d.y, 0.0, 1.0); vec3 c = mix(uHorizon, uZenith, pow(h, 0.45));' +
+      fragmentShader: 'uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uGlow; uniform vec3 uSun; uniform float uGlowAmt; uniform float uCurve; varying vec3 vDir;' +
+        'void main(){ vec3 d = normalize(vDir); float h = clamp(d.y, 0.0, 1.0); vec3 c = mix(uHorizon, uZenith, pow(h, uCurve));' +
         ' float s = max(dot(d, normalize(uSun)), 0.0); c += uGlow * (pow(s, 40.0) * 0.5 + pow(s, 5.0) * 0.14) * uGlowAmt;' +
         ' gl_FragColor = vec4(c, 1.0);\n #include <encodings_fragment>\n }'
     }));
@@ -338,6 +346,10 @@
       phobos = W.add(root, new T.DodecahedronGeometry(16, 1), new T.MeshStandardMaterial({ color: 0x8d8478, roughness: 1, flatShading: true, fog: false }), 0, 0, 0, true);
       phobos.scale.set(1.3, 1, 1.05);
     } else if (look.sky === 'sahrun') buildMoons();
+    giant = null; wall = null;
+    if (look.giant) buildGiant();
+    if (look.haboob) buildWall();
+    if (look.milkyWay) buildDeepSky();      // Sahrun: the Milky Way comes out every night, not only at the lookout
     // the astronaut's helmet lamp
     lamp = new T.SpotLight(0xdfeeff, 0, 34, 0.62, 0.55, 1.2);
     root.add(lamp); root.add(lamp.target);
@@ -407,6 +419,7 @@
 
   // ---------- bootprints and wheel tracks ----------
   var FN = 500, fMesh, fNext = 0, fDummy = new T.Object3D();
+  var fRec = new Float32Array(FN * 6), fBorn = new Float32Array(FN).fill(-1e9), fillT = 0;      // x, y, z, yaw, w, l of each print, and when it was made
   function buildPrints() {
     var g = new T.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); g.rotateY(Math.PI);     // the toe (the wide end) points the way you face
     // a boot sole pressed into the dust: rounded at toe and heel, with tread bars across it
@@ -426,6 +439,7 @@
     root.add(fMesh);
   }
   W.print = function (x, z, yaw, w, l) {
+    var o = fNext * 6; fRec[o] = x; fRec[o + 1] = Tn.height(x, z) + 0.04; fRec[o + 2] = z; fRec[o + 3] = yaw; fRec[o + 4] = w; fRec[o + 5] = l; fBorn[fNext] = time;
     fDummy.position.set(x, Tn.height(x, z) + 0.04, z);
     fDummy.rotation.set(0, yaw, 0); fDummy.scale.set(w, 1, l); fDummy.updateMatrix();
     fMesh.setMatrixAt(fNext, fDummy.matrix); fNext = (fNext + 1) % FN;
@@ -813,8 +827,9 @@
   function deepSky(t) {
     if (!deep) return;
     var dark = !air ? 1 - env.dustShown * 0.6 : Math.min(1, stars.material.opacity / 0.7);
-    deep.position.copy(camera.position); deep.visible = obsK > 0.001;
-    deep.children.forEach(function (p) { p.material.opacity = p.userData.op * obsK * dark; });
+    var k = Math.max(obsK, look.milkyWay ? dark * 0.85 * look.milkyWay : 0);      // milkyWay: how bright, on a planet that shows it every night
+    deep.position.copy(camera.position); deep.visible = k > 0.001;
+    deep.children.forEach(function (p) { p.material.opacity = p.userData.op * k * dark; });
     if (eStar) {
       // a little above the Sun and to one side, the way Earth sits low in the dusk sky of Mars
       // Earth can stand up to 47 degrees from the Sun as seen from Mars, so after sunset it stays well up in the west
@@ -839,7 +854,7 @@
     // on Mars the lookout's sunset time-lapse (js/observe.js) runs the day on past sunset into the night (t > 1)
     var t = clamp(env.t, 0, air ? 1.25 : 1), az, el;
     if (look.sunPath === 'polar') { az = lerp(1.05, -1.05, t); el = 0.15 + Math.sin(Math.PI * t) * 0.06; }
-    else { az = lerp(1.75, -1.75, t); el = 0.13 + Math.sin(Math.PI * t) * 0.9; }
+    else { az = lerp(1.75, -1.75, t); el = 0.13 + Math.sin(Math.PI * t) * (look.sunArc || 0.9); }
     sunDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
     var f = cam.target;
     sun.target.position.set(f.x, f.y, f.z);
@@ -848,9 +863,12 @@
     skyMesh.position.copy(camera.position); stars.position.copy(camera.position);
     deepSky(t);
 
-    env.dustShown = lerp(env.dustShown, env.dust, Math.min(1, dt * 0.8));
+    if (look.dustRise && env.dust > env.dustShown) env.dustShown = Math.min(env.dust, env.dustShown + (cam.mode === 'play' ? dt * look.dustRise : 0));
+    else env.dustShown = lerp(env.dustShown, env.dust, Math.min(1, dt * 0.8));
     env.stormShown = lerp(env.stormShown, env.storm, Math.min(1, dt * 3));
     var d = env.dustShown;
+    if (wall && env.dust > 0.4 && env.dustShown < env.dust) d = env.dust * smooth(0.8, 0.985, env.dustShown / env.dust);
+    env.dustAir = d;          // the dust in the air right here (a haboob: none until its wall arrives); js/fx.js reads it
     var day = !air ? 1 : smooth(0, 0.14, t) * (1 - smooth(0.86, 1, t));
     var night = smooth(1.0, 1.2, t), up = smooth(-0.1, 0.04, el);      // after sunset: how deep the night is; is the Sun still up
     if (air) {
@@ -875,7 +893,14 @@
         var p = (time * m.speed + m.phase) % 1, ma = lerp(-1.7, 1.7, p) + m.az, me = 0.08 + Math.sin(Math.PI * p) * m.el;
         m.sp.position.copy(camera.position).add(v1.set(Math.sin(ma) * Math.cos(me), Math.sin(me), -Math.cos(ma) * Math.cos(me)).multiplyScalar(2300));
         m.sp.material.opacity = (0.42 + 0.58 * (1 - day)) * (1 - d * 0.85);
+        var low = smooth(0.42, 0.08, me);                            // low in the sky its light crosses more air: orange
+        m.sp.material.color.setRGB(1, 1 - 0.25 * low, 1 - 0.45 * low);
       });
+      if (giant) {
+        giant.position.copy(camera.position).add(v1.set(Math.sin(GIANT_AZ) * Math.cos(GIANT_EL), Math.sin(GIANT_EL), Math.cos(GIANT_AZ) * Math.cos(GIANT_EL)).multiplyScalar(2250));
+        giant.material.opacity = (0.55 + 0.45 * (1 - day)) * (1 - d * 0.9);
+      }
+      if (wall) dustWall(dt);
       env.dark = clamp((1 - day) * 0.8 + d * 0.5, 0, 1);
     } else {
       // down in the ice crater no sunlight ever reaches you (see eternalShadow): only the helmet lamp and starlight
@@ -908,12 +933,76 @@
     });
   }
   function buildMoons() {
-    moons = [{ tex: moonTex('#f4eee2', '#b8ad9c', 3), size: 120, speed: 0.0021, phase: 0.18, el: 0.55, az: -0.5 },
-      { tex: moonTex('#ecc9aa', '#9a7860', 7), size: 52, speed: 0.0047, phase: 0.62, el: 0.36, az: 1.1 }];
+    moons = [{ tex: moonTex('#f4eee2', '#b8ad9c', 3), size: 175, speed: 0.0021, phase: 0.18, el: 0.55, az: -0.5 },
+      { tex: moonTex('#ecc9aa', '#9a7860', 7), size: 80, speed: 0.0047, phase: 0.62, el: 0.36, az: 1.1 }];
     moons.forEach(function (m) {
       m.sp = new T.Sprite(new T.SpriteMaterial({ map: m.tex, transparent: true, depthWrite: false, fog: false }));
       m.sp.scale.set(m.size, m.size, 1); m.sp.renderOrder = -8; root.add(m.sp);
     });
+  }
+
+  // ---------- a ringed giant planet in Sahrun's sky (made up), seen as a picture painted once ----------
+  var giant = null, GIANT_AZ = Math.PI + 0.42, GIANT_EL = 0.33;      // north-north-west, a third of the way up the sky
+  function giantTex() {
+    return W.canvasTex(512, function (ctx, s) {
+      var c = s / 2, R = s * 0.21, rx = s * 0.47, ry = s * 0.115, k;
+      var RINGS = ['rgba(232, 212, 172, 0.55)', 'rgba(196, 176, 146, 0.32)', 'rgba(242, 228, 196, 0.62)', 'rgba(176, 156, 128, 0.28)', 'rgba(226, 206, 168, 0.48)', 'rgba(210, 190, 156, 0.22)'];
+      function rings(front) {                                     // the far half of the rings goes behind the planet, the near half in front
+        ctx.save(); ctx.beginPath(); if (front) ctx.rect(0, c, s, s / 2); else ctx.rect(0, 0, s, c); ctx.clip();
+        for (k = 0; k < RINGS.length; k++) { ctx.strokeStyle = RINGS[k]; ctx.lineWidth = s * (0.008 + 0.006 * (k % 2)); ctx.beginPath(); ctx.ellipse(c, c, rx * (0.6 + k * 0.075), ry * (0.6 + k * 0.075), 0, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.restore();
+      }
+      rings(false);
+      var g = ctx.createRadialGradient(c - R * 0.4, c - R * 0.4, R * 0.1, c, c, R);
+      g.addColorStop(0, '#f4ead6'); g.addColorStop(0.65, '#cdb892'); g.addColorStop(1, '#75644d');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.beginPath(); ctx.arc(c, c, R, 0, Math.PI * 2); ctx.clip();
+      for (k = 0; k < 11; k++) { ctx.fillStyle = k % 2 ? 'rgba(140, 110, 82, 0.24)' : 'rgba(255, 244, 222, 0.16)'; ctx.fillRect(c - R, c - R + k * R * 2 / 11 + (k % 3) * 2, R * 2, R * 2 / 11 * 0.75); }
+      ctx.fillStyle = 'rgba(160, 90, 60, 0.35)'; ctx.beginPath(); ctx.ellipse(c + R * 0.3, c + R * 0.25, R * 0.16, R * 0.08, 0, 0, Math.PI * 2); ctx.fill();      // a great storm
+      var sh = ctx.createLinearGradient(c - R, c - R, c + R, c + R); sh.addColorStop(0.42, 'rgba(0, 0, 0, 0)'); sh.addColorStop(1, 'rgba(12, 10, 24, 0.8)');
+      ctx.fillStyle = sh; ctx.fillRect(c - R, c - R, 2 * R, 2 * R);
+      ctx.restore();
+      rings(true);
+    });
+  }
+  function buildGiant() {
+    giant = new T.Sprite(new T.SpriteMaterial({ map: giantTex(), transparent: true, depthWrite: false, fog: false }));
+    giant.scale.set(660, 660, 1); giant.material.rotation = -0.36; giant.renderOrder = -8; root.add(giant);
+  }
+
+  // ---------- a haboob: before a sandstorm a wall of dust rolls in from the west (Sahrun) ----------
+  // A curved wall far away to the west, coming closer as the storm builds (env.dustShown climbs over look.dustRise).
+  var wall = null;
+  // The wall is drawn by a small shader: billows of dust that roll slowly upward, a solid foot, a ragged top, and
+  // ends that fade away, so it has no hard edge.
+  function buildWall() {
+    wall = new T.Mesh(new T.CylinderGeometry(1, 1, 1, 96, 1, true, Math.PI * 1.5 - 1.5, 3.0), new T.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uOp: { value: 1 }, uLow: { value: new T.Color(0x9a6a3e) }, uHigh: { value: new T.Color(0xe0b47a) } },
+      transparent: true, depthWrite: false, side: T.DoubleSide, fog: false,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform float uTime; uniform float uOp; uniform vec3 uLow; uniform vec3 uHigh; varying vec2 vUv;' +
+        'float h(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }' +
+        'float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + 1.0), f.x), f.y); }' +
+        'float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n(p); p = p * 2.07 + 13.1; a *= 0.5; } return s; }' +
+        'void main(){ vec2 p = vec2(vUv.x * 30.0, vUv.y * 11.0 - uTime * 0.12);' +
+        ' float b = fbm(p + vec2(uTime * 0.02, 0.0)), b2 = fbm(p * 2.3 + 7.0);' +
+        ' float top = 0.42 + 0.42 * b;' +                              // the ragged top of the cloud
+        ' float a = (1.0 - smoothstep(top - 0.18, top, vUv.y)) * smoothstep(0.0, 0.14, vUv.x) * smoothstep(1.0, 0.86, vUv.x);' +
+        ' vec3 c = mix(uLow, uHigh, clamp(vUv.y * 1.4 + (b2 - 0.5) * 0.6, 0.0, 1.0)) * (0.8 + 0.45 * b2);' +
+        ' gl_FragColor = vec4(c, a * uOp);\n #include <encodings_fragment>\n }'
+    }));
+    wall.renderOrder = -7; wall.frustumCulled = false; wall.visible = false; root.add(wall);
+  }
+  function dustWall(dt) {
+    var goal = env.dust, p = goal > 0.4 ? clamp(env.dustShown / goal, 0, 1) : 1;
+    var show = goal > 0.4 && p < 0.985 && cam.mode !== 'inside' && !cam.room;
+    wall.visible = show;
+    if (!show) return;
+    var D = lerp(950, 16, Math.pow(p, 0.8)), H = lerp(300, 420, p);
+    wall.scale.set(D, H, D);
+    wall.position.set(camera.position.x, camera.position.y - 40 + H / 2, camera.position.z);
+    wall.material.uniforms.uTime.value = time;
+    wall.material.uniforms.uOp.value = 0.98 * smooth(0.985, 0.9, p);
   }
 
   function ambientParticles(dt) {
@@ -925,16 +1014,26 @@
           { vx: -sunDir.x * 46, vy: -sunDir.y * 46 - 10, vz: -sunDir.z * 46, life: 0.9, size: 0.34, grow: 0.6, color: 0xff48c8, alpha: 0.9 });
       }
     }
-    if (JA.siteOf(siteId).dusty && env.dustShown > 0.03) {
-      n = W.rate(env.dustShown * 12, dt);
+    var dAir = env.dustAir != null ? env.dustAir : env.dustShown;
+    if (JA.siteOf(siteId).dusty && dAir > 0.03) {
+      n = W.rate(dAir * 12, dt);
       for (i = 0; i < n; i++) {
         W.emit(f.x - 40 + Math.random() * 30, f.y + Math.random() * 14 - 1, f.z + (Math.random() - 0.5) * 80,
           { vx: 16 + Math.random() * 14, vy: (Math.random() - 0.5) * 2, vz: 3, life: 3, size: 0.9, grow: 2.4, color: look.dustSpeck, alpha: 0.28 });
       }
     }
+    if (look.spindrift && cam.mode !== 'inside' && !cam.room) {
+      // sand streaming off the dune crests in the wind, the way real dunes creep forward
+      n = W.rate(look.spindrift * (1 + dAir * 2), dt);
+      for (i = 0; i < n; i++) {
+        var ca = Math.random() * Math.PI * 2, cr = 22 + Math.random() * 110, cx = f.x + Math.cos(ca) * cr, cz = f.z + Math.sin(ca) * cr;
+        if (Tn.erg(cx, cz) < 0.82) continue;
+        W.emit(cx, Tn.height(cx, cz) + 0.3, cz, { vx: 6 + Math.random() * 5, vy: 0.5 + Math.random() * 1, vz: 1 + Math.random(), life: 2.6, size: 0.7, grow: 3.8, color: look.dustSpeck, alpha: 0.22, grav: 0 });
+      }
+    }
     if (look.drift && cam.mode !== 'inside' && !cam.room) {
       // sand skipping along the ground in the wind (saltation), even on a calm day; more when it is dusty
-      n = W.rate(look.drift * (1 + env.dustShown * 3), dt);
+      n = W.rate(look.drift * (1 + dAir * 3), dt);
       for (i = 0; i < n; i++) {
         var sx = f.x - 26 + Math.random() * 30, sz = f.z + (Math.random() - 0.5) * 44;
         W.emit(sx, Tn.height(sx, sz) + 0.12 + Math.random() * 0.5, sz,
@@ -1016,6 +1115,20 @@
     skyEvents(dt);
     ambientParticles(dt);
     updateParticles(dt);
+    if (look.fill && fMesh && (fillT += dt) > 0.3) {
+      // the wind fills old footprints and tracks with sand: they shrink away between fill[0] and fill[1] seconds old
+      fillT = 0;
+      var a0 = look.fill[0], a1 = look.fill[1], moved = false;
+      for (var fi = 0; fi < FN; fi++) {
+        var age = time - fBorn[fi];
+        if (age < a0 || age > a1 + 1) continue;
+        var kf = 1 - smooth(a0, a1, age), o = fi * 6;
+        fDummy.position.set(fRec[o], fRec[o + 1], fRec[o + 2]); fDummy.rotation.set(0, fRec[o + 3], 0);
+        fDummy.scale.set(Math.max(0.0001, fRec[o + 4] * kf), 1, Math.max(0.0001, fRec[o + 5] * kf)); fDummy.updateMatrix();
+        fMesh.setMatrixAt(fi, fDummy.matrix); moved = true;
+      }
+      if (moved) fMesh.instanceMatrix.needsUpdate = true;
+    }
     if (!(window.innerWidth && window.innerHeight)) return;
     // the picture goes through the camera (js/fx.js) when it is on and working; otherwise it is drawn plainly
     if (W.noDraw) return;                 // ?draw=0: everything moves but nothing is drawn (tests that run many players on one computer)

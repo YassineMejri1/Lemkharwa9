@@ -26,6 +26,8 @@ window.JA = window.JA || {};
     // Sahrun itself is not real: anything that is only true in the game says so, and cites this
     grace: { name: 'NASA GRACE and GRACE-FO missions (water seen by gravity)', url: 'https://grace.jpl.nasa.gov/' },
     shakealert: { name: 'USGS ShakeAlert earthquake early warning', url: 'https://www.shakealert.org/' },
+    nps: { name: 'U.S. National Park Service — Arches National Park', url: 'https://www.nps.gov/arch/index.htm' },
+    saturn: { name: 'NASA Science — Saturn', url: 'https://science.nasa.gov/saturn/' },
     sandfish: { name: 'Maladen et al., "Undulatory swimming in sand", Science, 2009', url: 'https://www.science.org/doi/10.1126/science.1172490' },
     fiction: { name: 'Made up for this game: Sahrun is a science-fiction planet', url: '' }
   };
@@ -90,6 +92,7 @@ window.JA = window.JA || {};
       dew: true,                     // a dew catcher beside the outpost turns cold nights into drinking water (see RULES.dewWater)
       creature: 'ray',               // MADE UP: sand rays glide under its dunes (js/sandray.js)
       worm: true,                    // MADE UP: deepmaws, giant sand worms, hunt on its open sand (js/deepmaw.js)
+      landmarks: true,               // sandstone arches, mushroom rocks and rock towers, built in code (js/desert.js, js/base.js)
       // its water is not ice: well pumps lift water from deep in the rock, in sealed cans (JA.waterWords)
       waterWords: { chunk: 'water can', chunks: 'water cans', a: 'a water can', stuff: 'water', Stuff: 'Water', rig: 'well pump', rigs: 'well pumps', at: 'pump', hand: 'pump by hand', icon: '💧' },   // MADE UP: its star, how far Sahrun is from it (AU) and how many days the star takes to turn once
       colors: { soil: 0xc9964f, soil2: 0xa8763a, dust: 0xe8c48a },
@@ -99,7 +102,7 @@ window.JA = window.JA || {};
         //   dew    GAME: how full the dew catcher gets the night after (1 = a full can); clear, still nights make the most
         clear: { cells: 7, icon: '☀️', label: 'Blazing sun', why: 'Not a cloud in the sky. Dry desert air lets almost all the sunlight through, so the panels drink it up. The crew will sweat, and drink more.', heat: 1.6, dew: 1 },
         dusty: { cells: 4.5, icon: '🌫️', label: 'Sand haze', why: 'Fine sand hangs in the air and scatters the sunlight before it reaches the panels.', heat: 1.25, dew: 0.5 },
-        storm: { cells: 2, icon: '🌪️', label: 'Sandstorm!', why: 'A wall of sand is rolling across the desert and hiding the Sun. On Earth these storms are called haboobs.', dew: 0 }
+        storm: { cells: 2, icon: '🌪️', label: 'Sandstorm!', why: 'A wall of sand is rolling across the desert and hiding the Sun. On Earth these storms are called haboobs.', dew: 0, wall: true }
       }
     }
   };
@@ -505,6 +508,10 @@ window.JA = window.JA || {};
     { id: 'urine', site: 'any', tags: ['water'], src: 'iss', text: 'Astronauts like to say that on the Space Station, yesterday\'s coffee becomes tomorrow\'s coffee. The recycled water is cleaner than most tap water on Earth.' },
     // Sahrun (made up): the facts are real science from Earth's deserts, the Space Station and Mars
     { id: 'sahrun', site: 'sahrun', tags: ['any'], src: 'fiction', text: 'Sahrun is a made-up planet, inspired by the desert worlds of science fiction. But the science you meet here is real: it comes from deserts on Earth and from Mars.' },
+    { id: 'arches', site: 'sahrun', tags: ['any'], src: 'nps', text: 'Natural stone arches form when rain, frost and wind wear away the softer layers of sandstone and leave a harder layer standing as a bridge. Arches National Park in Utah has more than 2,000 of them.' },
+    { id: 'mushroomrock', site: 'sahrun', tags: ['any'], src: 'earthobs', text: 'Wind-blown sand bounces along close to the ground, so it scours the bottom of a rock faster than the top. Over thousands of years that can leave a wide cap on a thin stem: a mushroom rock.' },
+    { id: 'ringedplanet', site: 'sahrun', tags: ['any'], src: 'saturn', text: 'The ringed planet in Sahrun\'s sky is made up. Real rings exist, though: Saturn\'s are made of countless chunks of ice and rock, from grains like sand to pieces as big as mountains.' },
+    { id: 'mirage', site: 'sahrun', tags: ['any'], src: 'earthobs', text: 'On a hot day the air just above the ground is much hotter than the air higher up, and light bends as it passes between them. Light from the sky curves up into your eyes from the ground, so you see a shimmering pool of water that is really a picture of the sky: a mirage.' },
     { id: 'fossilwater', site: 'sahrun', tags: ['ice', 'water'], src: 'earthobs', text: 'Wells deep in the Sahara pump up water that fell as rain thousands of years ago. Once it is pumped out, it can take thousands of years for rain to fill the rock again. That is why desert towns treat every drop as treasure.' },
     { id: 'fognets', site: 'sahrun', tags: ['water', 'ice'], src: 'earthobs', text: 'In Chile\'s Atacama Desert, one of the driest places on Earth, people hang fine nets in the morning fog. Tiny drops stick to the mesh and drip into pipes: drinking water caught from thin air.' },
     { id: 'haboob', site: 'sahrun', tags: ['dust', 'storm'], src: 'earthobs', text: 'A haboob is a wall of dust and sand pushed ahead of a thunderstorm. On Earth they can tower more than a kilometre high and swallow a whole city in minutes.' },

@@ -85,6 +85,62 @@
     return tile;
   };
 
+  // ---------- landmarks: sandstone arches, mushroom rocks and rock towers ----------
+  // Simple shapes roughened with noise and banded like layered sandstone (vertex colours, flat shaded). base.js places them.
+  var BEDS = [[0.8, 0.54, 0.34], [0.74, 0.49, 0.31], [0.84, 0.6, 0.39], [0.71, 0.46, 0.29]];      // the same colour space as the painted ground
+  function n3(x, y, z) { return Math.sin(x * 1.7 + Math.sin(y * 1.3)) * Math.sin(y * 1.1 + Math.sin(z * 1.9)) * Math.sin(z * 1.3 + Math.sin(x * 0.7)); }
+  // push every point in or out along its normal by a little noise, then give each flat face the colour of its sandstone bed
+  function rockify(geo, amp, seed, bedH) {
+    geo.computeVertexNormals();
+    var p = geo.attributes.position, nr = geo.attributes.normal, i, x, y, z, k;
+    for (i = 0; i < p.count; i++) {
+      x = p.getX(i); y = p.getY(i); z = p.getZ(i);
+      k = amp * (n3(x * 0.32 + seed, y * 0.32, z * 0.32 - seed) * 0.7 + n3(x * 0.9, y * 0.9 + seed, z * 0.9) * 0.3);
+      p.setXYZ(i, x + nr.getX(i) * k, y + nr.getY(i) * k * 0.5, z + nr.getZ(i) * k);
+    }
+    geo = geo.toNonIndexed();
+    p = geo.attributes.position;
+    var col = new Float32Array(p.count * 3);
+    for (i = 0; i < p.count; i += 3) {
+      var cy = (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3, cx = (p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3, cz = (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3;
+      var bed = BEDS[((Math.floor((cy + n3(cx * 0.15, 0, cz * 0.15) * 0.5) / bedH) % 4) + 4) % 4], sh = 0.9 + 0.1 * n3(cx * 2.1, cy * 2.1, cz * 2.1);
+      for (var j = 0; j < 3; j++) { col[(i + j) * 3] = bed[0] * sh; col[(i + j) * 3 + 1] = bed[1] * sh; col[(i + j) * 3 + 2] = bed[2] * sh; }
+    }
+    geo.setAttribute('color', new T.BufferAttribute(col, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+  // a stone arch: a thick, bent bridge of rock, fattest at its feet, which sink into the sand
+  D.arch = function (span, height, thick, seed) {
+    var pts = [new T.Vector3(-span / 2 - 0.6, -5, 0)], n = 18, i;
+    for (i = 0; i <= n; i++) { var a = Math.PI * i / n; pts.push(new T.Vector3(-Math.cos(a) * span / 2, Math.sin(a) * height, 0)); }
+    pts.push(new T.Vector3(span / 2 + 0.6, -5, 0));
+    var TS = 70, RS = 12, geo = new T.TubeGeometry(new T.CatmullRomCurve3(pts), TS, thick, RS, false);
+    var p = geo.attributes.position, nr = geo.attributes.normal;
+    for (i = 0; i < p.count; i++) {
+      var u = Math.floor(i / (RS + 1)) / TS, s = 1 + 0.9 * Math.pow(1 - Math.sin(Math.PI * u), 2);
+      var cx = p.getX(i) - nr.getX(i) * thick, cy = p.getY(i) - nr.getY(i) * thick, cz = p.getZ(i) - nr.getZ(i) * thick;
+      p.setXYZ(i, cx + nr.getX(i) * thick * s, cy + nr.getY(i) * thick * s, cz + nr.getZ(i) * thick * s * 1.45);      // a little wider than deep
+    }
+    return rockify(geo, thick * 0.32, seed || 1, 2.6);
+  };
+  // a mushroom rock: blowing sand scours the bottom of a rock faster than the top, leaving a cap on a thin stem
+  D.mushroom = function (h, capR, seed) {
+    var stem = new T.CylinderGeometry(capR * 0.3, capR * 0.46, h + 2, 10, 6); stem.translate(0, (h + 2) / 2 - 2, 0);
+    var cap = new T.SphereGeometry(capR, 14, 9); cap.scale(1, 0.42, 0.86); cap.translate(0, h + capR * 0.12, 0);
+    return [rockify(stem, capR * 0.12, seed || 1, 2.2), rockify(cap, capR * 0.14, (seed || 1) + 3, 2.2)];
+  };
+  // a rock tower: a stack of harder and softer beds, worn into bulges and waists
+  D.tower = function (h, r, seed) {
+    var prof = [], n = 16, i;
+    for (i = 0; i <= n; i++) {
+      var y = -4 + (h + 4) * i / n, rr = r * (0.86 + 0.14 * Math.sin(i * 1.7 + Math.sin(i * 0.9 + (seed || 1)) * 2)) * (1.35 - 0.6 * i / n);      // wide at the foot, narrowing upward
+      prof.push(new T.Vector2(Math.max(0.35, rr), y));
+    }
+    prof.push(new T.Vector2(r * 0.45, h + 0.8)); prof.push(new T.Vector2(0.01, h + 1.1));
+    return rockify(new T.LatheGeometry(prof, 11), r * 0.16, seed || 1, Math.max(1.4, h / 14));
+  };
+
   // ---------- the ring of cliffs and giant dunes ----------
   // Built in three.js coordinates (y is up). Returns a BufferGeometry with a grey 'color' per vertex (the shading),
   // ready to be tinted by the material colour, exactly like the Blender ranges.
@@ -102,7 +158,10 @@
         var base = 30 + 95 * Math.pow(n2(x, z, 6, 12), 1.4) + 18 * n2(x, z, 23, 13), stepH = 22;
         var stepped = base * 0.35 + (Math.floor(base / stepH) + smooth(0.6, 0.92, (base / stepH) % 1)) * stepH * 0.65;
         // giant dunes: long, smooth swells
-        var dune = 20 + 70 * Math.pow(Math.sin(a * 9 + n2(x, z, 4, 14) * 6) * 0.5 + 0.5, 1.6) * (0.5 + 0.5 * n2(x, z, 8, 15));
+        // giant dunes: long ridges that run round the horizon, one behind the other, each with a knife-edge crest
+        // (1 - |sin| is sharp at the top and round at the bottom); their height rises and falls along the ridge
+        var ridge = 1 - Math.abs(Math.sin(r * 0.03 + n2(x, z, 3, 14) * 4 + Math.sin(a * 5) * 0.6));
+        var dune = 16 + 92 * Math.pow(ridge, 2.2) * (0.35 + 0.65 * n2(x, z, 5, 15));
         var hgt = (stepped * cliffy + dune * (1 - cliffy)) * env, y = 22 + Math.max(0, hgt);
         pos.push(x, y, z);
         // shading: the lower layers and the hollows are darker; the sandstone is banded in layers

@@ -390,6 +390,8 @@
   // late: crew mode, joining a mission already under way ('hello': say welcome; 'quiet': a card follows)
   function beginSol(late) {
     var s = G.s, env = sim.env(s), look = s.site.env[env.kind], w = sim.weather(s), last = s.sol >= s.totalSols;
+    // a haboob: the dust wall rolls in once you step outside (js/world.js); the crew points it out
+    if (look.wall) setTimeout(function () { if (G.s === s && G.mode === 'play') say('Look to the west! A wall of sand is rolling in: a haboob. Get the outdoor jobs going before it gets here!', true); }, 4000);
     if (A.rover.driver) exitRoverLocal(true);
     if (G.room) leaveRoom(true);
     A.resetAstro(); crewSpot(); Au.music(null);

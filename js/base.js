@@ -550,8 +550,10 @@
     B.spots = { sockets: {}, hoppers: {}, rackSlots: [], bagTray: [], beds: [], panels: [], drill: [], ice: [], inst: {}, photo: [], pallet: [] };
     // every boulder keeps its own collider (b.col), so one that is broken up can stop blocking the way; h is how tall it stands
     Tn.boulders.forEach(function (b) { b.col = { x: b.x, z: b.z, r: b.r * 0.92, h: b.seat ? 0.9 : b.r * (0.5 + b.sy) }; B.colliders.push(b.col); });
+    var nRocks = B.colliders.length;      // the colliders after these are the buildings'
     hab(); solar(); airMaker(); greenhouse(); bagger(); lab(); comms(); rocket(); scienceSites();
     if (JA.siteOf(site).dew) dewCatcher();
+    if (JA.siteOf(site).landmarks && JA.desert && JA.desert.arch) desertDressing(nRocks);
     B.repair.rack = B.spots.rack.clone();
     var rackP = new T.Vector3(L.rack[0], 0, L.rack[1]);
     ['air', 'food', 'bag', 'lab', 'comms', 'scrub'].forEach(function (id) { cable(rackP, B.spots.sockets[id], id); });
@@ -590,6 +592,62 @@
     P.dew = { can: can, water: water, net: net };
   }
 
+  // ---------- a desert planet's dressing (Sahrun): rock landmarks, sand drifted against the buildings, a shade sail ----------
+  // The rocks near the outpost are hard ground (colliders): sand rays dive under them and a deepmaw cannot come up there.
+  var ROCKS = [      // kind, x, z, size numbers, turn, in the play area (with a collider)
+    ['arch', -62, 100, [32, 16, 2.6], 0.3, true], ['arch', 128, 18, [20, 10, 1.9], 1.3, true],
+    ['mush', -112, -22, [6.5, 4.2], 0, true], ['mush', -103, -13, [5, 3.2], 1, true], ['mush', -119, -9, [4, 2.6], 2, true],
+    ['mush', 28, 108, [5.5, 3.6], 0.5, true], ['mush', 37, 114, [4.2, 2.8], 1.7, true],
+    ['tower', -30, -122, [24, 3.2], 0, true], ['tower', -18, -131, [17, 2.6], 0, true], ['tower', -39, -133, [12, 2.2], 0, true],
+    // farther out, on the skyline
+    ['tower', 230, 70, [55, 7], 0, false], ['tower', 239, 92, [40, 5.5], 0, false], ['tower', -205, 160, [66, 8], 0, false],
+    ['arch', 150, -215, [74, 38, 6], 0.6, false], ['tower', -250, -70, [48, 6.5], 0, false], ['mush', 40, 246, [16, 11], 0, false]
+  ];
+  function desertDressing(nRocks) {
+    var D = JA.desert, rockM = new T.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0 });
+    var sandM = new T.MeshStandardMaterial({ color: 0xd8a25a, roughness: 1 }), seed = 1;
+    // sand blown up against the windward (west) side of each building, before the rocks add their own colliders
+    var lump = new T.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+    B.colliders.slice(nRocks).forEach(function (c) {
+      if (c.r < 1.4) return;
+      var m = add(root, lump, sandM, c.x - c.r * 0.95, Tn.height(c.x - c.r * 0.95, c.z) - 0.05, c.z, true);
+      m.scale.set(c.r * 0.75, Math.min(0.75, c.r * 0.22), c.r * 1.15); m.receiveShadow = true;
+    });
+    ROCKS.forEach(function (r) {
+      var g = group([r[1], r[2]]), a = r[4], s = r[3], geos, i;
+      if (r[0] === 'arch') geos = [D.arch(s[0], s[1], s[2], seed++)];
+      else if (r[0] === 'mush') geos = D.mushroom(s[0], s[1], seed++);
+      else geos = [D.tower(s[0], s[1], seed++)];
+      for (i = 0; i < geos.length; i++) { var m = new T.Mesh(geos[i], rockM); m.rotation.y = a; m.castShadow = m.receiveShadow = true; g.add(m); }
+      if (!r[5]) return;
+      if (r[0] === 'arch') [-1, 1].forEach(function (sd) { var ox = sd * s[0] / 2; collide(g, ox * Math.cos(a), -ox * Math.sin(a), s[2] * 1.7); });
+      else if (r[0] === 'mush') collide(g, 0, 0, s[1] * 0.55);
+      else collide(g, 0, 0, s[1] * 0.85);
+    });
+    // a shade sail over the rover park: four poles and a sagging sheet of cloth that ripples in the wind
+    var rp = L.roverPark, sg = group(rp), W2 = 11, H2 = 9, poleM = mat(0xb9bcc6, { flatShading: false });
+    var corners = [[-W2 / 2, -H2 / 2, 4.6], [W2 / 2, -H2 / 2, 4.6], [-W2 / 2, H2 / 2, 3.4], [W2 / 2, H2 / 2, 3.4]];
+    corners.forEach(function (c) { add(sg, cyl(0.07, 0.09, c[2], 6), poleM, c[0], c[2] / 2, c[1]); });
+    var cloth = W.canvasTex(128, function (ctx, n) {
+      ctx.fillStyle = '#efe4cc'; ctx.fillRect(0, 0, n, n);
+      ctx.strokeStyle = 'rgba(150, 120, 80, 0.35)'; ctx.lineWidth = 2;
+      for (var k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(k * n / 4, 0); ctx.lineTo(k * n / 4, n); ctx.stroke(); }     // seams
+      var gr = ctx.createLinearGradient(0, n, 0, n * 0.55); gr.addColorStop(0, 'rgba(176, 130, 80, 0.4)'); gr.addColorStop(1, 'rgba(176, 130, 80, 0)');
+      ctx.fillStyle = gr; ctx.fillRect(0, 0, n, n);              // dusty along the low edge
+    });
+    var sheet = new T.PlaneGeometry(W2, H2, 10, 8); sheet.rotateX(-Math.PI / 2);
+    var sp = sheet.attributes.position, base0 = new Float32Array(sp.count);
+    for (var i = 0; i < sp.count; i++) {
+      var x = sp.getX(i) / (W2 / 2), z = sp.getZ(i) / (H2 / 2);
+      base0[i] = lerpY(z) - 0.7 * (1 - x * x) * (1 - z * z);
+      sp.setY(i, base0[i]);
+    }
+    function lerpY(z) { return 4.6 + (3.4 - 4.6) * (z + 1) / 2; }
+    var sail = add(sg, sheet, new T.MeshStandardMaterial({ map: cloth, roughness: 0.9, side: T.DoubleSide }), 0, 0, 0);
+    sail.castShadow = true;
+    P.sail = { geo: sheet, base: base0 };
+  }
+
   // ---------- show what the mission rules say ----------
   var demo = { air: 60, bags: 5, filter: 80, water: 60, rack: { charge: 0.5, eff: [1, 1, 1], broken: false },
     m: { air: { power: 2, queue: 2, prog: 0.1, broken: false }, food: { lamp: 1, water: 1, broken: false, beds: [{ state: 'ripe', g: 1 }, { state: 'growing', g: 0.7, crop: 'potato' }, { state: 'growing', g: 0.4 }, { state: 'ripe', g: 1, crop: 'potato' }] },
@@ -614,6 +672,14 @@
     dl.emissiveIntensity = alarm ? 2 + Math.sin(t * 12) * 1.5 : 1.6;
     P.hab.beacon.material.emissiveIntensity = 1 + Math.sin(t * 3);
     P.hab.flag.rotation.y = JA.hasAir(site) ? Math.sin(t * 2) * 0.12 : 0;      // the flag only moves where there is wind
+    if (P.sail) {      // the shade sail ripples in the wind
+      var sgp = P.sail.geo.attributes.position, sb = P.sail.base;
+      for (var si = 0; si < sgp.count; si++) {
+        var fx = sgp.getX(si), fz = sgp.getZ(si), edge = (1 - Math.pow(fx / 5.5, 2)) * (1 - Math.pow(fz / 4.5, 2));
+        sgp.setY(si, sb[si] + 0.16 * edge * Math.sin(t * 2.4 + fx * 0.7 + fz * 0.4));
+      }
+      sgp.needsUpdate = true;
+    }
     if (P.dew) {
       // the can is there while it holds water; the net glints with dew in the morning
       var full = Math.max(0, Math.min(1, (s.dew || 0) / R.dewWater));

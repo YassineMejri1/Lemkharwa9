@@ -50,7 +50,7 @@
     sahrun: { seed: 2611, hills: [[0.012, 6], [0.04, 1.4], [0.15, 0.2]], dunes: 0, channel: 0, mesa: 11,
       ice: { r: 15, depth: 7, rim: 0.05 }, farCrater: false, craters: { n: 5, size: 8, depth: 0.1, rim: 0.12 },
       clusters: [[0, 6, 9, 1, 2.4, 6], [2, 3, 6, 0.8, 1.6, 5]], boulders: 26,
-      erg: { h: 3.2, wave: 54, rise: 0.64 } }
+      erg: { h: 3.2, wave: 54, rise: 0.64, sharp: true } }
   };
   var S = SHAPES.mars;
 
@@ -61,7 +61,9 @@
     var w = x * 0.92 + z * 0.39 + (vn(x * 0.011 + 7, z * 0.011 + 3) - 0.5) * 70;
     var p = w / E.wave, t = p - Math.floor(p);
     var prof = t < E.rise ? t / E.rise : (1 - t) / (1 - E.rise);
-    prof = prof * prof * (3 - 2 * prof);                                  // a rounded crest and a soft foot
+    // sharp: a soft foot rising straight to a knife-edge crest, then a steep slip face, like real desert dunes
+    if (E.sharp) prof = t < E.rise ? Math.pow(prof, 1.6) : Math.pow(prof, 1.15);
+    else prof = prof * prof * (3 - 2 * prof);                             // a rounded crest and a soft foot
     return prof * (0.6 + 0.8 * vn(x * 0.02 + 11, z * 0.02 - 4));          // some dunes are taller than others
   }
   // how much of a dune is here (0 = between dunes), with the flat outpost area left out: js/world.js paints crests by it

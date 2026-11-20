@@ -100,10 +100,24 @@
     t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(rx, ry);
     return t;
   }
+  function glowTex(rx, ry) {
+    var t = W.canvasTex(128, function (ctx, n) {
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, n, n);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+      for (var k = -1; k < 7; k++) {
+        ctx.beginPath();
+        for (var x = 0; x <= n; x += 8) { var y = k * 22 + Math.sin(x / n * Math.PI * 2) * 6; if (x) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+        ctx.stroke();
+      }
+    });
+    t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(rx, ry);
+    return t;
+  }
   function buildMesh(s) {
     // the wings are mapped in metres (repeat about every 4 m); the body, a sphere, all the way round (2 x 1.5 times)
-    var g = new T.Group(), skin = new T.MeshStandardMaterial({ map: skinTex(0.25, 0.25), roughness: 0.85, side: T.DoubleSide });
-    var hide = new T.MeshStandardMaterial({ map: skinTex(2, 1.5), roughness: 0.85 });
+    // at night its stripes glow a faint blue-green (made up, like the glow of real deep-sea animals)
+    var g = new T.Group(), skin = new T.MeshStandardMaterial({ map: skinTex(0.25, 0.25), roughness: 0.85, side: T.DoubleSide, emissive: 0x38e0c8, emissiveMap: glowTex(0.25, 0.25), emissiveIntensity: 0 });
+    var hide = new T.MeshStandardMaterial({ map: skinTex(2, 1.5), roughness: 0.85, emissive: 0x38e0c8, emissiveMap: glowTex(2, 1.5), emissiveIntensity: 0 });
     var sand = new T.MeshStandardMaterial({ color: 0xd8a45e, roughness: 1 }), dark = new T.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.4 });
     // under the sand: a moving hump, and the two wing tips cutting the surface
     var hump = new T.Mesh(new T.SphereGeometry(1, 20, 10), sand); hump.scale.set(5.2, 1, 3.8); hump.receiveShadow = true; g.add(hump);
@@ -131,7 +145,7 @@
     });
     body.visible = false;
     W.root.add(g);
-    mesh = { group: g, hump: hump, tips: tips, body: body, wings: wings };
+    mesh = { group: g, hump: hump, tips: tips, body: body, wings: wings, glow: [skin, hide] };
     meshRoot = W.root;
   }
   function dropMesh() { if (mesh && mesh.group.parent) mesh.group.parent.remove(mesh.group); mesh = null; }
@@ -159,7 +173,8 @@
     var me = ctx.pos || { x: 0, z: 0 }, dist = Math.hypot(P.x - me.x, P.z - me.z);
     // the leap: once, where it passes closest, if the sand there is open
     var lu = (u - p.leap) * LEN / SPEED / LEAP + 0.5, leaping = p.leapOk && lu > 0 && lu < 1;
-    var g = mesh.group;
+    var g = mesh.group, night = W.skyDark ? W.skyDark() : 0;
+    mesh.glow.forEach(function (m) { m.emissiveIntensity = night * 1.4; });
     g.position.set(P.x, ground, P.z); g.rotation.set(0, yaw, 0);
     // the hump and the wing tips
     var under = leaping ? 1 - smooth(0, 0.12, lu) + smooth(0.88, 1, lu) : 1, sh = show * under;
@@ -185,13 +200,13 @@
     // sand: a bow wave at its nose, and a trail settling behind it
     if (sh > 0.2 && !leaping) {
       // big enough to spot from 50 m away: a plume of sand thrown up at its nose, and a cloud hanging behind it
-      var n = W.rate(40 * sh, dt), col = s.site.colors.dust, i;
+      var n = W.rate(0.8 * sh, dt), col = s.site.colors.dust, i;      // W.rate counts per frame
       for (i = 0; i < n; i++) {
         var side = (Math.random() - 0.5) * 8, nx = P.x + hx * 3.8 - hz * side * 0.4, nz = P.z + hz * 3.8 + hx * side * 0.4;
         W.emit(nx, Tn.height(nx, nz) + 0.3, nz, { vx: hx * 4 + (Math.random() - 0.5) * 4, vy: 3 + Math.random() * 3.5, vz: hz * 4 + (Math.random() - 0.5) * 4,
           life: 1.4, size: 1.0, grow: 2.6, color: col, alpha: 0.6, grav: W.gravity * 0.6 });
       }
-      n = W.rate(12 * sh, dt);
+      n = W.rate(0.25 * sh, dt);
       for (i = 0; i < n; i++) {
         var bx = P.x - hx * 4 + (Math.random() - 0.5) * 8, bz = P.z - hz * 4 + (Math.random() - 0.5) * 8;
         W.emit(bx, Tn.height(bx, bz) + 0.4, bz, { vx: (Math.random() - 0.5), vy: 0.8, vz: (Math.random() - 0.5), life: 3.5, size: 2.2, grow: 3, color: col, alpha: 0.3, grav: 0 });

@@ -198,7 +198,7 @@
       mesh.ring.position.set(ev.tx, gy + 0.03, ev.tz); mesh.pit.position.set(ev.tx, gy, ev.tz);
       mesh.ring.rotation.z = t * (0.6 + k * 2.5);
       mesh.ring.material.opacity = clamp(k * 1.8, 0, 0.75); mesh.pit.material.opacity = clamp((k - 0.25) * 1.3, 0, 0.7);
-      var nPart = W.rate(24 + 40 * k, dt), col = s.site.colors.soil;
+      var nPart = W.rate(0.6 + 1.4 * k, dt), col = s.site.colors.soil;      // W.rate counts per frame
       for (var i = 0; i < nPart; i++) {                           // grains of sand running round and round, low over the ground, sinking towards the middle
         var a = Math.random() * Math.PI * 2, rr = CATCH * (0.6 + Math.random() * 0.5), x = ev.tx + Math.cos(a) * rr, z = ev.tz + Math.sin(a) * rr;
         W.emit(x, Tn.height(x, z) + 0.15, z, { vx: -Math.sin(a) * 6 - Math.cos(a) * 1.8, vy: 0.3 + k * 1.2, vz: Math.cos(a) * 6 - Math.sin(a) * 1.8, life: 0.7, size: 0.3 + k * 0.25, grow: 1.1, color: col, alpha: 0.5, grav: W.gravity * 0.6 });
@@ -250,8 +250,8 @@
         W.emit(x + Math.cos(aa) * rr, y + 0.3, z + Math.sin(aa) * rr, { vx: Math.cos(aa) * sp, vy: 9 + Math.random() * 12, vz: Math.sin(aa) * sp, life: 2, size: 0.9 + Math.random() * 0.7, grow: 1.6, color: cd, alpha: 0.75, grav: W.gravity }); 
       }
     }
-    if (sh > P.s0 && tail < P.s0 + 4) fountain(ev.tx, P.y0, ev.tz, 220);
-    if (sh > P.s1 - 6 && tail < P.s1) fountain(P.bx, P.y1, P.bz, 220);
+    if (sh > P.s0 && tail < P.s0 + 4) fountain(ev.tx, P.y0, ev.tz, 4);
+    if (sh > P.s1 - 6 && tail < P.s1) fountain(P.bx, P.y1, P.bz, 4);
     // the body: every ring follows the head along the same path
     var pos = new T.Vector3(), tan = new T.Vector3(), above = [];
     mesh.body.visible = true;
@@ -275,7 +275,7 @@
     mesh.head.scale.set(open, 1, open);
     // sand pouring off it while it is up in the air
     if (above.length) {
-      var nf = W.rate(60, dt), cs = s.site.colors.dust;
+      var nf = W.rate(1.5, dt), cs = s.site.colors.dust;
       for (var f = 0; f < nf; f++) {
         var b = above[Math.floor(Math.random() * above.length)], aa = Math.random() * Math.PI * 2;
         W.emit(b[0] + Math.cos(aa) * b[3] * 0.8, b[1] - b[3] * 0.3, b[2] + Math.sin(aa) * b[3] * 0.8, { vx: (Math.random() - 0.5) * 2, vy: -1, vz: (Math.random() - 0.5) * 2, life: 1.8, size: 1.1, grow: 1.4, color: cs, alpha: 0.6, grav: W.gravity });
