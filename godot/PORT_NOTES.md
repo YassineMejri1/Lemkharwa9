@@ -15,7 +15,7 @@ in the repo root; everything for Godot lives in `godot/`.
 | Action | Keyboard / mouse | Gamepad |
 |---|---|---|
 | Walk | W A S D or arrows | left stick |
-| Look | drag the mouse | right stick |
+| Look | move the mouse (hold Alt to get the pointer back for the HUD) | right stick |
 | Jump | Space | A |
 | Use (pick up, plug in, drill, enter) | E or Enter (hold for drills) | X (hold for drills) |
 | Second action | Q | B |
@@ -37,6 +37,7 @@ in the repo root; everything for Godot lives in `godot/`.
 godot/
   project.godot
   assets/models/*.glb      Blender exports, copied from ../assets/models
+  assets/models/astronaut.glb  the skinned astronaut, from ../assets/blender/scripts/build_astronaut_skinned.py
   assets/textures, assets/fonts, assets/icons
   audio/{voice,sfx,music,landing}/*.mp3   copied from ../audio
   scripts/rules/           the rules with no graphics, ported one to one (data, sim, crisis, spaceweather, archive data)

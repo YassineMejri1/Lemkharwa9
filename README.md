@@ -227,6 +227,7 @@ node tools/tests/solo.test.js
 | 3D engine | three.js r149, https://threejs.org, loaded from jsDelivr | MIT |
 | Fonts | Exo 2, Figtree, Lexend, Sora (`assets/fonts/`) | SIL Open Font License 1.1 (licence files included) |
 | 3D models and textures | Made by the team in Blender, from the scripts in `assets/blender/scripts/` | Original work |
+| Astronaut of the Godot game | "Astronaut" by Jungle Jim (`assets/blender/source/astronaut_jungle_jim.fbx`), rigged for the game by `assets/blender/scripts/build_astronaut_skinned.py` | The author's licence (add the link and terms here) |
 | UI icons | Drawn in code by the team (`tools/icons/build.js`) | Original work |
 | Voice lines, sound effects, music | Generated with ElevenLabs (prompts in `tools/audio/manifest.js`), processed with ffmpeg | Generated audio, used under the team's ElevenLabs terms |
 

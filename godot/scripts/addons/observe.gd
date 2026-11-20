@@ -9,8 +9,8 @@ extends Node
 ## The mission clock waits while you sit (the game does not run the rules in this mode).
 ## This only drives the astronaut, the camera, the overlay and the deeper sky (World.observe). A port of js/observe.js.
 
-const S := 0.84
-const HIP := 0.86          # the astronaut's scale and hip height in model units
+var S: float = Actors.RIG.scale
+var HIP: float = Actors.RIG.hipY          # the astronaut's scale and hip height in model units
 var st = null
 var site := "moon"
 var seat = null
@@ -162,7 +162,7 @@ func _build_ui() -> void:
 	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	el.add_child(fade)
 	var hint := Button.new()
-	hint.text = "E  Stand up   ·  drag to look around  ·  wheel to zoom  ·  V  visor"
+	hint.text = "E  Stand up   ·  move the mouse to look around  ·  wheel to zoom  ·  V  visor"
 	hint.theme_type_variation = "BtnGhost"
 	hint.focus_mode = Control.FOCUS_NONE
 	hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)

@@ -737,6 +737,7 @@ func _get_hammer(a) -> Node3D:
 	_add(hammer, _box(0.46, 0.17, 0.17), M.metal, 0, 0, 0.78, true)
 	hammer.position = Vector3(0, -0.09, 0)          # gripped in the fist, head forward when the swing lands
 	hammer.rotation.x = 2.0
+	hammer.scale = Vector3.ONE * 0.84 / Actors.RIG.scale      # its size in metres, whatever the astronaut's scale
 	hammer.visible = false
 	hand.add_child(hammer)
 	return hammer

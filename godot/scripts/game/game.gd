@@ -808,7 +808,7 @@ func begin_sol(late := "") -> void:
 		var line := ""
 		var vox
 		if s.sol == 1:
-			line = "Welcome outside! Walk with W A S D, drag the mouse to look around, and press Space to jump."
+			line = "Welcome outside! Walk with W A S D, move the mouse to look around, and press Space to jump."
 			vox = "act-welcome"
 		else:
 			var lbl: String = look.label
@@ -2507,7 +2507,7 @@ func go_inside(id: String) -> void:
 	if id == "rocket":
 		tip("inside-rocket", "Look around the cabin with the mouse. The couches, the screens, the life support and the lockers each have something to tell you.")
 	else:
-		tip("inside", "Look around with the mouse — drag down to look up at the skylight!")
+		tip("inside", "Look around with the mouse — look up at the skylight! Hold Alt to click the buttons.")
 
 
 ## Back outside (or, with quiet, just forget the room: the day ended, the rocket launched...)
@@ -3355,7 +3355,7 @@ func how_info() -> void:
 	if touch:
 		keys = "<div class=\"keys\"><span>🕹️</span><div>Left stick: walk (push all the way to run) · drive the rover</div><span>⏸</span><div>Pause · change how long a day lasts</div><span>👆</span><div>Drag anywhere to look around</div><span>✋</span><div>Use, pick up, plug in, drill (hold)</div><span>🎯</span><div>Hold to aim a throw, let go to throw</div><span>⤴</span><div>Jump</div><span>👁</span><div>Helmet view: see through your own visor</div><span>💡</span><div>Tap a meter, a blue card or the round radio badge: your wrist tablet projects a hologram that shows why</div><span>📓</span><div>Field Journal: every piece of science you have found</div></div>"
 	else:
-		keys = "<div class=\"keys\"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><div>Walk · drive the rover (arrow keys work too)</div><span><kbd>Mouse</kbd></span><div>Drag to look around · wheel to zoom</div><span><kbd>E</kbd></span><div>Use, pick up, plug in, drill (hold)</div><span><kbd>F</kbd></span><div>Hold to aim a throw, let go to throw</div><span><kbd>Space</kbd></span><div>Jump</div><span><kbd>Shift</kbd></span><div>Run (uses more air)</div><span><kbd>Q</kbd></span><div>Put down what you are holding</div><span><kbd>V</kbd></span><div>Helmet view: see through your own visor (A and D turn you)</div><span><kbd>C</kbd></span><div>Save a postcard picture</div><span><kbd>L</kbd></span><div>Camera filter: see like a real space camera</div><span><kbd>X</kbd></span><div>Camera effects: full, lite or off</div><span><kbd>T</kbd></span><div>Wrist tablet: a hologram that shows why, about what just happened or the machine next to you</div><span><kbd>J</kbd></span><div>Field Journal: every piece of science you have found</div><span><kbd>M</kbd></span><div>Mini map: the buildings, your jobs and where you are</div><span><kbd>N</kbd></span><div>Music on or off</div><span><kbd>F11</kbd></span><div>Full screen on or off</div></div>"
+		keys = "<div class=\"keys\"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><div>Walk · drive the rover (arrow keys work too)</div><span><kbd>Mouse</kbd></span><div>Move to look around · wheel to zoom</div><span><kbd>Alt</kbd></span><div>Hold to show the pointer and click the meters, the map or the buttons</div><span><kbd>E</kbd></span><div>Use, pick up, plug in, drill (hold)</div><span><kbd>F</kbd></span><div>Hold to aim a throw, let go to throw</div><span><kbd>Space</kbd></span><div>Jump</div><span><kbd>Shift</kbd></span><div>Run (uses more air)</div><span><kbd>Q</kbd></span><div>Put down what you are holding</div><span><kbd>V</kbd></span><div>Helmet view: see through your own visor (A and D turn you)</div><span><kbd>C</kbd></span><div>Save a postcard picture</div><span><kbd>L</kbd></span><div>Camera filter: see like a real space camera</div><span><kbd>X</kbd></span><div>Camera effects: full, lite or off</div><span><kbd>T</kbd></span><div>Wrist tablet: a hologram that shows why, about what just happened or the machine next to you</div><span><kbd>J</kbd></span><div>Field Journal: every piece of science you have found</div><span><kbd>M</kbd></span><div>Mini map: the buildings, your jobs and where you are</div><span><kbd>N</kbd></span><div>Music on or off</div><span><kbd>F11</kbd></span><div>Full screen on or off</div></div>"
 	open_info("<h2>How to play</h2>" + keys \
 		+ _row("🔋", "Power cells", "The Solar Rack charges a few cells each day. Carry or throw each one into a machine's socket: Air Maker, Greenhouse, Soil Bagger, Lab, Radio Dish or Rover.") \
 		+ _row("🧊", "Ice = air and water", "Start the ice drills at the far crater: each one digs out a chunk by itself while you start the next. Drop it in the Air Maker to make oxygen, or in the Greenhouse tank to water the plants. The rover bed carries four things.") \
@@ -3436,7 +3436,7 @@ func goals_for() -> Dictionary:
 	var rack_or_cell = null if has.call("cell") else sp.rack
 	var air_t = sp.hoppers.air if has.call("ice") or rover_ice else (sp.sockets.air if has.call("cell") else (sp.rack if m.air.power == 0 and m.air.queue > 0 else sp.ice[0]))
 	if s.sol == 1:
-		add.call("Walk with the stick, drag to look, and try a jump" if touch else "Walk (W A S D), drag the mouse to look, jump (Space)", tut.get("moved"), null, "👟")
+		add.call("Walk with the stick, drag to look, and try a jump" if touch else "Walk (W A S D), move the mouse to look, jump (Space)", tut.get("moved"), null, "👟")
 		add.call("Carry a power cell from the Solar Rack to the Air Maker", tut.get("airCell"), sp.sockets.air if has.call("cell") else sp.rack, "🔋")
 		add.call("Fetch ice from the " + s.site.iceName + " for the Air Maker (the rover is faster!)", tut.get("ice"), air_t, "🧊")
 		add.call("Greenhouse: a power cell, ice for water, then plant seeds", tut.get("grow"), sp.sockets.food if has.call("cell") else (sp.hoppers.water if has.call("ice") else sp.beds[1]), "🥬")
@@ -3765,6 +3765,11 @@ const KEYMAP := { KEY_LEFT: "left", KEY_A: "left", KEY_RIGHT: "right", KEY_D: "r
 var drag := false
 var drag_btn := 0
 var pad := { "x": 0.0, "z": 0.0, "lx": 0.0, "ly": 0.0 }
+## Mouse look: while you play, the pointer is hidden and moving the mouse turns the camera. The pointer comes back
+## whenever a card, a menu, the pause screen or the settings are open, and while you hold Alt (to click the meters,
+## the map, the job list or the buttons indoors).
+const MOUSE_LOOK := 0.6          # per pixel, mouse look turns this much of what a drag turns
+var alt_held := false
 
 
 func _play_or_inside() -> bool:
@@ -3775,7 +3780,33 @@ func _pause_open() -> bool:
 	return Ui.modal_open() and Ui.modal_doc != null and str(Ui.modal_doc.get_meta("cls", "")).find("pause") >= 0
 
 
+func _mouse_look_wanted() -> bool:
+	if alt_held or not get_window().has_focus():
+		return false
+	if mode != "play" and mode != "observe" and not (mode == "inside" and cut == null):
+		return false
+	return not (Ui.modal_open() or info_open() or holo_open() or Ui.typing() or (Ui.settings_menu != null and Ui.settings_menu.visible))
+
+
+## every frame: hide and lock the pointer for mouse look, or give it back
+func _sync_mouse() -> void:
+	var want := Input.MOUSE_MODE_CAPTURED if _mouse_look_wanted() else Input.MOUSE_MODE_VISIBLE
+	if Input.mouse_mode != want:
+		Input.mouse_mode = want
+		drag = false
+
+
 func _input(e: InputEvent) -> void:
+	if e is InputEventKey and e.physical_keycode == KEY_ALT and not e.echo:
+		alt_held = e.pressed
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if e is InputEventMouseMotion:
+			_look(e.screen_relative * MOUSE_LOOK)        # screen pixels: the same feel at any window size
+			get_viewport().set_input_as_handled()
+			return
+		if e is InputEventMouseButton and e.button_index != MOUSE_BUTTON_WHEEL_UP and e.button_index != MOUSE_BUTTON_WHEEL_DOWN:
+			get_viewport().set_input_as_handled()       # the hidden pointer must not click the HUD under it
+			return
 	# releases always count, whatever has the focus, so no key is ever left stuck down
 	if e is InputEventKey and not e.pressed:
 		var k = KEYMAP.get(e.physical_keycode)
@@ -3933,7 +3964,7 @@ func _pad_down(e: InputEventJoypadButton) -> void:
 				pause_modal()
 
 
-## drag to look, wheel to zoom (whatever the HUD did not take)
+## wheel to zoom; drag to look while the pointer shows (whatever the HUD did not take). Mouse look is in _input.
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseButton:
 		if e.button_index == MOUSE_BUTTON_WHEEL_UP or e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -3975,6 +4006,7 @@ func let_go() -> void:
 	keys = {}
 	e_held = false
 	drag = false
+	alt_held = false
 	if charge != null:
 		charge = null
 		if Actors.astro:
@@ -4220,6 +4252,7 @@ var WORLD := { "mode": "", "pos": null, "s": null, "say": func(t): say(t, true),
 func _process(delta: float) -> void:
 	if not booted:
 		return
+	_sync_mouse()
 	advance(minf(0.05, delta))
 
 

@@ -24,6 +24,17 @@ class Astro:
 	var drill: Node3D
 	var bit: Node3D
 	var accent: BaseMaterial3D
+	# the suit is one skinned mesh: the joints above are empties, copied onto its skeleton by _skin()
+	var torso: MeshInstance3D           # hips, chest, helmet and pack (helmet view draws them as a shadow only)
+	var antenna: MeshInstance3D
+	var skel: Skeleton3D
+	var joints: Array[Node3D] = []      # in SKIN order
+	var bone := PackedInt32Array()
+	var bind: Array[Transform3D] = []   # from each joint's frame to its bone's, at rest
+	var base := Transform3D.IDENTITY    # the hips' parent, in the model
+	var sk_inv := Transform3D.IDENTITY  # the model, in the skeleton's frame
+	var jm: Array[Transform3D] = []     # this frame: each joint in the model
+	var bm: Array[Transform3D] = []     # this frame: each bone in the skeleton
 	var pos := Vector3(0, 0, 13)
 	var vel := Vector3.ZERO
 	var vy := 0.0
@@ -151,12 +162,16 @@ var _hit_n := Vector2.ZERO
 const THROW_ANGLE := 0.72
 const THROW_MIN := 3.2
 const THROW_MAX := 9.5
-## the astronaut's skeleton: the same pivots as assets/blender/scripts/build_astronaut.py, in the model's own units
-## (he is drawn at 0.84 scale). toe: the ball of the foot in front of the ankle; heel: the back of the heel.
-const RIG := { "scale": 0.84, "hipX": 0.2, "hipY": 0.86, "kneeY": 0.5, "ankleY": 0.15, "waistY": 0.98, "shX": 0.58, "shY": 1.48, "elbowY": 1.2, "wristY": 0.97, "toe": 0.26, "heel": -0.13 }
-const L1 := 0.86 - 0.5
-const L2 := 0.5 - 0.15
-const ANK := 0.15
+## the astronaut's skeleton: the same pivots as assets/blender/scripts/build_astronaut_skinned.py, in the model's own
+## units (he is drawn at 1.07 scale, about 1.9 m tall). toe: the ball of the foot in front of the ankle; heel: the back
+## of the heel.
+const RIG := { "scale": 1.07, "hipX": 0.156, "hipY": 0.86, "kneeY": 0.496, "ankleY": 0.142, "waistY": 0.993, "shX": 0.301, "shY": 1.321, "elbowY": 1.12, "wristY": 0.944, "toe": 0.15, "heel": -0.105 }
+const L1 := 0.86 - 0.496
+const L2 := 0.496 - 0.142
+const ANK := 0.142
+## the skeleton's bones, a parent before its children, and the joint empty (astro_<bone>) that drives each
+const SKIN := ["hips", "body", "legL", "shinL", "footL", "legR", "shinR", "footR", "armL", "foreL", "handL", "armR", "foreR", "handR"]
+const SKIN_PARENT := [-1, 0, 0, 2, 3, 0, 5, 6, 1, 8, 9, 1, 11, 12]
 const BED := [[-0.5, 1.6, -0.85], [0.5, 1.6, -0.85], [-0.5, 1.6, -1.7], [0.5, 1.6, -1.7]]
 const RADIUS := { "cell": 0.4, "ice": 0.4, "bag": 0.32, "core": 0.34, "crate": 0.3, "inst": 0.38, "case": 0.28 }
 const ITEM_MODEL := { "cell": "power_cell", "bag": "soil_bag", "core": "core_sample", "crate": "food_crate", "inst": "instrument", "case": "supply_case" }
@@ -220,10 +235,13 @@ func build_astronaut(color: int) -> Astro:
 	a.foot_l = n.call("footL")
 	a.foot_r = n.call("footR")
 	a.tip = n.call("antennaTip")
+	a.antenna = n.call("antenna")
+	a.torso = n.call("torso")
 	a.drill = n.call("drill")
 	a.bit = n.call("drillBit")
 	for j in [a.hips, a.body, a.arm_l, a.arm_r, a.fore_l, a.fore_r, a.hand_l, a.hand_r, a.leg_l, a.leg_r, a.shin_l, a.shin_r, a.foot_l, a.foot_r]:
 		j.rotation_order = EULER_ORDER_XYZ
+	_bind_skin(a, g)
 	a.tip_mat = Base.own_glow(a.tip)
 	a.accent = Base.own_mat(g, "SuitAccent")
 	set_suit_color(a, color)
@@ -231,6 +249,44 @@ func build_astronaut(color: int) -> Astro:
 	g.scale = Vector3.ONE * RIG.scale
 	root.add_child(g)
 	return a
+
+
+## n's place in the model g (n is inside g)
+static func _in_model(g: Node3D, n: Node3D) -> Transform3D:
+	var t := Transform3D.IDENTITY
+	while n != g:
+		t = n.transform * t
+		n = n.get_parent() as Node3D
+	return t
+
+
+## Ties each joint empty to its bone: at rest, bone = joint * bind (whatever way the bones were exported to face).
+func _bind_skin(a: Astro, g: Node3D) -> void:
+	a.skel = g.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	a.joints = [a.hips, a.body, a.leg_l, a.shin_l, a.foot_l, a.leg_r, a.shin_r, a.foot_r, a.arm_l, a.fore_l, a.hand_l, a.arm_r, a.fore_r, a.hand_r]
+	a.base = _in_model(g, a.hips.get_parent() as Node3D)
+	var sk := _in_model(g, a.skel)
+	a.sk_inv = sk.affine_inverse()
+	for i in SKIN.size():
+		var b := a.skel.find_bone(SKIN[i])
+		a.bone.append(b)
+		a.bind.append(_in_model(g, a.joints[i]).affine_inverse() * sk * a.skel.get_bone_global_rest(b))
+		a.jm.append(Transform3D.IDENTITY)
+		a.bm.append(Transform3D.IDENTITY)
+	_skin(a)
+
+
+## Copies the joints' pose onto the skeleton. Every pose function ends with it.
+func _skin(a: Astro) -> void:
+	for i in SKIN.size():
+		var p: int = SKIN_PARENT[i]
+		var j: Transform3D = (a.base if p < 0 else a.jm[p]) * a.joints[i].transform
+		a.jm[i] = j
+		var b: Transform3D = a.sk_inv * j * a.bind[i]
+		a.bm[i] = b
+		var local: Transform3D = b if p < 0 else a.bm[p].affine_inverse() * b
+		a.skel.set_bone_pose_position(a.bone[i], local.origin)
+		a.skel.set_bone_pose_rotation(a.bone[i], local.basis.get_rotation_quaternion())
 
 
 ## cuffs, bands, knee pads and gauntlets take the chosen suit colour
@@ -1189,11 +1245,12 @@ func pose(a: Astro, dt: float, moving: bool, sprint: bool, rm) -> void:
 	elif a.carrying and a.aim:
 		lean = -0.12
 	a.body.rotation = Vector3(lean, -p_yaw * 1.6, -tilt * 0.85)
+	_skin(a)
 
 
 ## sitting in the rover: thighs on the seat, shins down, hands toward the wheel
 func pose_seated(a: Astro) -> void:
-	a.hips.position = Vector3(0, RIG.hipY - 0.12, 0)
+	a.hips.position = Vector3(0, 0.49 / RIG.scale, 0)       # the hips 0.49 m above the seat point, on the cushion
 	a.hips.rotation = Vector3.ZERO
 	a.head_y = 0
 	a.air = 0
@@ -1212,6 +1269,7 @@ func pose_seated(a: Astro) -> void:
 	a.fore_r.rotation = Vector3(-0.45, 0, 0)
 	a.hand_l.rotation = Vector3(-0.2, 0, 0)
 	a.hand_r.rotation = Vector3(-0.2, 0, 0)
+	_skin(a)
 
 
 ## Sitting on a rock: sit_k 0 = standing, 1 = seated (thighs forward, shins hanging); relax_k leans him back on his
@@ -1246,6 +1304,7 @@ func pose_rock(a: Astro, _dt: float) -> void:
 		arm.rotation = Vector3(ax + br * 0.01, 0, az)
 		fore.rotation = Vector3(el, 0, 0)
 		hand.rotation = Vector3(lerpf(-0.15, 0.7, r), 0, 0)
+	_skin(a)
 
 
 # ---------- the rover ----------
@@ -1536,7 +1595,7 @@ func set_first_person(on: bool) -> void:
 		return
 	astro.fp = on
 	var mode := GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY if on else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	for part in [astro.hips, astro.body, astro.tip]:
+	for part in [astro.torso, astro.antenna, astro.tip]:
 		(part as GeometryInstance3D).cast_shadow = mode
 
 
