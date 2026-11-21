@@ -43,7 +43,8 @@ godot/
   scripts/rules/           the rules with no graphics, ported one to one (data, sim, crisis, spaceweather, archive data)
   scripts/world/           terrain.gd, world.gd (sky, light, ground, particles), base.gd (outpost), actors.gd (astronauts, rover, things)
   scripts/game/game.gd     the old game.js: input, offers, zones, throws, mini-games, days, nights, endings
-  scripts/ui/              ui.gd (HUD, radio, cards, modals, prompt, tags, marks), html.gd (cards are still written as HTML), style.gd
+  scripts/ui/              ui.gd (HUD, radio, cards, modals, prompt, tags, marks), html.gd (cards are still written as HTML), style.gd,
+                           starmap.gd (the level map of planets)
   scripts/audio/           audio.gd (recordings, synth stand-ins, voice lines), synth.gd, music_gen.gd
   scripts/addons/          the optional extras, one file each (see below)
   scripts/net/net.gd       crew mode's network
@@ -69,6 +70,38 @@ godot/
 Each is optional: `Game.ADDONS` loads every one that is there and compiles, and the game runs without any of them.
 All of them are ported: journal, minimap, pov, sky, observe, fx, interior, mission, sunwatch, keepsake, holo,
 colony (the town that grows between missions, and the "what could it become" film), pioneer, intro, crew.
+Only in this version: hazards (see Planets).
+
+## Planets (only in this version)
+
+The levels are planets, in the order of `Data.PLANET_ORDER`: Moon, Mars, Europa, Titan, Io. Winning a planet opens the
+next one (`Game.done`, kept in `user://settings.cfg`), and gives it stars: 1 for Cadet, 2 for Commander, 3 for Veteran.
+
+**For testing, every planet is open now: `Game.all_open` is `true`. Set it to `false` to bring the order back.**
+
+Planets are picked on the star map (`scripts/ui/starmap.gd`): a level map with a dotted route, each planet in a glass
+bubble with its number and stars, a padlock on a locked one. It is drawn in code (no picture files) and shown with
+`Ui.modal_page`, so the game treats it like an open card. It opens in two places:
+- from the title (`Game.star_map`): pick a planet, then the mission planner opens for that planet;
+- on the last day, from the commander's couch in the rocket (`Game.board_modal`): pick the next planet, confirm, lift
+  off. In crew mode the host picks for everyone.
+
+The planets after Mars live in `data/planets.json`, because `game_data.json` is written from the web version. Each one
+names the world it is built on (`"like": "moon"` or `"mars"`) and lists only what differs. `Data` merges the two: `id`
+stays the base world, so every `"moon"` / `"mars"` branch and table still works, and `planet` is the planet itself.
+
+| Planet | Built on | What is different |
+|---|---|---|
+| Europa | Moon | slippery ice (`grip`), geysers that throw you up, strong radiation, a small Sun |
+| Titan | Mars | thick air: you fall slowly (`fall`); little sunlight, almost no radiation |
+| Io | Moon | lava pools that knock you back, the strongest radiation |
+
+- Looks: `World.LOOKS` has one entry per planet with only the colours that differ.
+- Hazards: `scripts/addons/hazards.gd` (geysers, lava). The same on every screen of a crew, with no network messages.
+- On these planets `Game.fun` is true: the add-ons in `Game.SCIENCE` are off, the recorded voice is off (read-aloud
+  still works), and a radio line or room fact that names the Moon or Mars is not shown.
+- To add a planet: one entry in `data/planets.json`, its id in `Data.PLANET_ORDER`, its colours in `World.LOOKS`, and
+  its place and look on the star map (`AT` and the `PLANET` shader in `scripts/ui/starmap.gd`).
 
 ## Crew mode (multiplayer, up to 4)
 

@@ -109,7 +109,7 @@ func text_for(id: String, s: Dictionary) -> String:
 			return "The Greenhouse air is too damp, and a fuzzy white mould is growing on one bed of plants. Mould spreads from leaf to leaf."
 		"cold":
 			return "A battery pack has just failed. Tonight there is only enough stored power to keep ONE machine warm. " + \
-				("In the dark, the Moon's surface drops to about −133°C." if moon else "Nights on Mars fall far below −70°C.") + " Anything left unheated will freeze."
+				("Outside it is far colder than any freezer." if s.site.planet != s.site.id else "In the dark, the Moon's surface drops to about −133°C." if moon else "Nights on Mars fall far below −70°C.") + " Anything left unheated will freeze."
 		"fuse":
 			return "A power surge has blown the fuses in the Radio Dish AND the Greenhouse water pump. The toolbox holds exactly one spare fuse."
 		"stuck":

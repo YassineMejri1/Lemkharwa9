@@ -157,6 +157,8 @@ var knock_loose := false
 var root: Node3D
 var site := "mars"
 var grav := 3.71
+var grip := 1.0          # how well boots hold the ground outside (Europa's ice: 0.2)
+var fall := 0.0          # the fastest you can fall in thick air, in m/s (Titan); 0 = no limit
 var _hit_n := Vector2.ZERO
 
 const THROW_ANGLE := 0.72
@@ -637,8 +639,11 @@ func _update_devils(dt: float) -> void:
 # ---------- build ----------
 func build(root_node: Node3D, site_id: String, suit_color: int = 0xff7a3d) -> void:
 	root = root_node
-	site = site_id
-	grav = Data.SITES[site].gravity
+	var P: Dictionary = Data.SITES[site_id]
+	site = P.id              # the world this planet is built on: "moon" or "mars"
+	grav = P.gravity
+	grip = P.get("grip", 1.0)
+	fall = P.get("fall", 0.0)
 	items = []
 	crew = []
 	astro = build_astronaut(suit_color)
@@ -905,7 +910,7 @@ func _update_astro(dt: float, input) -> void:
 	var mx := -v1.z * ix - v1.x * iz
 	var mz := v1.x * ix - v1.z * iz          # camera-relative: right*ix + back*iz
 	var speed := (8.8 if sprint else 5.8) * (0.93 if a.carrying else 1.0)
-	var k := minf(1, dt * (11.0 if a.on_ground else 1.6))
+	var k := minf(1, dt * (11.0 * (grip if room == null else 1.0) if a.on_ground else 1.6))
 	a.vel.x += (mx * speed - a.vel.x) * k
 	a.vel.z += (mz * speed - a.vel.z) * k
 	a.pos.x += a.vel.x * dt
@@ -948,6 +953,8 @@ func _update_astro(dt: float, input) -> void:
 				on_jump.call()
 	if not a.on_ground:
 		a.vy -= grav * dt
+		if fall > 0 and room == null:
+			a.vy = maxf(a.vy, -fall)
 		a.pos.y += a.vy * dt
 		if a.pos.y <= ground:
 			var hit := -a.vy

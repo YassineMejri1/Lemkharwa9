@@ -18,7 +18,7 @@ extends Node
 
 const LETTERS := "ABCDEFGHJKLMNPQRSTUVWXYZ"        # no I and O: a code read out loud must not be mistaken
 const RELAYS := ["wss://test.mosquitto.org:8081/mqtt", "wss://broker.hivemq.com:8884/mqtt"]
-const VERSION := 1
+const VERSION := 2              # 2: a mission can be on a planet after Mars, which an older game does not know
 const PORT0 := 47820            # the host's game listens on the first free port from here
 const PORTS := 10
 const DISCO := 47810            # "who has crew ABCDE?" on the local network: the first free port from here

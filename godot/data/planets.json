@@ -1,0 +1,70 @@
+{
+ "europa": {
+  "like": "moon",
+  "short": "Europa",
+  "name": "Europa",
+  "emoji": "🧊",
+  "place": "Conamara Chaos, on the ice shell",
+  "gravity": 1.31,
+  "doseDay": 8,
+  "doseNight": 5,
+  "delay": 43,
+  "grip": 0.2,
+  "hazard": "geysers",
+  "iceName": "Blue Fissure",
+  "commText": "A radio message takes about 43 minutes to reach Earth.",
+  "blurb": "The ground is slippery ice, geysers throw you into the sky, and Jupiter's radiation never rests.",
+  "why": "We built here because a whole ocean of water hides under the ice.",
+  "env": {
+   "sun": { "cells": 6, "icon": "☀️", "label": "Small bright Sun", "why": "The Sun is far away and small out here, but the ice shines and the panels still charge." },
+   "lowsun": { "cells": 4.5, "icon": "🌥️", "label": "Long shadows", "why": "Tall ice ridges throw long shadows over the solar panels." },
+   "shadow": { "cells": 3, "icon": "🌑", "label": "Jupiter's shadow", "why": "Jupiter is passing in front of the Sun. The panels will charge very slowly today!" },
+   "dark": { "cells": 1, "icon": "🌚", "label": "The long eclipse", "why": "Jupiter hides the Sun all day. The panels make almost nothing, so today runs on the power cells you saved." }
+  }
+ },
+ "titan": {
+  "like": "mars",
+  "short": "Titan",
+  "name": "Titan",
+  "emoji": "🟠",
+  "place": "Shangri-La dune sea",
+  "dayWord": "Day",
+  "gravity": 1.35,
+  "doseDay": 1,
+  "doseNight": 0.5,
+  "stormMult": 0.2,
+  "delay": 80,
+  "fall": 2.4,
+  "iceName": "Ice Quarry",
+  "commText": "A radio message takes about 80 minutes to reach Earth.",
+  "blurb": "The air is so thick that you float down slowly from every jump. But the orange haze leaves little sunlight for power.",
+  "why": "We built here because the thick air stops radiation, and the ground is made of water ice.",
+  "env": {
+   "clear": { "cells": 5, "icon": "🟠", "label": "Orange haze", "why": "Titan's sky is always hazy. Only a little sunlight reaches the solar panels." },
+   "dusty": { "cells": 3.5, "icon": "🌫️", "label": "Thick haze", "why": "The haze is thicker today and blocks even more of the sunlight." },
+   "storm": { "cells": 2, "icon": "🌧️", "label": "Methane storm!", "why": "Dark methane clouds are hiding the Sun. On Titan it rains methane, not water." }
+  }
+ },
+ "io": {
+  "like": "moon",
+  "short": "Io",
+  "name": "Io",
+  "emoji": "🌋",
+  "place": "Loki Patera, beside a lava lake",
+  "gravity": 1.8,
+  "doseDay": 10,
+  "doseNight": 6,
+  "delay": 43,
+  "hazard": "lava",
+  "iceName": "Frost Hollow",
+  "commText": "A radio message takes about 43 minutes to reach Earth.",
+  "blurb": "The most volcanic world there is: glowing lava cracks, eruptions, and the hardest radiation of all.",
+  "why": "We built here to study volcanoes that never stop erupting.",
+  "env": {
+   "sun": { "cells": 6, "icon": "☀️", "label": "Clear sky", "why": "No ash in the sky today, so the solar panels charge well." },
+   "lowsun": { "cells": 4.5, "icon": "🌥️", "label": "Thin ash", "why": "A far volcano is throwing ash into the sky. It dims the sunlight a little." },
+   "shadow": { "cells": 3, "icon": "🌋", "label": "Ash fall", "why": "Ash from an eruption is falling on the solar panels. They will charge very slowly today!" },
+   "dark": { "cells": 1, "icon": "🌚", "label": "Eruption cloud", "why": "A giant eruption cloud hides the Sun all day. The panels make almost nothing, so today runs on the power cells you saved." }
+  }
+ }
+}

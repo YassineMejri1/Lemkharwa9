@@ -522,7 +522,7 @@ func lobby() -> void:
 			"plan": func():
 				Au.play("tap")
 				Ui.close_modal()
-				Game.setup_modal(),
+				Game.star_map(),
 		} })
 	_refresh_room()
 
@@ -1409,7 +1409,7 @@ func _state_now() -> Dictionary:
 		if k != "site" and k != "level" and k != "rng":
 			s2[k] = Game.s[k]
 	var o: Dictionary = _clean({ "s": s2, "rigs": Game.rigs, "tut": Game.tut, "tutStep": Game.tut_step })
-	o.site = Game.s.site.id
+	o.site = Game.s.site.planet
 	o.level = Game.s.level.id
 	return o
 

@@ -3,6 +3,7 @@ extends Node
 ##   Godot_v4.7.2-stable_win64_console.exe --path . res://tools/shot.tscn -- site=mars cam=title out=res://tools/shots/a.png
 var args := {}
 var frames := 0
+var hz: Node = load("res://scripts/addons/hazards.gd").new()      # the planet's geysers or lava: part of its look
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -18,7 +19,10 @@ func _ready() -> void:
 		World.cam.mode = "fixed"
 		World.cam.fixed = { "pos": Vector3(float(args.x), float(args.get("y", "8")), float(args.z)), "look": Vector3(float(args.get("lx", "0")), float(args.get("ly", "2")), float(args.get("lz", "0"))) }
 	if get_node_or_null("/root/Base") and args.get("base", "1") == "1":
-		get_node("/root/Base").build(World.root, args.get("site", "mars"))
+		get_node("/root/Base").build(World.root, Data.SITES[args.get("site", "mars")].id)
+	hz.build(World.root, args.get("site", "mars"))
+	if hz.list.size():
+		print("hazards at ", hz.list.map(func(h): return Vector2i(h.x, h.z)))
 	if args.get("base", "1") == "1":
 		Actors.build(World.root, args.get("site", "mars"))
 		if World.cam.mode == "play":
@@ -36,6 +40,7 @@ func _process(dt: float) -> void:
 	World.time = float(args.get("time", "0")) + frames * 0.016
 	World.update(0.016 if frames > 2 else 100.0)
 	Base.update(0.016, null)
+	hz.update(0.016, { "t": World.time }, "play" if Actors.astro else "")
 	if Actors.astro:
 		var walk: String = args.get("walk", "0")
 		var inp := { "x": 0.0, "z": -1.0 if walk != "0" else 0.0, "jump": args.get("jump", "") == str(frames), "sprint": walk == "2" }

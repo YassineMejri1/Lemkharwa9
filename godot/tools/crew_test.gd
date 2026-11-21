@@ -117,7 +117,7 @@ func _process(_dt: float) -> void:
 		return
 	if play_f < 0:
 		play_f = f
-		_log("in the mission: sol %d players %s" % [Game.s.sol, str(C.players.keys())])
+		_log("in the mission on %s: sol %d players %s hazards %d" % [Game.s.site.planet, Game.s.sol, str(C.players.keys()), Game.addons.hazards.list.size()])
 	var t := f - play_f
 	var other = null
 	for p in C._others():

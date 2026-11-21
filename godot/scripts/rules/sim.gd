@@ -1072,10 +1072,10 @@ func clean_all_panels(s: Dictionary) -> void:
 
 # ---------- repairs and the radio delay ----------
 func comm_info(s: Dictionary) -> Dictionary:
-	if s.site.id == "moon":
+	if s.site.id == "moon" and not s.site.has("delay"):
 		return { "oneWay": "1.3 seconds", "round": "about 3 seconds", "wait": 3.0, "minutes": 0 }
 	var date = Js.orv(weather(s).get("date"), Weather.today_iso())
-	var one: float = Weather.mars_delay_min(date)
+	var one: float = s.site.delay if s.site.has("delay") else Weather.mars_delay_min(date)      # delay: a far planet's own radio minutes
 	var rnd := one * 2
 	return { "oneWay": "about " + str(Js.mround(one)) + " minutes", "round": "about " + str(Js.mround(rnd)) + " minutes", "wait": clampf(rnd * 1.4, 14, 60), "minutes": Js.mround(rnd) }
 
@@ -1288,7 +1288,7 @@ func pick_facts(s: Dictionary, n: int) -> Array:
 	if t.airMade:
 		tags.append("air")
 	tags.append_array(["dose", "any"])
-	var site_id: String = s.site.id
+	var site_id: String = s.site.planet      # a planet after Mars has no facts of its own yet: it gets the ones true anywhere
 	for tag in tags:
 		if out.size() >= n:
 			break

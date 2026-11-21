@@ -308,6 +308,37 @@ func unit_checks() -> void:
 		ok("describe() names the satellites", "GOES" in Weather.describe(stormy, "moon").text)
 	ok("Mars radio delay is minutes", Weather.mars_delay_min("2024-05-10") > 3 and Weather.mars_delay_min("2024-05-10") < 23)
 
+	# ---- the planets after Mars: each is the Moon's or Mars's world with its own values on top (data/planets.json)
+	var eu: Dictionary = Data.SITES.europa
+	ok("Europa is built on the Moon's world", eu.id == "moon" and eu.planet == "europa" and eu.gravity == 1.31)
+	ok("a planet changes its own weather words only", eu.env.sun.label != Data.SITES.moon.env.sun.label and Data.SITES.moon.env.sun.cells == 7)
+	ok("the Moon and Mars are themselves", Data.SITES.moon.planet == "moon" and Data.SITES.mars.id == "mars" and not Data.SITES.mars.has("like"))
+	for p in ["europa", "titan", "io"]:
+		var won: Dictionary = bot(p, "cadet", 5, { "science": true }).s
+		ok(p + " can be won", won.over and won.over.type == "win", str(won.over))
+	ok("Titan has its own radio delay", Sim.comm_info(game("titan", "cadet", 3)).minutes == 160)
+	var was: Dictionary = Game.done
+	Game.done = { "moon": 1 }
+	Game.all_open = false
+	ok("winning a planet opens the next one only", Game.unlocked("moon") and Game.unlocked("mars") and not Game.unlocked("europa") and not Game.unlocked("pluto"))
+	Game.all_open = true
+	ok("for testing, every planet is open (and nothing else)", Game.unlocked("io") and not Game.unlocked("pluto"))
+	Game.done = was
+	var hz: Node = load("res://scripts/addons/hazards.gd").new()
+	var hroot := Node3D.new()
+	Terrain.set_site("moon")
+	hz.build(hroot, "io")
+	var far := true
+	for h in hz.list:
+		for q in hz._places():
+			far = far and Vector2(h.x, h.z).distance_to(q) >= hz.CLEAR
+	ok("Io has its lava pools, clear of every job", hz.list.size() == hz.COUNT.lava and far, str(hz.list.size()))
+	ok("a geyser shoots at the start of its beat and hisses at the end", hz.beat(13.0, 0.0) == 1.0 and hz.beat(-1.0, 0.0) == hz.PERIOD - 1.0)
+	hz.build(hroot, "mars")
+	ok("Mars has no hazards", hz.list.is_empty())
+	hz.free()
+	hroot.free()
+
 
 ## Every reference mission, played again with the GDScript rules.
 func parity() -> void:

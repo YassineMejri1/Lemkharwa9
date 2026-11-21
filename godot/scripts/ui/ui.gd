@@ -44,6 +44,7 @@ var modal_doc: Html.Doc
 var info_doc: Html.Doc
 var _modal_panel: PanelContainer
 var _modal_scroll: ScrollContainer
+var _page: Control = null                # a full page shown in place of the card (the star map)
 var _info_panel: PanelContainer
 var _info_scroll: ScrollContainer
 var _meters := {}
@@ -1228,7 +1229,7 @@ func storm_words(level: int) -> String:
 func weather_row(s: Dictionary, w, known: bool, when: String) -> String:
 	if not known:
 		return "<div class=\"info-row\"><span class=\"ic\">❓</span><div><b>No space-weather forecast</b><p>The Radio Dish was off, so Earth could not send a forecast. Your suit's small sensor only gives a few seconds of warning.</p></div></div>"
-	var story := Html.esc(Weather.describe(w, s.site.id).text)
+	var story := Html.esc(Weather.describe(w, s.site.id).text) if s.site.planet == s.site.id else ""      # the story is told for the Moon or Mars
 	if w == null or int(w.level) == 0:
 		return "<div class=\"info-row good\"><span class=\"ic\">😎</span><div><b>No radiation storm " + when + "</b><p>" + data_tag(s) + story + "</p></div></div>"
 	return "<div class=\"info-row alert\"><span class=\"ic\">🌩️</span><div><b>" + storm_words(int(w.level)) + " " + when + "!</b><p>" + data_tag(s) + story + " Soil bags on the dome help — and do not get caught far from home!</p></div></div>"
@@ -1362,6 +1363,7 @@ func _fit_modals() -> void:
 func modal(html: String, opts: Dictionary = {}) -> Html.Doc:
 	var doc := Html.render(html, opts.get("actions", {}))
 	modal_doc = doc
+	_drop_page()
 	_open(modal_root, _modal_panel, _modal_scroll, doc, str(opts.get("cls", "")))
 	if not opts.get("noFocus", false):
 		var first := doc.first_button()
@@ -1402,9 +1404,31 @@ func _open(r: Control, p: PanelContainer, sc: ScrollContainer, doc: Html.Doc, cl
 	call_deferred("_fit_modals")
 
 
+## A full page in place of the card (the star map). The game treats it like any open card: it waits, and the pointer
+## is free. Opening a card, or close_modal(), takes the page away.
+func modal_page(page: Control) -> void:
+	_drop_page()
+	for k in _modal_scroll.get_children():
+		k.queue_free()
+	modal_doc = null
+	_page = page
+	_modal_panel.visible = false
+	page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	modal_root.add_child(page)
+	modal_root.visible = true
+
+
+func _drop_page() -> void:
+	if _page:
+		_page.queue_free()
+		_page = null
+		_modal_panel.visible = true
+
+
 func close_modal() -> void:
 	if not modal_root.visible:
 		return
+	_drop_page()
 	modal_root.visible = false
 	for k in _modal_scroll.get_children():
 		k.queue_free()

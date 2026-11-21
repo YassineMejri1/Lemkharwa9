@@ -7,9 +7,19 @@ extends Node3D
 
 const LOOKS := {
 	"moon": { "ground": 0x8b8c96, "ground2": 0x5f606b, "rock": 0x8a8b95, "mountain": 0x4d4e58, "range": 0x7d7e88, "sunColor": 0xffffff, "sunInt": 1.65,
-		"hemiSky": 0x9fb2d8, "hemiGround": 0x34353f, "hemiInt": 0.4, "fog": -1, "zenith": 0x000003, "horizon": 0x04050a, "glow": 0xffffff, "sunSize": 330 },
+		"hemiSky": 0x9fb2d8, "hemiGround": 0x34353f, "hemiInt": 0.4, "fog": -1, "zenith": 0x000003, "horizon": 0x04050a, "glow": 0xffffff, "sunSize": 330,
+		"dust": 0xb8b9c4 },
 	"mars": { "ground": 0xc8703f, "ground2": 0x9a4a2a, "rock": 0x9c5536, "mountain": 0x8a4526, "range": 0xa5562f, "sunColor": 0xfff1df, "sunInt": 1.25,
-		"hemiSky": 0xf5d1a8, "hemiGround": 0x7a3b22, "hemiInt": 0.66, "fog": 0xdcab78, "zenith": 0xa8734a, "horizon": 0xe6bc8c, "glow": 0xfff0d0, "sunSize": 210 }
+		"hemiSky": 0xf5d1a8, "hemiGround": 0x7a3b22, "hemiInt": 0.66, "fog": 0xdcab78, "zenith": 0xa8734a, "horizon": 0xe6bc8c, "glow": 0xfff0d0, "sunSize": 210,
+		"dust": 0xd9a070 },
+	# the planets after Mars: only what differs from the world they are built on (Data.PLANET_ORDER)
+	"europa": { "ground": 0xbfdcf5, "ground2": 0x7da4cb, "rock": 0xa5c6e2, "mountain": 0x47648a, "range": 0x86acd2, "sunColor": 0xeaf4ff, "sunInt": 1.35,
+		"hemiSky": 0xa9ccf5, "hemiGround": 0x3f5876, "sunSize": 150, "dust": 0xe6f2fc, "earth": false },
+	"titan": { "ground": 0x8a6b3c, "ground2": 0x5c4526, "rock": 0x7a6a55, "mountain": 0x4f3a1e, "range": 0x6e5229, "sunColor": 0xffc27a, "sunInt": 0.9,
+		"hemiSky": 0xd9963f, "hemiGround": 0x4a3414, "hemiInt": 0.62, "fog": 0xb07a2e, "zenith": 0x7a5216, "horizon": 0xc48a35, "glow": 0xffcf8a, "sunSize": 120,
+		"dust": 0x9a7a45 },
+	"io": { "ground": 0xc9b03c, "ground2": 0xa5672a, "rock": 0x8f7a35, "mountain": 0x4d4420, "range": 0x9a8632,
+		"hemiSky": 0xd8c79a, "hemiGround": 0x4a3d18, "sunSize": 150, "dust": 0xd9c45a, "earth": false }
 }
 const EARTH_DIR := Vector3(-0.5, 0.2, -0.84)
 const PN := 2400          # particles
@@ -120,16 +130,17 @@ func _ready() -> void:
 func build(site: String) -> void:
 	if root:
 		root.queue_free()
-	site_id = site
+	var P: Dictionary = Data.SITES[site]
+	site_id = P.id               # the world this planet is built on: "moon" or "mars" (see Data.PLANET_ORDER)
 	_deep = null                 # the deep sky lived under the old root
 	_e_star = null
 	_e_moon = null
 	_deimos = null
 	_obs_k = 0.0
 	_sev.list = []
-	look = LOOKS[site]
-	gravity = Data.SITES[site].gravity
-	Terrain.set_site(site)
+	look = LOOKS[site_id].merged(LOOKS.get(site, {}), true)
+	gravity = P.gravity
+	Terrain.set_site(site_id)
 	root = Node3D.new()
 	root.name = "SiteRoot"
 	add_child(root)
@@ -437,15 +448,16 @@ func _build_sky() -> void:
 		_free_event(e)
 	_sev = { "next": 8.0, "list": [] }
 	if site_id == "moon":
-		earth = MeshInstance3D.new()
-		var sm := Mats.ball(95, 64, 48)
-		earth.mesh = sm
-		var em := ShaderMaterial.new()
-		em.shader = load("res://scripts/world/earth.gdshader")
-		earth.material_override = em
-		earth.rotation.z = 0.41
-		earth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(earth)
+		if look.get("earth", true):      # from Jupiter's moons the Earth is only a dot
+			earth = MeshInstance3D.new()
+			var sm := Mats.ball(95, 64, 48)
+			earth.mesh = sm
+			var em := ShaderMaterial.new()
+			em.shader = load("res://scripts/world/earth.gdshader")
+			earth.material_override = em
+			earth.rotation.z = 0.41
+			earth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(earth)
 	else:
 		var pm := StandardMaterial3D.new()
 		pm.albedo_color = c(0x8d8478)
@@ -555,7 +567,7 @@ func burst(x: float, y: float, z: float, n: int, speed: float, color: int, o: Di
 
 
 func dust(x: float, z: float, n: int, speed: float = 1.6, size: float = 0.5) -> void:
-	burst(x, Terrain.height(x, z) + 0.15, z, n, speed, 0xd9a070 if site_id == "mars" else 0xb8b9c4,
+	burst(x, Terrain.height(x, z) + 0.15, z, n, speed, look.dust,
 		{ "life": 1.3, "size": size, "grow": 2.6, "alpha": 0.45, "up": 0.6, "grav": gravity * 0.12 })
 
 

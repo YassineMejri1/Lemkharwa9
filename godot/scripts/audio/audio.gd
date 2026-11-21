@@ -28,6 +28,7 @@ var on := true
 ## crew mode (scripts/addons/crew.gd): relay.call("play" or "line", what, o) is true when the sound is for a crewmate's screen
 var relay := Callable()
 var reading := false
+var mute_lines := false                  # the recorded lines belong to the Moon and Mars: off on the planets after them (Game.fun)
 var log_list: Array = []                 # what was played lately ('tap', 'synth:tap', 'loop:rover', 'voice:rack-intro'): for tests
 var gen: Node                            # the generated music
 
@@ -506,6 +507,8 @@ func _line_next() -> void:
 ## Mission Control: one line, or several in a row, by id (data/voice.json).
 ## Returns true when a recording will be heard. o.plain: no radio beeps around it.
 func line(ids, o: Dictionary = {}) -> bool:
+	if mute_lines:
+		return false
 	if relay.is_valid() and relay.call("line", ids, o):
 		return false
 	if ids is String:

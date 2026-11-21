@@ -36,6 +36,27 @@ func run() -> void:
 	ok("ui: pick card action", hit.back() == "a")
 	ui.close_modal()
 	ok("ui: modal closes", not ui.modal_open())
+	# the star map: the planet you pick is the planet you get, a locked one cannot be picked, Escape goes back
+	var picked := []
+	var won: Dictionary = Game.done
+	Game.done = { "moon": 2 }
+	Game.all_open = false
+	var map := StarMap.new({ "title": "T", "sub": "S", "sel": "mars", "back_label": "Back", "back": func(): picked.append("back"), "pick": func(p): picked.append(p) })
+	ui.modal_page(map)
+	ok("map: the game sees an open card", ui.modal_open() and ui.modal_doc == null)
+	ok("map: one planet for each level, in order", map.orbs.keys() == Data.PLANET_ORDER)
+	ok("map: the stars are the ones won", map.orbs.moon.stars == 2 and map.orbs.mars.stars == 0)
+	ok("map: the planet after a won one is open, the rest are locked", map.orbs.mars.open and not map.orbs.europa.open and map.orbs.europa.disabled)
+	map.orbs.mars.pressed.emit()
+	var esc := InputEventAction.new()
+	esc.action = "ui_cancel"
+	esc.pressed = true
+	map._input(esc)
+	ok("map: picking Mars picks Mars, and Escape goes back", picked == ["mars", "back"], str(picked))
+	Game.all_open = true
+	Game.done = won
+	ui.close_modal()
+	ok("map: closing takes the page away", not ui.modal_open() and ui._page == null)
 	ui.card({ "kind": "why", "icon": "💨", "title": "T", "text": "x" })
 	ui.card({ "kind": "core", "icon": "🧪", "title": "U", "text": "y" })
 	ok("ui: first card shows", ui.card_now() != null and ui.card_now().title == "T")

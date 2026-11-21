@@ -31,12 +31,31 @@ var RANKS: Dictionary
 var FAIL: Dictionary
 ## the order the levels appear in (a Dictionary from JSON keeps it, but this says so)
 const LEVEL_ORDER := ["cadet", "commander", "veteran"]
+## The planets in the order they unlock. Those after Mars live in data/planets.json (this game only: game_data.json
+## is written from the web version). Each names the world it is built on ("like") and lists what differs. Its "id"
+## stays that world, so every "moon" / "mars" branch and table still works; "planet" is the planet itself.
+const PLANETS_PATH := "res://data/planets.json"
+const PLANET_ORDER := ["moon", "mars", "europa", "titan", "io"]
 
 
 func _init() -> void:
 	var d: Dictionary = load_json(DATA_PATH)
 	SOURCES = d.SOURCES
 	SITES = d.SITES
+	for k in SITES:
+		SITES[k].planet = k
+	var planets: Dictionary = load_json(PLANETS_PATH)
+	for k in planets:
+		var own: Dictionary = planets[k]
+		var p: Dictionary = SITES[own.like].duplicate(true)
+		for f in own:
+			if f == "env":
+				for e in own.env:
+					p.env[e].merge(own.env[e], true)
+			else:
+				p[f] = own[f]
+		p.planet = k
+		SITES[k] = p
 	LEVELS = d.LEVELS
 	SHIFTS = d.SHIFTS
 	RULES = d.RULES

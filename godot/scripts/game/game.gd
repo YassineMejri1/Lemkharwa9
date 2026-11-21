@@ -45,6 +45,14 @@ var goal = null
 var last_warn := -1
 var geiger := 0.0
 var ending = null
+## The planets campaign: a planet opens when the one before it is won (Data.PLANET_ORDER). Kept in settings.cfg.
+var done: Dictionary = {}       # the planets won on this computer, each with its stars: 1 Cadet, 2 Commander, 3 Veteran
+## TESTING: every planet is open. Set this to false to bring the order back (each win opens the next planet).
+var all_open := true
+var next_site := ""             # the planet picked on the star map in the rocket, for the next flight
+## On the planets after Mars the science add-ons, the recorded voice and the Moon and Mars facts are off.
+var fun := false
+const SCIENCE := ["intro", "colony", "holo", "sunwatch", "journal", "keepsake", "mission", "sky", "observe"]
 var launch_t := 0.0
 var launch_n := -1
 var banner_until := 0.0
@@ -106,7 +114,7 @@ static func esc(t) -> String:
 ## Add-on modules are optional extras. If one is missing or fails, the mission carries on without it.
 func ext(mod: String, fn: String, args: Array = []):
 	var m = addons.get(mod)
-	if m == null or not is_instance_valid(m) or not m.has_method(fn):
+	if m == null or not is_instance_valid(m) or not m.has_method(fn) or (fun and mod in SCIENCE):
 		return null
 	return m.callv(fn, args)
 
@@ -117,7 +125,35 @@ func fx_level() -> int:
 
 
 func has_addon(mod: String) -> bool:
-	return addons.has(mod) and is_instance_valid(addons[mod])
+	return addons.has(mod) and is_instance_valid(addons[mod]) and not (fun and mod in SCIENCE)
+
+
+## A planet is open when it is the first one, when the one before it is won, or when it was won itself (with a crew).
+func unlocked(p: String) -> bool:
+	var i: int = Data.PLANET_ORDER.find(p)
+	return i >= 0 and (all_open or i == 0 or done.has(p) or done.has(Data.PLANET_ORDER[i - 1]))
+
+
+## Where the rocket flies after a win: the planet picked on the star map, or else the next one in order.
+func next_planet() -> String:
+	if next_site != "":
+		return next_site
+	var o: Array = Data.PLANET_ORDER
+	return o[mini(o.find(s.site.planet) + 1, o.size() - 1)]
+
+
+## The star map, from the title: pick a planet, then plan the mission there.
+func star_map() -> void:
+	Ui.modal_page(StarMap.new({ "title": "Choose your planet", "sub": "Every planet plays its own way.", "sel": opts.site, "back_label": "Back",
+		"back": func():
+			Ui.close_modal()
+			if crew():
+				crew().lobby()
+			else:
+				title_scene(),
+		"pick": func(p: String):
+			opts.site = p
+			setup_modal() }))
 
 
 func register(mod: String, node: Node) -> void:
@@ -131,6 +167,9 @@ func register(mod: String, node: Node) -> void:
 ## Urgent lines (storms, breakdowns) cut in at once. topic: the hologram that explains these words.
 func say(text: String, force := false, vid = "?", urgent := false, topic_id := "", from := "") -> void:
 	if text == "":
+		return
+	# shortcut: on the planets after Mars a line that names the Moon or Mars is dropped, not rewritten; write those planets their own lines when they need them
+	if fun and (text.contains("Moon") or text.contains("Mars")):
 		return
 	if vid is String and vid == "?":
 		vid = Au.voice_for(text)
@@ -235,7 +274,7 @@ func holo_open() -> bool:
 ## The numbers of this very mission that a hologram can show.
 func holo_data(id: String) -> Dictionary:
 	var C: Dictionary = Data.CROPS
-	var d := { "site": s.site.id if s else opts.site }
+	var d := { "site": s.site.id if s else Data.SITES[opts.site].id }
 	if id == "crops":
 		d.lettuce = { "days": C.lettuce.growSols, "food": C.lettuce.food }
 		d.potato = { "days": C.potato.growSols, "food": C.potato.food }
@@ -351,7 +390,7 @@ func holo_menu() -> void:
 	if not has_addon("holo"):
 		return
 	var S: Dictionary = ext("holo", "scenes")
-	var site: String = s.site.id if s else opts.site
+	var site: String = s.site.id if s else Data.SITES[opts.site].id
 	var html := "<h2>💡 Holo-tablet</h2><p class=\"sub\">The tablet on your wrist can project a moving picture of how each thing works. Pick one. Tip: stand next to a machine and press T, and it shows that machine.</p><div class=\"holo-grid\">"
 	for id in S:
 		if id == "longdark" and site != "moon":
@@ -381,7 +420,7 @@ func open_journal() -> void:
 	if not has_addon("journal") or holo_open():
 		return
 	Au.play("tap")
-	ext("journal", "open", [s.site.id if s else opts.site, { "holo": func(id): show_holo(id), "sound": func(): Au.play("tap") }])
+	ext("journal", "open", [s.site.id if s else Data.SITES[opts.site].id, { "holo": func(id): show_holo(id), "sound": func(): Au.play("tap") }])
 
 
 func journal_find(f) -> void:
@@ -474,6 +513,7 @@ func title_scene() -> void:
 		leave_room(true)
 	mode = "title"
 	s = null
+	fun = false
 	ext("pioneer", "stop")
 	if Actors.astro:
 		Actors.astro.mode = "hidden"
@@ -494,34 +534,36 @@ func title_scene() -> void:
 
 func setup_modal() -> void:
 	var o: Dictionary = opts
+	if not unlocked(o.site):         # a crew's host can take you to a planet you have not opened yourself
+		o.site = "moon"
 	var card := func(g: String, v, emoji: String, t: String, text: String) -> String:
 		var sel := str(o[g]) == str(v)
 		return "<button class=\"pick" + (" sel" if sel else "") + "\" data-act=\"pick\" data-g=\"" + g + "\" data-v=\"" + str(v) + "\"><em>" + emoji + "</em><b>" + t + "</b><span>" + text + "</span></button>"
+	var P: Dictionary = Data.SITES[o.site]
 	var lv_icon := { "cadet": "🎒", "commander": "🧑‍🚀", "veteran": "🎖️" }
-	var html: String = "<h2>Plan your mission</h2><p class=\"sub\">A few quick choices, Commander.</p><h3>1 · Where will you build your outpost?</h3><div class=\"cards\">" \
-		+ card.call("site", "moon", "🌙", "The Moon", esc(Data.SITES.moon.blurb)) + card.call("site", "mars", "🔴", "Mars", esc(Data.SITES.mars.blurb)) + "</div>" \
-		+ "<h3>2 · How long is the mission?</h3><p class=\"sub\">Every day is harder than the one before, and teaches something new.</p><div class=\"cards three\">"
+	var html: String = "<h2>Plan your mission</h2><p class=\"sub\">A few quick choices, Commander.</p><div class=\"info-row good\"><span class=\"ic\">" + P.emoji + "</span><div><b>Destination: " + esc(P.short) + " · " + esc(P.place) + "</b><p>" + esc(P.blurb) + "</p></div></div>" \
+		+ "<h3>1 · How long is the mission?</h3><p class=\"sub\">Every day is harder than the one before, and teaches something new.</p><div class=\"cards three\">"
 	for k in Data.LEVEL_ORDER:
 		var L: Dictionary = Data.LEVELS[k]
 		html += card.call("level", k, lv_icon[k], L.name + " · " + Js.num(L.sols) + " days", str(L.ages) + ". " + esc(L.blurb))
-	html += "</div><h3>3 · How much time do you want each day?</h3><p class=\"sub\">You can change this at any moment with the ⏸ button.</p><div class=\"cards four\">"
+	html += "</div><h3>2 · How much time do you want each day?</h3><p class=\"sub\">You can change this at any moment with the ⏸ button.</p><div class=\"cards four\">"
 	for sh in Data.SHIFTS:
 		html += card.call("shift", int(sh.id), sh.icon, sh.name + " · " + Js.num(sh.id / 60.0) + " min", esc(sh.text))
-	html += "</div><h3>4 · Which Sun do you want to face?</h3><div class=\"cards\">" \
+	html += "</div><h3>3 · Which Sun do you want to face?</h3><div class=\"cards\">" \
 		+ card.call("sun", "live", "☀️", "The real Sun, right now", "Flares, solar gas clouds and radiation storms from the last 30 days, fetched live from NASA.") \
 		+ card.call("sun", "archive", "🌩️", "The great storms of May 2024", "A famous stormy month from NASA's records. Much harder!") + "</div>"
 	if crew():
 		var n: int = crew().count()
 		html += "<p class=\"sub crew-plan\">🧑‍🚀 Crew mode: " + str(n) + " astronaut" + ("s" if n > 1 else "") + " will launch together. Pioneer mode is for one player.</p>"
 	elif has_addon("pioneer"):
-		html += "<h3>5 · How do you want to play?</h3><div class=\"cards\">" \
+		html += "<h3>4 · How do you want to play?</h3><div class=\"cards\">" \
 			+ card.call("pioneer", "off", "🧑‍🚀", "Classic", "The outpost as the engineers built it. Best for a first mission.") \
 			+ card.call("pioneer", "on", "⛏️", "Pioneer · hard mode", "Fewer supplies. Break rocks into rubble, metal and glass sand, then build your own panels, batteries, walls and more.") + "</div>"
 	html += "<h3>Your spacesuit colour</h3><div class=\"swatches\">"
 	for i in SUITS.size():
 		var c: int = SUITS[i]
 		html += "<button class=\"swatch" + (" sel" if o.suit == c else "") + "\" style=\"--c:#" + ("%06x" % c) + "\" data-act=\"suit\" data-v=\"" + str(c) + "\" aria-label=\"" + SUIT_NAMES[i] + " spacesuit\"></button>"
-	html += "</div><div class=\"modal-actions\"><button class=\"btn ghost\" data-act=\"back\">Back</button><button class=\"btn primary\" data-act=\"go\">Launch 🚀</button></div>"
+	html += "</div><div class=\"modal-actions\"><button class=\"btn ghost\" data-act=\"back\">◀ Star map</button><button class=\"btn primary\" data-act=\"go\">Launch 🚀</button></div>"
 	var keep := Ui.modal_open()
 	var doc := Ui.modal(html, { "cls": "wide", "noFocus": keep, "actions": {
 		"pick": func(el):
@@ -538,12 +580,10 @@ func setup_modal() -> void:
 			_refocus("suit", "", str(o.suit)),
 		"back": func():
 			Au.play("tap")
-			Ui.close_modal()
-			if crew():
-				crew().lobby()
-			else:
-				title_scene(),
-		"go": func(): launch(),
+			star_map(),
+		"go": func():
+			_save_pref("site", o.site)
+			launch(),
 	} })
 
 
@@ -580,6 +620,9 @@ func start_mission(data: Dictionary, snap = null) -> void:
 	World.cam.room = null
 	room = null
 	colony_visit = 0
+	fun = Data.SITES[opts.site].id != opts.site
+	Au.mute_lines = fun
+	next_site = ""
 	build_world(opts.site, opts.suit)
 	if snap:
 		s = snap.s
@@ -638,7 +681,7 @@ func start_mission(data: Dictionary, snap = null) -> void:
 	elif crew():
 		crew().mission_started(data)
 	World.cam.fp = pov
-	Au.gen.set_site(opts.site)
+	Au.gen.set_site(s.site.id)
 	Ui.show_part("title", false)
 	Ui.close_modal()
 	World.env.t = 0.1
@@ -657,15 +700,17 @@ func start_mission(data: Dictionary, snap = null) -> void:
 
 ## builds the place: the ground and sky, the outpost, the astronaut and the rover
 func build_world(site: String, suit: int) -> void:
+	var like: String = Data.SITES[site].id      # the world this planet is built on; the planet sets the look, the gravity and the hazards
 	World.build(site)
-	Base.build(World.root, site)
+	Base.build(World.root, like)
 	Actors.build(World.root, site, suit)
-	ext("interior", "build", [World.root, site])
-	ext("colony", "build", [World.root, site])
+	ext("interior", "build", [World.root, like])
+	ext("colony", "build", [World.root, like])
 	ext("crew", "world_built")
-	ext("pioneer", "build", [World.root, site])
+	ext("pioneer", "build", [World.root, like])
 	ext("observe", "build")
-	ext("fx", "build", [site])
+	ext("fx", "build", [like])
+	ext("hazards", "build", [World.root, site])
 
 
 func welcome_modal() -> void:
@@ -691,7 +736,7 @@ func welcome_modal() -> void:
 	var c = crew()
 	var html: String = "<h2>Welcome to " + esc(s.site.name) + ", Commander!</h2>" \
 		+ "<p class=\"sub\">" + esc(s.site.place) + " · This is Mission Control on Earth. We are with you on the radio all the way.</p>" \
-		+ "<div class=\"info-row\"><span class=\"ic\">🎯</span><div><b>Your mission</b><p>Keep the crew alive for " + str(n) + " " + dw + (" (a sol is one Mars day)" if s.site.id == "mars" else "") + ", do real science, then ride the rocket home. " + esc(s.site.why) + "</p></div></div>" \
+		+ "<div class=\"info-row\"><span class=\"ic\">🎯</span><div><b>Your mission</b><p>Keep the crew alive for " + str(n) + " " + dw + (" (a sol is one Mars day)" if s.site.planet == "mars" else "") + ", do real science, then ride the rocket home. " + esc(s.site.why) + "</p></div></div>" \
 		+ "<div class=\"info-row\"><span class=\"ic\">🔋</span><div><b>You do everything by hand</b><p>The Sun charges only a few power cells a day. YOU carry each one to the machine that needs it most — air, food, shield, science or radio. There is never enough for all of them.</p></div></div>" \
 		+ "<div class=\"info-row\"><span class=\"ic\">📈</span><div><b>Every day is harder, and teaches something new</b><p>The outpost wears down the longer you stay. And " + str(s.level.crisisSols.size()) + " times, something will go wrong that has no checklist: " + ("the host makes the call for the whole crew" if c else "you alone will choose what to do") + ", and live with what follows.</p></div></div>" \
 		+ wx \
@@ -709,6 +754,8 @@ func welcome_modal() -> void:
 
 ## The radio delay for this mission's real dates, and who talks to you.
 func comm_welcome() -> String:
+	if fun:
+		return s.site.commText + " Earth is too far away to help in time, so a crewmate inside the habitat talks you through your work."
 	if s.site.id == "moon":
 		return s.site.commText + " That is why Mission Control can talk you through your work live."
 	var c := Sim.comm_info(s)
@@ -1809,7 +1856,7 @@ func repair_modal() -> void:
 				ext("mission", "repair_sent", [s])
 				Au.play("page")
 				Ui.close_modal()
-				if s.site.id == "moon":
+				if s.site.id == "moon" and not fun:
 					say("We got your question! The Moon is only 1.3 light-seconds from Earth, so our answer is on its way.", true, "dish-sent-moon")
 				else:
 					say("Your question is on its way to Earth. It takes " + str(r.info.oneWay) + " to get there, and the answer takes just as long to come back. Keep working — I will call you when it arrives.", true, null),
@@ -2632,6 +2679,8 @@ func room_action(id: String) -> Callable:
 	return func():
 		var fact = ext("interior", "fact", [id])
 		fact = fact if fact else ""
+		if fun and (fact.contains("Moon") or fact.contains("Mars")):
+			fact = ""
 		ext("interior", "poke", [id])
 		if id == "door" or id == "hatch":
 			leave_room()
@@ -3060,18 +3109,25 @@ func night_modal(r: Dictionary) -> void:
 # =====================================================================
 #  THE ROCKET
 # =====================================================================
+## The star map in the rocket: the crew picks the next planet, then lifts off. Leaving a planet opens the one after it.
 func board_modal() -> void:
 	if guest():
-		say("When the whole crew is aboard, " + crew().name(0) + " (the host) launches the rocket for everyone.", true)
+		say("When the whole crew is aboard, " + crew().name(0) + " (the host) picks the next planet and launches the rocket for everyone.", true)
 		return
-	Ui.modal("<div class=\"big-icon\">🚀</div><h2>Ready to fly home?</h2><p>" + ("The sample case is on board." if s.caseLoaded else "The sample case is NOT on board yet. Scientists on Earth are waiting for those rocks.") \
-		+ " Anything left undone stays undone!" + (" The rocket takes off with the whole crew." if crew() else "") + "</p><div class=\"modal-actions\"><button class=\"btn ghost\" data-act=\"no\">Not yet</button><button class=\"btn primary\" data-act=\"yes\">Launch! 🚀</button></div>",
-		{ "actions": { "no": func():
+	Ui.modal_page(StarMap.new({ "eyebrow": "THE ROCKET · STAR MAP", "title": "Where to next?", "sub": "Pick the next planet for the crew." if crew() else "Pick your next planet.",
+		"sel": next_planet(), "here": s.site.planet, "back_label": "Not yet", "back": func(): Ui.close_modal(), "pick": launch_ask }))
+
+
+func launch_ask(p: String) -> void:
+	Ui.modal("<div class=\"big-icon\">🚀</div><h2>Launch to " + esc(Data.SITES[p].short) + "?</h2><p>" + ("The sample case is on board." if s.caseLoaded else "The sample case is NOT on board yet. Scientists on Earth are waiting for those rocks.") \
+		+ " Anything left undone stays undone!" + (" The rocket takes off with the whole crew." if crew() else "") + "</p><div class=\"modal-actions\"><button class=\"btn ghost\" data-act=\"map\">◀ Star map</button><button class=\"btn primary\" data-act=\"yes\">Launch! 🚀</button></div>",
+		{ "actions": { "map": func():
 			Au.play("tap")
-			Ui.close_modal(),
+			board_modal(),
 		"yes": func():
 			Au.play("tap")
 			Ui.close_modal()
+			next_site = p
 			launch_home() } })
 
 
@@ -3100,6 +3156,9 @@ func fail_now(reason: String) -> void:
 
 ## text, vid: Mission Control's last words before the countdown, when there are any
 func start_launch_scene(text := "", vid = null) -> void:
+	if ending and ending.get("win") and Data.LEVEL_ORDER.find(s.level.id) + 1 > int(done.get(s.site.planet, 0)):
+		done[s.site.planet] = Data.LEVEL_ORDER.find(s.level.id) + 1
+		_save_pref("done", done)
 	var c = crew()
 	if c and c.host:
 		c.launch(text, vid, ending)
@@ -3172,7 +3231,9 @@ func step_launch(delta: float) -> void:
 func learned() -> String:
 	var out: Array = []
 	out.append("Power is limited: every cell you carried to one machine was a cell another machine did not get.")
-	if s.site.id == "mars":
+	if fun:
+		pass
+	elif s.site.id == "mars":
 		out.append("Mars is so far away that Earth cannot help quickly. Crews there must often decide for themselves.")
 	else:
 		out.append("The Moon has no air to block solar storms, so thick soil shielding really matters.")
@@ -3223,7 +3284,8 @@ func end_buttons(win: bool) -> String:
 	if guest():
 		html += "<button class=\"btn primary\" data-act=\"leave\">Leave the crew</button></div><p class=\"sub\">The host can start the next mission for the whole crew.</p>"
 	else:
-		html += "<button class=\"btn ghost\" data-act=\"change\">Change mission</button><button class=\"btn primary\" data-act=\"again\">" + ("Fly again with the crew ▶" if crew() else "Play again ▶") + "</button></div>"
+		html += "<button class=\"btn ghost\" data-act=\"change\">Change mission</button><button class=\"btn primary\" data-act=\"again\">" \
+			+ ("Fly to " + esc(Data.SITES[next_planet()].short) + (" with the crew ▶" if crew() else " ▶") if win and next_planet() != s.site.planet else ("Fly again with the crew ▶" if crew() else "Play again ▶")) + "</button></div>"
 	return html
 
 
@@ -3248,8 +3310,11 @@ func end_actions() -> Dictionary:
 			Ui.close_modal()
 			title_scene()
 			Ui.show_part("title", false)
-			setup_modal(),
+			star_map(),
 		"again": func():
+			if s.over and s.over.get("type") == "win":
+				opts.site = next_planet()
+				_save_pref("site", opts.site)
 			Ui.fade(false)
 			launch(),
 		"leave": func():
@@ -3323,7 +3388,7 @@ func win_modal() -> void:
 			bh += "<div class=\"info-row good\"><span class=\"ic\">" + b.icon + "</span><div><b>" + esc(b.name) + "</b><p>" + esc(b.text) + "</p></div></div>"
 		bh += "</div>"
 	Ui.modal("<div class=\"rank\"><div class=\"big-icon\">" + rank.icon + "</div><h2>" + esc(rank.name) + "</h2>" \
-		+ "<p>Mission complete! The crew is on the way home after " + str(s.totalSols) + " " + day_word().to_lower() + "s on " + esc(s.site.name) + ".</p>" \
+		+ "<p>Mission complete! The crew lifted off after " + str(s.totalSols) + " " + day_word().to_lower() + "s on " + esc(s.site.name) + ".</p>" \
 		+ "<p class=\"sub\">" + ("The rock samples are on their way to Earth. " if s.caseLoaded else "") + esc(rank.line) + "</p></div>" \
 		+ bh + journal_line() + "<h3>What you just practised</h3>" + learned() + decisions_block() + _finds_block() + end_buttons(true),
 		{ "cls": "wide", "actions": end_actions(), "speak": "Mission complete! You are a " + rank.name + ". " + rank.line })
@@ -4166,7 +4231,7 @@ func bind_ui() -> void:
 			Au.gen.unlock()
 			Au.play("tap")
 			Ui.show_part("title", false)
-			setup_modal(),
+			star_map(),
 		"crew": func():
 			Au.unlock()
 			Au.play("tap")
@@ -4312,6 +4377,7 @@ func advance(step: float) -> void:
 			WORLD.s = s
 			ext("colony", "update", [step, WORLD])
 			ext("pioneer", "update", [step, s, mode, WORLD.pos])
+			ext("hazards", "update", [step, s, mode])
 	Base.update(step, null if mode == "title" else s)
 	World.update(step)
 	if c:
@@ -4408,7 +4474,7 @@ func _enter_tree() -> void:
 
 
 ## the optional extras, in scripts/addons/: each one that is there and compiles is switched on
-const ADDONS := ["journal", "minimap", "pov", "sky", "observe", "fx", "interior", "mission", "sunwatch", "keepsake", "holo", "colony", "pioneer", "intro", "crew"]
+const ADDONS := ["journal", "minimap", "pov", "sky", "observe", "fx", "interior", "mission", "sunwatch", "keepsake", "holo", "colony", "pioneer", "intro", "crew", "hazards"]
 
 
 func load_addons() -> void:
@@ -4436,6 +4502,13 @@ func boot() -> void:
 	opts.music = bool(_load_pref("music", true))
 	map_open = bool(_load_pref("map", false))
 	Ui.set_setting("map", map_open)
+	var won = _load_pref("done", {})
+	if won is Dictionary:           # the settings file is outside input: keep only the planets and the star counts we know
+		for p in Data.PLANET_ORDER:
+			if won.get(p) is int or won.get(p) is float:
+				done[p] = clampi(int(won[p]), 1, 3)
+	var site = _load_pref("site", "moon")
+	opts.site = site if site is String and unlocked(site) else "moon"       # the settings file is outside input: never trust a planet from it
 	load_addons()
 	build_world("mars", opts.suit)
 	Actors.astro.mode = "hidden"
