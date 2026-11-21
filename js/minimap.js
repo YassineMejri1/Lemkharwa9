@@ -115,7 +115,7 @@
       if (zi) { ctx.beginPath(); ctx.arc(x, y, 2.6 * sc, 0, Math.PI * 2); ctx.fillStyle = 'rgba(200, 215, 255, 0.75)'; ctx.fill(); return; }
       badge(x, y, bR, 'rgba(10, 22, 58, 0.92)', 'rgba(190, 210, 255, 0.35)', BUILD[b.key], null);
     });
-    if (d.ice) badge(px(d.ice.x, d.ice.z), py(d.ice.x, d.ice.z), bR, 'rgba(10, 40, 70, 0.92)', 'rgba(79, 216, 255, 0.7)', 'ice', null);
+    if (d.ice) badge(px(d.ice.x, d.ice.z), py(d.ice.x, d.ice.z), bR, 'rgba(10, 40, 70, 0.92)', 'rgba(79, 216, 255, 0.7)', d.ice.icon || 'ice', null);      // 'water' on a well planet
     if (d.rover) badge(px(d.rover.x, d.rover.z), py(d.rover.x, d.rover.z), bR, 'rgba(10, 40, 70, 0.92)', 'rgba(159, 232, 255, 0.8)', 'rover', null);
     ctx.restore();
 

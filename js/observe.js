@@ -34,7 +34,7 @@
     var L = Tn.L, R = { x: L.seat[0], z: L.seat[1] }, g0 = Tn.height(R.x, R.z), top = g0 + (Tn.seatTop || 0.62);
     // Moon: face Earth, which hangs above the outpost from here. Mars: face between the outpost and the west, so the
     // sunset at the end of the shift (and Earth, the evening star beside it) is in the picture.
-    var yaw = siteId === 'moon' ? Math.atan2(W.EARTH_DIR.x, W.EARTH_DIR.z) : Math.atan2(-R.x, -R.z) + 0.44;
+    var yaw = JA.pick(siteId, { moon: 'earth', mars: 'sunset', sahrun: 'sunset' }) === 'earth' ? Math.atan2(W.EARTH_DIR.x, W.EARTH_DIR.z) : Math.atan2(-R.x, -R.z) + 0.44;
     var fx = Math.sin(yaw), fz = Math.cos(yaw);
     // the real height of the rock's surface at a point (a ray straight down onto the rock mesh)
     var ray = new T.Raycaster(), down = new T.Vector3(0, -1, 0);
@@ -80,16 +80,30 @@
     ui.hint.addEventListener('click', function () { O.stand(); });        // touch screens: tap to stand up (bound once)
     return ui;
   }
+  // What the lookout card says on each planet (a new planet adds its own)
+  var INFO = {
+    moon: function (s, place) {
+      return { b: place + ' · The Moon', l1: 'Earth is 384,400 km away. Its light takes 1.3 seconds to get here.', l2: 'The sky is black even at noon: there is no air to scatter sunlight.',
+        l3: 'No air means no shooting stars. Watch instead for tiny flashes where space dust hits the ground.' };
+    },
+    mars: function (s, place, darkNow) {
+      var date = s && JA.sim.weather(s).date, mins = date && JA.weather ? JA.weather.marsDelayMin(date) : 0;
+      var dist = mins ? Math.round(mins * 60 * 299792.458 / 1e6) + ' million km away' : 'many millions of km away';
+      var dark = darkNow != null ? darkNow : (W.skyDark && W.skyDark() > 0.35);
+      return { b: place + ' · Mars', l1: 'Earth is ' + dist + (mins ? '. A radio call takes ' + Math.round(mins) + ' minutes.' : '.'),
+        l2: dark ? 'The bright blue-white star low in the west is Earth. The faint dot beside it is our Moon.' : 'By day the dusty sky glows butterscotch. Sunsets here are blue.',
+        l3: dark ? 'Shooting stars here are grains of space dust burning up in the thin air.' : 'Stay a while: the Sun is about to set.' };
+    },
+    sahrun: function (s, place, darkNow) {
+      var dark = darkNow != null ? darkNow : (W.skyDark && W.skyDark() > 0.35);
+      return { b: place + ' · Sahrun (a made-up world)', l1: 'Earth is so far away that its light takes years to get here. Your relay ship in orbit answers in seconds.',
+        l2: dark ? 'Two moons rise over the dunes. The real Mars has two moons too, but they are tiny.' : 'Fine sand in the air turns the sky gold. Watch the dunes change colour as the Sun sinks.',
+        l3: dark ? 'Shooting stars burn bright in thick air: grains of space dust heating up as they fall.' : 'Stay a while: the Sun is about to set.' };
+    }
+  };
   function infoText(s, darkNow) {
-    var moon = site === 'moon', place = s && s.site ? s.site.place : '';
-    if (moon) return { b: place + ' · The Moon', l1: 'Earth is 384,400 km away. Its light takes 1.3 seconds to get here.', l2: 'The sky is black even at noon: there is no air to scatter sunlight.',
-      l3: 'No air means no shooting stars. Watch instead for tiny flashes where space dust hits the ground.' };
-    var date = s && JA.sim.weather(s).date, mins = date && JA.weather ? JA.weather.marsDelayMin(date) : 0;
-    var dist = mins ? Math.round(mins * 60 * 299792.458 / 1e6) + ' million km away' : 'many millions of km away';
-    var dark = darkNow != null ? darkNow : (W.skyDark && W.skyDark() > 0.35);
-    return { b: place + ' · Mars', l1: 'Earth is ' + dist + (mins ? '. A radio call takes ' + Math.round(mins) + ' minutes.' : '.'),
-      l2: dark ? 'The bright blue-white star low in the west is Earth. The faint dot beside it is our Moon.' : 'By day the dusty sky glows butterscotch. Sunsets here are blue.',
-      l3: dark ? 'Shooting stars here are grains of space dust burning up in the thin air.' : 'Stay a while: the Sun is about to set.' };
+    var place = s && s.site ? s.site.place : '';
+    return JA.pick(site, INFO)(s, place, darkNow);
   }
   function setInfo(t) {
     var i = ui.info;
@@ -109,7 +123,9 @@
     W.cam.mode = 'cine'; W.cam.cine.roll = 0;
     setInfo(t);
     // Mars: the time-lapse runs the sky on from now to a starry night (the mission clock stays where it was)
-    st.lapse = site === 'mars'; st.sky0 = W.env.t; st.darkInfo = W.skyDark && W.skyDark() > 0.35;
+    st.lapse = JA.hasAir(site); st.sky0 = W.env.t; st.darkInfo = W.skyDark && W.skyDark() > 0.35;
+    var lapseEl = ui && ui.el.querySelector('.ob-lapse');
+    if (lapseEl && lapseEl.lastChild) lapseEl.lastChild.nodeValue = 'Time-lapse · sunset on ' + JA.siteOf(site).short;
     u.info.querySelector('small').textContent = 'The mission clock waits while you rest.';
     u.el.className = 'on'; document.body.classList.add('observing');
     return true;
@@ -130,7 +146,7 @@
   // input: { x, z } from the keys or stick (looks around slowly), stand: true to stand up
   O.step = function (dt, input) {
     if (!st) return;
-    var a = A.astro, t = st.t += dt, moon = site === 'moon', ph = st.phase;
+    var a = A.astro, t = st.t += dt, ph = st.phase;
     // ---- the astronaut ----
     if (ph === 'walk') {
       // step to the front of the rock, then turn your back to it
@@ -174,7 +190,7 @@
     // ---- the camera ----
     var H = headPoint(v3), tv = ph === 'view' ? t - st.tv : (ph === 'stand' ? 99 : 0);
     var rev = ease(seg(tv, 0.8, 9));                                   // the slow reveal after he has settled
-    var yaw = seat.yaw + 0.14 + st.yawU, pitch = lerp(0.02, moon ? 0.11 : 0.07, rev) + st.pitchU;
+    var yaw = seat.yaw + 0.14 + st.yawU, pitch = lerp(0.02, JA.pick(site, { moon: 0.11, mars: 0.07, sahrun: 0.07 }), rev) + st.pitchU;
     var breathe = Math.sin(W.time * 1.45) * 0.006;
     // a tall phone screen sees less from side to side: a wider lens, and the astronaut nearer the middle
     var asp = W.camera.aspect || 1.6, narrow = clamp(asp / 1.35, 0.4, 1);

@@ -77,8 +77,8 @@
   }
   function driving() { return !!(JA.actors && JA.actors.rover && JA.actors.rover.driver); }
   function touch() { return !!document.body && document.body.classList.contains('touch'); }
-  function rockColor() { return site === 'mars' ? 0x8a4a30 : 0x8a8b95; }
-  function dustColor() { return site === 'mars' ? 0xd9a070 : 0xb8b9c4; }
+  function rockColor() { return JA.pick(site, { moon: 0x8a8b95, mars: 0x8a4a30, sahrun: 0x9a7a52 }); }
+  function dustColor() { return JA.siteOf(site).colors.dust; }
 
   // ---------- shapes and materials (made again for every new world: the old ones go with the old world) ----------
   function cyl(rt, rb, h, seg) { return new T.CylinderGeometry(rt, rb, h, seg || 12); }
@@ -87,13 +87,12 @@
   function flat(m) { m.rotation.x = Math.PI / 2; return m; }
   function add(parent, geo, mat, x, y, z, noShadow) { return W.add(parent, geo, mat, x, y, z, noShadow); }
   function makeKit() {
-    var mars = site === 'mars';
     GEO = { lump: new T.DodecahedronGeometry(0.27, 0), nugget: new T.IcosahedronGeometry(0.24, 0), shard: new T.OctahedronGeometry(0.26, 0),
       brick: box(0.47, 0.28, 0.42).toNonIndexed() };
     M = {
       hull: W.soft(0xf2f3f7), grey: W.soft(0xc3c7d2), dark: W.soft(0x2b3147), blue: W.soft(0x3d7dff), teal: W.soft(0x3db8a0), orange: W.soft(0xff8a3d),
       metal: new T.MeshStandardMaterial({ color: 0xcfd3de, metalness: 0.8, roughness: 0.25 }),
-      soil: W.mat(mars ? 0x9a4a2a : 0x666772),
+      soil: W.mat(JA.pick(site, { moon: 0x666772, mars: 0x9a4a2a, sahrun: 0xa8763a })),
       brick: new T.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.9, metalness: 0.02, flatShading: true }),
       solar: new T.MeshStandardMaterial({ color: 0x14306b, roughness: 0.25, metalness: 0.5, emissive: 0x1b3f96, emissiveIntensity: 0.4 }),
       line: W.glow(0x6fa3ff, 0.9), lamp: W.glow(0x46ff8a, 1.6), red: W.glow(0xff5a5a, 2), water: W.glow(0x4fd8ff, 1.3), ice: W.glow(0x7fe8ff, 1.4),
@@ -101,7 +100,7 @@
       can: new T.MeshStandardMaterial({ color: 0x8fe8d0, emissive: 0x3db8a0, emissiveIntensity: 0.8, roughness: 0.5 }),
       bars: [0, 1, 2, 3].map(function () { return new T.MeshStandardMaterial({ color: 0x3a3214, emissive: 0xffd23f, emissiveIntensity: 0.05, roughness: 0.4 }); }),
       // the pieces a broken boulder leaves: grey-brown rubble, dark metal, pale glass sand
-      rock: W.mat(mars ? 0x55392b : 0x4b4741, { emissive: 0xff9a50, emissiveIntensity: 0.08 }),
+      rock: W.mat(JA.pick(site, { moon: 0x4b4741, mars: 0x55392b, sahrun: 0x6a5238 }), { emissive: 0xff9a50, emissiveIntensity: 0.08 }),
       ore: new T.MeshStandardMaterial({ color: 0x3a4152, metalness: 0.85, roughness: 0.3, flatShading: true, emissive: 0x3a55a8, emissiveIntensity: 0.5 }),
       sand: new T.MeshStandardMaterial({ color: 0xeafff8, roughness: 0.12, metalness: 0.1, flatShading: true, emissive: 0x7fe8d8, emissiveIntensity: 0.6, transparent: true, opacity: 0.92 }),
       crack: new T.MeshBasicMaterial({ color: 0x0d0806, side: T.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
@@ -209,7 +208,7 @@
     },
     // a wall of baked-soil bricks: a gentle arc about 4 m long and 1.2 m high, laid row by row
     berm: function (o) {
-      var tones = site === 'mars' ? [0x8a4424, 0x6f3519, 0x9c5230] : [0x6a6b76, 0x565762, 0x7b7c87], i, k, n, a, x, z, list, dy, row;
+      var tones = JA.pick(site, { moon: [0x6a6b76, 0x565762, 0x7b7c87], mars: [0x8a4424, 0x6f3519, 0x9c5230], sahrun: [0xb08a58, 0x9a7444, 0xc49a62] }), i, k, n, a, x, z, list, dy, row;
       for (i = 0; i < 4; i++) {
         list = []; n = 8 - (i % 2);
         for (k = 0; k < n; k++) {
@@ -371,7 +370,7 @@
     }
   }
   function finish(st) {
-    var def = (JA.BUILDS || {})[st.id] || { name: 'structure', text: '' }, k, kd;
+    var def = defOf(st.id, S) || { name: 'structure', text: '' }, k, kd;
     st.done = true;
     for (k = 0; k < st.kids.length; k++) { kd = st.kids[k]; kd.o.visible = true; kd.o.position.y = kd.y; kd.o.scale.setScalar(1); }
     W.burst(st.x, st.y + 0.4, st.z, 26, 5, 0x4dff9a, { life: 0.7, size: 0.2, grow: 0.5, alpha: 0.9, up: 0.25, grav: 0 });
@@ -605,16 +604,21 @@
       if (play) {
         tell('sound', 'ice', { at: v1, vol: 0.9 });
         W.burst(v1.x, v1.y, v1.z, 8, 2, 0xbfefff, { life: 0.6, size: 0.18, grow: 0.6, alpha: 0.9, grav: 0 });
-        if (pos && Math.hypot(pos.x - st.x, pos.z - st.z) < 60) tell('toast', '🧊 +1', v2.set(v1.x, v1.y + 1, v1.z), '#7fe8ff');
+        if (pos && Math.hypot(pos.x - st.x, pos.z - st.z) < 60) tell('toast', JA.waterWords(S).icon + ' +1', v2.set(v1.x, v1.y + 1, v1.z), '#7fe8ff');
       }
-      if (!flags.rig) { flags.rig = true; tell('say', 'Your drill rig just dug out an ice chunk, all by itself! It keeps two ready for you beside it.'); }
+      if (!flags.rig) { flags.rig = true; tell('say', JA.iceWell(S) ? 'Your well pump just filled a can of water, all by itself! It keeps two ready for you beside it.' : 'Your drill rig just dug out an ice chunk, all by itself! It keeps two ready for you beside it.'); }
     }
   }
 
   // ---------- placing a structure ----------
+  // A building's words on this planet: fields under the planet's id replace the others (Sahrun's drill rig is a well pump)
+  function defOf(id, s) {
+    var d = (JA.BUILDS || {})[id], sid = s && s.site && s.site.id;
+    return d && sid && d[sid] ? Object.assign({}, d, d[sid]) : d;
+  }
   function allowed(s, def) { return !!def && (!def.site || !s || !s.site || def.site === s.site.id); }
   function startPlace(id) {
-    var s = S, def = (JA.BUILDS || {})[id], can, o, edge;
+    var s = S, def = defOf(id, S), can, o, edge;
     if (!on || !s || !def || !root || !M) return false;
     if (place) cancelPlace(true);
     if (lastMode !== 'play') { tell('say', 'Step outside first. Building happens out on the ground.'); return false; }
@@ -648,7 +652,7 @@
     var cs = Math.cos(pl.yaw), sn = Math.sin(pl.yaw), lo = pl.y, hi = pl.y, i, k, h, c, list, q;
     if (Math.hypot(x, z) + sp.rad > Tn.PLAY_R - 3) return 'Not here: too close to the edge of the map';
     if (Math.hypot(x - DOOR[0], z - DOOR[1]) < DOOR_R) return 'Not here: keep the way to the door clear';
-    if (pl.def.where === 'ice' && L.ice && Math.hypot(x - L.ice[0], z - L.ice[1]) > (Tn.iceR || 20) * 0.8) return 'Not here: it must stand on the ice field';
+    if (pl.def.where === 'ice' && L.ice && Math.hypot(x - L.ice[0], z - L.ice[1]) > (Tn.iceR || 20) * 0.8) return JA.iceWell(S) ? 'Not here: it must stand at the ' + S.site.iceName : 'Not here: it must stand on the ice field';
     for (i = 0; i < 8; i++) { h = ground(x + Math.cos(i * 0.785) * sp.rad, z + Math.sin(i * 0.785) * sp.rad); lo = Math.min(lo, h); hi = Math.max(hi, h); }
     if (hi - lo >= BUMPY) return 'Not here: the ground is too bumpy';
     // a wall is long and thin, so it is checked by its own small circles; everything else by its round footprint
@@ -758,7 +762,7 @@
     var B = JA.BUILDS || {}, MT = JA.MATS || {}, m = s.mats || {}, bag = '', cards = '', id, def, k, can, n, cost, have, src;
     for (k in MT) bag += '<span>' + MT[k].icon + ' ' + esc(MT[k].name) + ' <b>' + (m[k] || 0) + '</b></span>';
     for (id in B) {
-      def = B[id]; if (!allowed(s, def)) continue;
+      def = defOf(id, s); if (!allowed(s, def)) continue;
       can = rule('canBuild', s, id) || { ok: false, msg: 'The workshop is not ready yet.' };
       n = (s.built && s.built[id]) || 0; cost = '';
       for (k in (def.cost || {})) {

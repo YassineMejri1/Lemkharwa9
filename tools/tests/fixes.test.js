@@ -142,7 +142,7 @@ function ok(name, cond, extra) { if (cond) pass++; else fail++; console.log((con
   ok('after the shift the crew picks ripe beds and plants the same crop again', crew && crew.v === JA.CROPS.lettuce.food + JA.CROPS.potato.food && s.m.food.beds[1].state === 'growing' && s.m.food.beds[1].crop === 'potato', crew && crew.text);
   // nobody lands in a storm
   var badStart = 0;
-  ['moon', 'mars'].forEach(function (site) { ['cadet', 'commander', 'veteran'].forEach(function (lv) {
+  Object.keys(JA.SITES).forEach(function (site) { ['cadet', 'commander', 'veteran'].forEach(function (lv) {      // every planet
     for (var seed = 1; seed <= 20; seed++) { var g = sim.newGame({ site: site, level: lv, seed: seed, weather: arch, dayLength: 300 }); if (g.weather[0].level > 0 || (g.weather[1] && g.weather[1].level > 2)) badStart++; }
   }); });
   ok('no mission starts on a storm day, or meets a big storm on day 2', badStart === 0, badStart + ' bad starts');

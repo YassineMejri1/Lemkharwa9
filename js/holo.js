@@ -38,7 +38,16 @@
   // A share of something: 0.46 and 46 both mean 46%.
   function share(v, def, lo, hi) { v = num(v, def, 0, 100); return Math.max(lo, Math.min(hi, v > 1 ? v / 100 : v)); }
   function pct(f) { return Math.round(f * 100); }
-  function place(v, def) { return v === 'moon' || v === 'mars' ? v : def; }
+  // Each hologram has a drawing for the Moon and one for Mars; a scene that also draws Sahrun passes ALL as 'has'.
+  // Any other planet uses the drawing of the planet it is "like" (JA.SITES).
+  var ALL = ['moon', 'mars', 'sahrun'];
+  function place(v, def, has) {
+    has = has || ['moon', 'mars'];
+    if (has.indexOf(v) >= 0) return v;
+    var P = JA.SITES && JA.SITES[v];
+    return P && P.like && P.like !== v ? place(P.like, def, has) : def;
+  }
+  function placeName(v) { return v === 'mars' ? 'Mars' : v === 'sahrun' ? 'Sahrun' : 'Moon'; }
 
   // ---------- drawing tools ----------
   function A(a) { g.globalAlpha = fade * cl(a); }
@@ -142,7 +151,7 @@
     pen(AMB, 3, 16); ring(x, y, r); hide(); g.stroke(); wash(0.22);
     for (i = 0; i < 10; i++) { a = i * 0.6283 + (still ? 0 : t * 0.15); line(x + Math.cos(a) * (r + 8), y + Math.sin(a) * (r + 8), x + Math.cos(a) * (r + 19), y + Math.sin(a) * (r + 19)); }
   }
-  // A little world: 'earth' (with land), 'moon' (with craters) or 'mars' (an ice cap and a long canyon).
+  // A little world: 'earth' (with land), 'moon' (with craters), 'mars' (an ice cap and a long canyon) or 'sahrun' (bands of dunes).
   function globe(x, y, r, kind) {
     var a = g.globalAlpha;
     pen(kind === 'earth' ? CY : INK, 3); ring(x, y, r); hide(); g.stroke(); wash(kind === 'earth' ? 0.16 : 0.1);
@@ -156,6 +165,13 @@
     } else if (kind === 'moon') {
       g.globalAlpha = a * 0.55; g.lineWidth = 2;
       ring(x - r * 0.34, y - r * 0.22, r * 0.22); ring(x + r * 0.3, y + r * 0.32, r * 0.28); ring(x + r * 0.28, y - r * 0.48, r * 0.13); ring(x - r * 0.3, y + r * 0.5, r * 0.1);
+    } else if (kind === 'sahrun') {
+      g.globalAlpha = a * 0.55; g.lineWidth = 2;
+      for (var k = -2; k <= 2; k++) {
+        g.beginPath();
+        for (var j = 0; j <= 12; j++) { var px = x - r + j * r / 6, py = y + k * r * 0.32 + Math.sin(j * 1.3 + k) * r * 0.06; if (j) g.lineTo(px, py); else g.moveTo(px, py); }
+        g.stroke();
+      }
     } else {
       g.globalAlpha = a * 0.55; g.lineWidth = 2;
       g.beginPath(); g.ellipse(x, y - r * 0.92, r * 0.5, r * 0.22, 0, 0, TAU); g.fill();
@@ -320,32 +336,35 @@
 
   // ---------- 1. how ice becomes air ----------
   SC.electrolysis = {
-    icon: '🧊', title: 'How ice becomes air', src: 'iss',
-    fix: function (d) { return { airPerIce: Math.round(num(d.airPerIce, 14, 0, 999)) }; },
+    icon: '🧊', title: function (d) { return d.site === 'sahrun' ? 'How water becomes air' : 'How ice becomes air'; }, src: 'iss',
+    fix: function (d) { return { airPerIce: Math.round(num(d.airPerIce, 14, 0, 999)), site: place(d.site, 'moon', ALL) }; },
     steps: function (d) {
-      return ['Ice is frozen water. The Air Maker melts it.',
+      var well = d.site === 'sahrun';      // Sahrun's water comes up from a well, not as ice
+      return [well ? 'Water from the Deep Well is poured into the Air Maker.' : 'Ice is frozen water. The Air Maker melts it.',
         'Every drop of water is made of tiny pieces: two hydrogen and one oxygen. Scientists write H₂O.',
         'Electricity pulls the pieces apart. That is why the Air Maker needs a power cell.',
-        'The oxygen fills the tanks for the crew to breathe. One ice chunk makes ' + d.airPerIce + ' air.'];
+        'The oxygen fills the tanks for the crew to breathe. One ' + (well ? 'water can' : 'ice chunk') + ' makes ' + d.airPerIce + ' air.'];
     },
     draw: function (d, s, t) {
       var i, p, q, m, x, y, o;
+      var well = d.site === 'sahrun';
       if (s === 0) {
-        m = ez(ph(t, 0.8, 3.4));                                   // 0 = solid ice, 1 = all melted
+        m = well ? 1 : ez(ph(t, 0.8, 3.4));                        // 0 = solid ice, 1 = all melted (well water: already water)
         A(0.4); pen(CY, 2, 4); box(70, 52, 580, 310, 28);          // the machine around it
         A(0.9); txt('AIR MAKER', 164, 52, 18, CY);
         A(0.65 + 0.35 * sway(t, 3)); pen(AMB, 3.5, 16); zig(136, 304, 288, 12, 14);      // the heater glows
         A(1); pen(AMB, 3, 8); line(126, 278, 314, 278);
         if (m > 0.02) { A(0.8); pen(CY, 3); g.beginPath(); g.ellipse(220, 274, 34 + 54 * m, 4, 0, 0, TAU); g.stroke(); }
         q = 60 * (1 - 0.68 * m);
-        A(1); ice(220, 274 - q * 1.15, q);
+        if (well) { A(1); pen(CY, 3, 8); box(184, 160, 72, 104, 10); hide(); g.stroke(); wash(0.1); pen(CY, 0, 10); slab(190, 200, 60, 58, 6); }      // the can
+        else { A(1); ice(220, 274 - q * 1.15, q); }
         A(0.8); pen(CY, 3); arrow(338, 214, 412, 214, 14);
         for (i = 0; i < 3; i++) {                                  // drips run across
           p = (lap(t, 1.8, 0.4) + i / 3) % 1;
-          if (m < 1 || still) { A(0.9 * Math.sin(p * Math.PI) * (m > 0.02 ? 1 : 0)); pen(CY, 2); dot(mix(330, 420, p), 232 + Math.sin(p * Math.PI) * -8, 4); }
+          if (m < 1 || still || well) { A(0.9 * Math.sin(p * Math.PI) * (m > 0.02 ? 1 : 0)); pen(CY, 2); dot(mix(330, 420, p), 232 + Math.sin(p * Math.PI) * -8, 4); }
         }
         if (m > 0.02) { A(1); water(520, 214 + sway(t, 1.6) * 3, 52 * ez(m)); }
-        A(1); txt('ice', 220, 328, 24, INK);
+        A(1); txt(well ? 'well water' : 'ice', 220, 328, 24, INK);
         A(0.35 + 0.65 * m); txt('water', 520, 328, 24, CY);
       } else if (s === 1) {
         o = [190, 170, 156, 236, 226, 230, 164, 296, 224, 290];    // where the small molecules float
@@ -522,11 +541,11 @@
     icon: '🛡️', title: 'How soil stops radiation', src: 'artemis',
     fix: function (d) {
       var slots = Math.round(num(d.slots, 16, 1, 40));
-      return { slots: slots, bags: Math.round(num(d.bags, 0, 0, slots)), shield: share(d.shield, 0.25, 0, 1), site: place(d.site, 'moon') };
+      return { slots: slots, bags: Math.round(num(d.bags, 0, 0, slots)), shield: share(d.shield, 0.25, 0, 1), site: place(d.site, 'moon', ALL) };
     },
     steps: function (d) {
       return ['Radiation is tiny, very fast particles from the Sun and from deep space. You cannot see or feel them.',
-        'On Earth, thick air and a magnetic field stop most of them. ' + (d.site === 'mars' ? 'Mars has only very thin air.' : 'The Moon has neither.'),
+        'On Earth, thick air and a magnetic field stop most of them. ' + (d.site === 'mars' ? 'Mars has only very thin air.' : d.site === 'sahrun' ? 'Sahrun (made up) has thick air that stops many of them, but no magnetic field.' : 'The Moon has neither.'),
         'Mass stops them. A particle that hits soil gives up its energy there instead of in you.',
         'Your dome has ' + d.bags + ' of ' + d.slots + ' soil bags. Indoors, ' + pct(d.shield) + '% is blocked. Outdoors, only your suit protects you.'];
     },
@@ -558,8 +577,9 @@
         A(0.3); pen(CY, 12, 14); ring(190, 206, 60);
         A(1); globe(190, 206, 50, 'earth');
         // the Moon or Mars: nothing in the way
-        r = d.site === 'mars' ? 56 : 48;
+        r = d.site === 'mars' || d.site === 'sahrun' ? 56 : 48;
         if (d.site === 'mars') { A(0.3); pen(INK, 2, 6); ring(540, 206, r + 9); }
+        if (d.site === 'sahrun') { A(0.55); pen(AMB, 3, 8); ring(540, 206, r + 13); }      // thick air
         A(1); globe(540, 206, r, d.site);
         for (i = 0; i < 5; i++) {
           b = -60 + i * 30; u = (lap(t, 2.4, 0.55) + i * 0.23) % 1;
@@ -568,14 +588,18 @@
           x = 190 + 0.77 * b - 0.64 * a; y = 206 - 0.64 * b - 0.77 * a;
           A(1);
           if (fly(x, y, 0.64, 0.77, 250, u / 0.6, BAD, 3)) { A(1 - (u - 0.6) / 0.4); spark(x, y, 12, i % 2 ? CY : AMB); }
-          // on the other world it reaches the ground
-          if (Math.abs(b) < r) {
+          // on the other world it reaches the ground (Sahrun's thick air stops every other one)
+          if (d.site === 'sahrun' && i % 2) {
+            q = r + 13; a = Math.sqrt(Math.max(0, q * q - b * b)); x = 540 + 0.77 * b - 0.64 * a; y = 206 - 0.64 * b - 0.77 * a;
+            A(1);
+            if (fly(x, y, 0.64, 0.77, 250, u / 0.6, BAD, 3)) { A(1 - (u - 0.6) / 0.4); spark(x, y, 12, AMB); }
+          } else if (Math.abs(b) < r) {
             a = Math.sqrt(r * r - b * b); x = 540 + 0.77 * b - 0.64 * a; y = 206 - 0.64 * b - 0.77 * a;
             A(1);
             if (fly(x, y, 0.64, 0.77, 250, u / 0.6, BAD, 3)) { A(1 - (u - 0.6) / 0.4); pen(BAD, 3, 10); ring(x, y, 5 + (u - 0.6) * 34); }
           }
         }
-        A(1); txt('Earth', 190, 352, 24, CY); txt(d.site === 'mars' ? 'Mars' : 'Moon', 540, 352, 24, INK);
+        A(1); txt('Earth', 190, 352, 24, CY); txt(placeName(d.site), 540, 352, 24, INK);
       } else if (s === 2) {
         ground(326);
         A(1); dome(360, 326, 112);
@@ -715,7 +739,7 @@
     icon: '☀️',
     title: function (d) { return d.site === 'moon' ? 'Why panels must face the Sun' : 'Why dusty panels make less power'; },
     src: function (d) { return d.site === 'moon' ? 'artemis' : 'insight'; },
-    fix: function (d) { return { site: place(d.site, 'mars'), eff: share(d.eff, 1, 0, 1) }; },
+    fix: function (d) { return { site: place(d.site, 'mars', ALL), eff: share(d.eff, 1, 0, 1) }; },
     steps: function (d) {
       var live = 'Your panels are working at ' + pct(d.eff) + '% right now.';
       if (d.site === 'moon') {
@@ -725,7 +749,7 @@
           'Turn it back to face the Sun and it charges at full speed again.'];
       }
       return ['A solar panel turns sunlight into electricity.',
-        'On Mars, dust settles on the glass a little more every day.',
+        d.site === 'sahrun' ? 'On Sahrun, blowing sand settles on the glass a little more every day.' : 'On Mars, dust settles on the glass a little more every day.',
         'Dust blocks the light, so fewer power cells get charged. ' + live,
         'Brush the dust off and the light gets through again. NASA\'s InSight lander ran out of power this way.'];
     },
@@ -817,12 +841,12 @@
   // ---------- 6. every drop, again and again ----------
   SC.water = {
     icon: '💧', title: 'Every drop, again and again', src: 'iss',
-    fix: function (d) { return { recycle: share(d.recycle, 0.9, 0, 1) }; },
+    fix: function (d) { return { recycle: share(d.recycle, 0.9, 0, 1), site: place(d.site, 'moon', ALL) }; },
     steps: function (d) {
       return ['Water is heavy, and bringing it from Earth costs a fortune. So nothing is thrown away.',
         'The crew drinks and washes. Their breath and sweat make the air damp. Even pee is collected.',
         'The recycler cleans all of it and gives back about ' + Math.round(d.recycle * 10) + ' cups out of every 10.',
-        'Plants keep some in their leaves, and a little is always lost. Fresh ice tops the tank up.'];
+        d.site === 'sahrun' ? 'Plants keep some in their leaves, hot days sweat some away, and a little is always lost. Well water and dew top the tank up.' : 'Plants keep some in their leaves, and a little is always lost. Fresh ice tops the tank up.'];
     },
     draw: function (d, s, t) {
       var i, p, q, m, x, y, n, u, top, back;
@@ -906,22 +930,25 @@
 
   // ---------- 7. why Earth answers late ----------
   SC.radio = {
-    icon: '📡', title: 'Why Earth answers late',
-    src: function (d) { return d.site === 'moon' ? 'moon' : 'mars'; },
+    icon: '📡', title: function (d) { return d.site === 'sahrun' ? 'Why Mission Control lives in orbit' : 'Why Earth answers late'; },
+    src: function (d) { return d.site === 'moon' ? 'moon' : d.site === 'sahrun' ? 'iss' : 'mars'; },
     fix: function (d) {
-      var site = place(d.site, 'mars'), one = site === 'moon' ? '1.3 seconds' : typeof d.oneWay === 'number' && isFinite(d.oneWay) ? 'about ' + d.oneWay + ' minutes' : d.oneWay && typeof d.oneWay === 'string' ? d.oneWay : 'about 12 minutes';
+      var site = place(d.site, 'mars', ALL), one = site === 'moon' ? '1.3 seconds' : site === 'sahrun' ? 'about 2 seconds' : typeof d.oneWay === 'number' && isFinite(d.oneWay) ? 'about ' + d.oneWay + ' minutes' : d.oneWay && typeof d.oneWay === 'string' ? d.oneWay : 'about 12 minutes';
       var m = /(\d+(?:[.,]\d+)?)\s*([a-z]*)/i.exec(one), u = m ? m[2].charAt(0).toLowerCase() : '';
       // n and unit are the same time as a number, for the running clock in the picture
       return { site: site, oneWay: one, n: m ? parseFloat(m[1].replace(',', '.')) : NaN, unit: u === 's' ? ' s' : u === 'm' ? ' min' : u === 'h' ? ' h' : '' };
     },
     steps: function (d) {
       var moon = d.site === 'moon';
+      if (d.site === 'sahrun') return ['Radio waves travel at the speed of light: 300,000 km every second. Nothing is faster.',
+        'Earth is so far from Sahrun that a message would take years. So Mission Control lives on a relay ship in orbit, about 600,000 km up.',
+        'A question and its answer make two trips of about 2 seconds each. Quick enough to talk you through a repair. (Sahrun and its relay ship are made up.)'];
       return ['Radio waves travel at the speed of light: 300,000 km every second. Nothing is faster.',
         moon ? 'The Moon is 384,000 km from Earth, so a message takes 1.3 seconds.' : 'Mars is hundreds of millions of km away. Today a message takes ' + d.oneWay + '.',
         'A question and its answer make two trips. ' + (moon ? 'That is still quick, almost like a phone call.' : 'So crews on Mars must often decide for themselves.')];
     },
     draw: function (d, s, t) {
-      var i, p, q, u, x, r, moon = d.site === 'moon';
+      var i, p, q, u, x, r, moon = d.site === 'moon', relay = d.site === 'sahrun';
       // The clock: k trips done so far (0 to 2).
       function clock(k, y) {
         var v = d.n * k, text = isNaN(d.n) || !d.unit ? (k >= 2 ? '2 × ' : '') + d.oneWay.replace(/^about\s+/i, '') : (d.n % 1 || (d.n < 10 && d.unit === ' s') ? v.toFixed(1) : Math.round(v)) + d.unit;
@@ -933,8 +960,16 @@
         r = moon ? 26 : 34;
         stars(14, 5);
         A(0.4); pen(CY, 2, 0); dash(3, 9); line(170, 215, 586, 215); dash();
-        A(1); globe(104, 215, 54, 'earth'); globe(624, 215, r, d.site);
-        txt('Earth', 104, 302, 22, CY); txt(moon ? 'Moon' : 'Mars', 624, 302, 22, INK);
+        A(1);
+        if (relay) { ship(104, 215); txt('Relay ship', 104, 302, 22, CY); A(0.8); txt('Earth: years away', 104, 120, 18, GREY); A(1); }
+        else { globe(104, 215, 54, 'earth'); txt('Earth', 104, 302, 22, CY); }
+        globe(624, 215, r, d.site); txt(placeName(d.site), 624, 302, 22, INK);
+      }
+      // the relay ship: a body with a dish and two wings of solar panels
+      function ship(x0, y0) {
+        pen(CY, 3, 8); box(x0 - 22, y0 - 13, 44, 26, 7); hide(); g.stroke(); wash(0.14);
+        pen(AMB, 2.5, 8); box(x0 - 66, y0 - 8, 36, 16, 3); box(x0 + 30, y0 - 8, 36, 16, 3); line(x0 - 30, y0, x0 - 22, y0); line(x0 + 22, y0, x0 + 30, y0);
+        pen(CY, 3, 8); arc(x0, y0 - 13, 12, Math.PI, 0); line(x0, y0 - 25, x0, y0 - 32);
       }
       // A radio signal: three curved lines, flying right (dir 1) or left (dir -1).
       function signal(x0, y0, dir, col) {
@@ -953,6 +988,7 @@
         worlds();
         u = lap(t, 6, 0.8); p = cl(u / 0.55);
         if (moon) { A(0.85); txt('384,000 km', 372, 246, 20, INK); }
+        if (relay) { A(0.85); txt('600,000 km', 372, 246, 20, INK); }
         if (p < 1) { A(1); signal(mix(184, 584, p), 215, 1, AMB); }
         else { A(1 - (u - 0.55) / 0.45); pen(AMB, 3, 12); ring(624, 215, r + 8 + (u - 0.55) * 70); }
         clock(p, 112);
@@ -971,12 +1007,12 @@
   // ---------- 8. what a solar storm is ----------
   SC.storm = {
     icon: '🌩️', title: 'What a solar storm is', src: 'donki',
-    fix: function (d) { return { dish: d.dish !== false, lead: Math.round(num(d.lead, 45, 0, 999)) }; },
+    fix: function (d) { return { dish: d.dish !== false, lead: Math.round(num(d.lead, 45, 0, 999)), site: place(d.site, 'moon', ALL) }; },
     steps: function (d) {
-      return ['Sometimes the Sun flashes (a solar flare) and throws out a giant cloud of gas (a CME).',
+      return [d.site === 'sahrun' ? 'Sometimes a star flashes (a flare) and throws out a giant cloud of gas (a CME). Sahrun\'s star, Aster, is made up, but it works like our Sun.' : 'Sometimes the Sun flashes (a solar flare) and throws out a giant cloud of gas (a CME).',
         'The flash of light arrives in minutes. Telescopes that watch the Sun see it, and the cloud leaving.',
         'The dangerous particles, sped up by the cloud\'s shock wave, come later. That gap is your warning time.',
-        d.dish ? 'Your Radio Dish is on, so Earth\'s forecasters can warn you early: about ' + d.lead + ' seconds in this game.' :
+        d.dish ? 'Your Radio Dish is on, so ' + (d.site === 'sahrun' ? 'the forecasters on the relay ship' : 'Earth\'s forecasters') + ' can warn you early: about ' + d.lead + ' seconds in this game.' :
           'Your Radio Dish is off, so only your suit\'s sensor notices, when the particles are already here: ' + (d.lead > 0 ? 'about ' + d.lead + ' seconds of warning.' : 'no warning at all.')];
     },
     draw: function (d, s, t) {
@@ -1056,16 +1092,16 @@
   // ---------- 9. why everything flies so far ----------
   SC.gravity = {
     icon: '🪐', title: 'Why everything flies so far',
-    src: function (d) { return d.site === 'mars' ? 'mars' : 'moon'; },
-    fix: function (d) { return { site: place(d.site, 'moon') }; },
+    src: function (d) { return d.site === 'mars' ? 'mars' : d.site === 'sahrun' ? 'fiction' : 'moon'; },
+    fix: function (d) { return { site: place(d.site, 'moon', ALL) }; },
     steps: function (d) {
-      var mars = d.site === 'mars';
+      var mars = d.site === 'mars', sah = d.site === 'sahrun';
       return ['Gravity is the pull of a planet or moon. The more massive it is, the harder it pulls.',
-        mars ? 'Mars is smaller than Earth. It pulls with about 38% of Earth\'s strength.' : 'The Moon is much smaller than Earth. It pulls with only one-sixth of Earth\'s strength.',
-        'So the same throw stays up longer and lands about ' + (mars ? '2.6' : '6') + ' times farther away.'];
+        mars ? 'Mars is smaller than Earth. It pulls with about 38% of Earth\'s strength.' : sah ? 'Sahrun is made up. In this game it pulls with half of Earth\'s strength.' : 'The Moon is much smaller than Earth. It pulls with only one-sixth of Earth\'s strength.',
+        'So the same throw stays up longer and lands about ' + (mars ? '2.6' : sah ? '2' : '6') + ' times farther away.'];
     },
     draw: function (d, s, t) {
-      var p, u, a, mars = d.site === 'mars', name = mars ? 'Mars' : 'Moon', times = mars ? 2.63 : 6, secs = mars ? 3.2 : 4.2;
+      var p, u, a, mars = d.site === 'mars', sah = d.site === 'sahrun', name = placeName(d.site), times = mars ? 2.63 : sah ? 2 : 6, secs = mars ? 3.2 : sah ? 3 : 4.2;
       // A world that pulls everything towards its middle: longer, thicker arrows mean a harder pull.
       // A ball dropped from the same height lands sooner where the pull is harder.
       function pull(cx, cy, r, len, w, fallSecs) {
@@ -1097,7 +1133,7 @@
         A(1); txt('strong pull', 196, 374, 22, AMB); txt('weak pull', 548, 374, 22, AMB);
       } else if (s === 1) {
         stars(12, 31);
-        A(1); globe(190, 150, 74, 'earth'); globe(520, 150, 74 * (mars ? 0.53 : 0.27), d.site);      // their real sizes, side by side
+        A(1); globe(190, 150, 74, 'earth'); globe(520, 150, 74 * (mars ? 0.53 : sah ? 0.5 : 0.27), d.site);      // their real sizes, side by side (Sahrun's is made up)
         txt('Earth', 190, 254, 24, CY); txt(name, 520, 254, 24, INK);
         p = ez(ph(t, 0.6, 1)); u = ez(ph(t, 1.7, 1)); a = 86 / times;      // the pull of each, as an arrow
         A(1); pen(AMB, 7, 12);
@@ -1105,11 +1141,11 @@
         g.lineWidth = Math.max(3.5, Math.min(7, a * 0.22));
         if (u > 0.05) arrow(480, 286, 480, 286 + a * u, Math.min(16, a * 0.6));
         A(p); txt('Earth\'s pull', 176, 328, 22, AMB, 'left');
-        A(u); txt(mars ? '38% of it' : '1/6 of it', 506, 298, 22, AMB, 'left');
+        A(u); txt(mars ? '38% of it' : sah ? 'half of it' : '1/6 of it', 506, 298, 22, AMB, 'left');
       } else {
         u = lap(t, secs + 3.3, 0.97) * (secs + 3.3) - 0.7;         // seconds since both let go of the ball
         lane(138, 500 / times, secs / times, 'Earth', CY, '1×');
-        lane(330, 500, secs, name, INK, mars ? '2.6×' : '6×');
+        lane(330, 500, secs, name, INK, mars ? '2.6×' : sah ? '2×' : '6×');
       }
     }
   };
@@ -1164,15 +1200,15 @@
   // ---------- 11. why the drill gets hot ----------
   SC.drill = {
     icon: '🔩', title: 'Why the drill gets hot',
-    src: function (d) { return d.site === 'mars' ? 'msl' : 'apollo'; },
-    fix: function (d) { return { site: place(d.site, 'moon') }; },
+    src: function (d) { return d.site === 'mars' || d.site === 'sahrun' ? 'msl' : 'apollo'; },
+    fix: function (d) { return { site: place(d.site, 'moon', ALL) }; },
     steps: function (d) {
       return ['Rubbing makes heat. Rub your hands together fast and feel it. A drill rubs rock much faster.',
-        'On Earth, air and water carry the heat away. ' + (d.site === 'mars' ? 'The air on Mars is about 100 times thinner, so the heat stays in the drill.' : 'The Moon has no air at all, so the heat stays in the drill.'),
+        'On Earth, air and water carry the heat away. ' + (d.site === 'sahrun' ? 'The desert air on Sahrun is already hot, so it carries much less heat away and the drill heats up fast.' : d.site === 'mars' ? 'The air on Mars is about 100 times thinner, so the heat stays in the drill.' : 'The Moon has no air at all, so the heat stays in the drill.'),
         'So drill in short bursts and let it cool. An overheated drill bit wears out, and a worn bit heats up even faster.'];
     },
     draw: function (d, s, t) {
-      var i, k, p, u, y, hot, on, mars = d.site === 'mars';
+      var i, k, p, u, y, hot, on, mars = d.site === 'mars', sah = d.site === 'sahrun';
       // A drill standing in a hole in the rock. turn = is it spinning; heat 0 to 1 colours the bit cyan, amber, then pink.
       function rig(x0, gy, turn, heat) {
         var j, yy, col = heat < 0.4 ? CY : heat < 0.78 ? AMB : BAD, sp = turn && !still ? (t * 5) % 1 : 0.3;
@@ -1217,10 +1253,11 @@
         rig(520, 244, true, 0.6); steam(520, 232, AMB, 1);
       } else if (s === 1) {
         p = ez(ph(t, 0.6, 4.5));                                   // the heat building up where the air is missing
-        A(1); txt('Earth', 190, 44, 24, CY); txt(mars ? 'Mars' : 'Moon', 530, 44, 24, INK);
+        A(1); txt('Earth', 190, 44, 24, CY); txt(placeName(d.site), 530, 44, 24, INK);
         rig(190, 250, true, 0.15); air(190, 250, 10);
         rig(530, 250, true, 0.25 + 0.75 * p);
         if (mars) air(530, 250, 2);
+        if (sah) air(530, 250, 4);                                 // hot air: it moves, but takes little heat
         steam(530, 238, p > 0.7 ? BAD : AMB, 0.3 + 0.7 * p);
         A(1); txt('air cools it', 190, 374, 20, CY);
         A(0.3 + 0.7 * p); txt('heat stays', 530, 374, 20, BAD);
@@ -1703,6 +1740,98 @@
     var c = e.code || '', k = e.key || '';
     if (cur && (c === 'Space' || k === ' ' || k === 'Spacebar' || c === 'Enter' || k === 'Enter') && ownButton()) e.preventDefault();
   }
+
+  // ---------- dew: water out of thin air (Sahrun's dew catcher) ----------
+  SC.dew = {
+    icon: '💧', title: 'How dew forms', src: 'earthobs',
+    fix: function (d) { return { water: Math.round(num(d.water, 16, 1, 99)) }; },
+    steps: function (d) {
+      return ['On a clear night, the sand and the net send their heat up into the open sky, and get cold.',
+        'Air always holds some invisible water vapour. Touching the cold net, it cools until the vapour turns into drops: dew.',
+        'The drops run down into the can: about ' + d.water + ' water after a clear, still night. Wind and blowing sand keep the net too warm for dew.'];
+    },
+    draw: function (d, s, t) {
+      var i, k, u, x, y;
+      // the net between two posts; cold = it glows cyan
+      function net(cold) {
+        A(1); pen(INK, 3, 6); line(250, 350, 250, 110); line(470, 350, 470, 110);
+        A(0.55); pen(cold ? CY : INK, 1.5, cold ? 8 : 0);
+        for (k = 0; k <= 8; k++) line(250 + 220 * k / 8, 120, 250 + 220 * k / 8, 270);
+        for (k = 0; k <= 5; k++) line(250, 120 + 150 * k / 5, 470, 120 + 150 * k / 5);
+        A(1);
+      }
+      stars(24, 12);
+      ground(350);
+      if (s === 0) {
+        net(false);
+        for (i = 0; i < 9; i++) {                                  // heat rising out of the sand and the net into the clear sky
+          u = (lap(t, 2.6, 0.5) + i / 9) % 1; x = 70 + i * 72;
+          A(0.85 * (1 - u)); pen(AMB, 2.5, 10); wavy(x, 340 - u * 60, 300 - u * 260, 5, (still ? 0 : -t * 3) + i);
+        }
+        A(1); txt('clear sky', 600, 46, 22, INK); txt('heat escapes', 120, 46, 22, AMB);
+      } else if (s === 1) {
+        net(true);
+        for (i = 0; i < 14; i++) {                                 // vapour drifting in from the air
+          u = (lap(t, 3.2, 0.6) + rnd(i)) % 1;
+          x = mix(40 + rnd(i + 5) * 120, 260 + rnd(i + 9) * 200, u); y = 130 + rnd(i + 2) * 140;
+          A(0.85 * (1 - u)); pen(CY, 0, 6); dot(x, y, 2.5);
+        }
+        for (i = 0; i < 12; i++) { A(1); pen(CY, 0, 10); dot(256 + 208 * rnd(i + 20), 126 + 138 * rnd(i + 40), 2 + 4.5 * ez(ph(t, rnd(i) * 1.6, 1.4))); }      // drops growing on the net
+        A(1); txt('water vapour', 120, 96, 22, CY); txt('dew', 360, 92, 26, CY);
+      } else {
+        net(true);
+        for (i = 0; i < 8; i++) { u = (lap(t, 2, 0.7) + i / 8) % 1; A(1); pen(CY, 0, 10); dot(264 + i * 27, 124 + u * 148, 5); }      // drops running down
+        A(1); pen(INK, 3, 6); line(240, 280, 480, 280); line(480, 280, 516, 300);      // the gutter and the spout
+        k = still ? 0.7 : ez((t / 5) % 1);
+        A(1); pen(CY, 3.5, 6); box(512, 292, 70, 58, 8); hide(); g.stroke();
+        pen(CY, 0, 10); slab(516, 346 - 50 * k, 62, 50 * k, 5);
+        A(1); txt('+' + d.water + ' water', 600, 250, 24, CY);
+      }
+    }
+  };
+
+  // ---------- two waves tell the distance (the Sandquake Sensor) ----------
+  SC.swave = {
+    icon: '〰️', title: 'Two waves tell the distance', src: 'insight',
+    fix: function (d) { return { vp: Math.round(num(d.vp, 400, 50, 9000)), vs: Math.round(num(d.vs, 200, 20, 5000)) }; },
+    steps: function (d) {
+      var per = Math.round(d.vp * d.vs / (d.vp - d.vs) / 10);
+      return ['Something shakes the ground, and two kinds of waves spread out from it.',
+        'The P wave pushes and pulls. It is fast, so it arrives first. The S wave shakes from side to side. It is slower, so it arrives later.',
+        'The farther away the shaking, the bigger the gap between them. In this sand, every tenth of a second of gap means about ' + per + ' metres.'];
+    },
+    draw: function (d, s, t) {
+      var i, u, r1, r2, prog;
+      // a sensor's trace: a flat line with a small wiggle (P) and a big one (S), drawn from left to right as time passes
+      function trace(y, xp, xs, label, col) {
+        A(0.6); pen(GREY, 2, 0); line(60, y, 660, y);
+        g.save(); g.beginPath(); g.rect(0, 0, 60 + 600 * prog, HT); g.clip();
+        A(1); pen(CY, 3, 8); zig(xp, xp + 40, y - 8, 16, 6);
+        pen(AMB, 3.5, 10); zig(xs, xs + 80, y - 18, 36, 8);
+        g.restore();
+        if (label) { A(1); txt(label, 60, y - 40, 20, col || INK, 'left'); }
+      }
+      if (s === 0) {
+        ground(110);
+        A(1); txt('ground', 650, 92, 20, CY, 'right');
+        u = lap(t, 3.4, 0.6); r1 = 20 + u * 420; r2 = 20 + u * 210;
+        A(1 - u * 0.6); pen(CY, 3, 10); arc(170, 280, r1, -Math.PI * 0.55, Math.PI * 0.45);
+        A(1 - u * 0.6); pen(AMB, 3.5, 10); dash(10, 8); arc(170, 280, r2, -Math.PI * 0.55, Math.PI * 0.45); dash();
+        A(1); spark(170, 280, 18, BAD);
+        txt('P wave: fast', 470, 160, 22, CY); txt('S wave: slow', 470, 200, 22, AMB);
+      } else if (s === 1) {
+        prog = still ? 1 : Math.min(1, (t % 6) / 4.5);
+        A(1); txt('the sensor feels', 360, 60, 22, INK);
+        trace(220, 200, 420, '', INK);
+        if (prog > 0.25) { A(1); txt('P', 220, 150, 26, CY); }
+        if (prog > 0.62) { A(1); txt('S', 460, 140, 26, AMB); pen(AMB, 2.5, 6); arrow(220, 300, 420, 300, 10); arrow(420, 300, 220, 300, 10); txt('the gap', 320, 330, 22, AMB); }
+      } else {
+        prog = still ? 1 : Math.min(1, (t % 7) / 5);
+        trace(150, 160, 240, 'near: a short gap', INK);
+        trace(320, 160, 480, 'far: a long gap', INK);
+      }
+    }
+  };
 
   // ---------- what the game can call ----------
   H.SCENES = {};

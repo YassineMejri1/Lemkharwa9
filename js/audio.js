@@ -167,7 +167,11 @@
 
   // ---------- where you are, and where things are ----------
   // lp: how much treble the place lets through; range: how far sounds carry (1 = normal)
-  var ENV = { open: { lp: 20000, gain: 1, range: 1 }, moon: { lp: 1250, gain: 0.9, range: 0.6 }, mars: { lp: 3800, gain: 0.95, range: 0.85 }, 'in': { lp: 700, gain: 0.3, range: 1 } };
+  // sahrun: thick air carries sound clearly and far, as on Earth
+  var ENV = { open: { lp: 20000, gain: 1, range: 1 }, moon: { lp: 1250, gain: 0.9, range: 0.6 }, mars: { lp: 3800, gain: 0.95, range: 0.85 }, sahrun: { lp: 9000, gain: 1, range: 1 }, 'in': { lp: 700, gain: 0.3, range: 1 } };
+  // A planet's own wind, from the same recordings (no entry: Mars's): how loud the wind and the blowing sand are for
+  // clear, dusty and stormy air, and how fast they play (slower = deeper). Sahrun: a deeper wind, and sand always skipping.
+  var BEDTONE = { sahrun: { wind: [0.9, 0.8, 0.5], sand: [0.35, 0.65, 1], rate: 0.82 } };
   var env = ENV.open, ear = { x: 0, z: 0, rx: 1, rz: 0, on: false }, HERE = { g: 1, p: 0 };
   function ears(x, z, camera) {
     ear.x = x; ear.z = z; ear.on = true;
@@ -258,20 +262,23 @@
   function hum(name, want, at, vol) { if (want) loop(name, { at: at, vol: vol, keep: true, fade: 0.25 }); else stopLoop(name, 0.25); }
 
   // ---------- the scene: how the world is filtered, and which background beds play ----------
-  var sceneKey = '', sceneDirty = false, beds = {}, hushed = false, BEDS = ['amb-suit', 'amb-mars-wind', 'amb-mars-dust', 'amb-hab', 'amb-storm'];
+  var sceneKey = '', sceneDirty = false, beds = {}, bedTone = null, hushed = false, BEDS = ['amb-suit', 'amb-mars-wind', 'amb-mars-dust', 'amb-hab', 'amb-storm'];
   // o.place: 'out' on the surface, 'in' the habitat; anything else (menus, the lander cabin) is clear and has no bed
-  // o.site: 'moon' or 'mars'; o.dust: 0 to 1; o.storm: 0 none, 1 warning, 2 raging
+  // o.site: a planet id (see JA.SITES); o.dust: 0 to 1; o.storm: 0 none, 1 warning, 2 raging
   function scene(o) {
     var dust = o.dust > 0.7 ? 2 : o.dust > 0.2 ? 1 : 0, storm = o.storm | 0;
     var key = [o.place, o.site, dust, storm].join();
     if (key === sceneKey) return;
     sceneKey = key;
-    var out = o.place === 'out', inn = o.place === 'in', mars = o.site === 'mars';
-    env = out ? ENV[o.site] || ENV.open : inn ? ENV['in'] : ENV.open;
+    // outdoors you hear the planet: wind only where there is air, blowing dust only where there is dust
+    var out = o.place === 'out', inn = o.place === 'in', P = o.site && JA.SITES[o.site] ? JA.siteOf(o.site) : null;
+    var air = !!P && P.atmosphere !== 'none', dusty = !!P && P.dusty;
+    env = out ? (P ? JA.pick(P, ENV) : ENV.open) : inn ? ENV['in'] : ENV.open;
+    bedTone = P && BEDTONE[P.id] || null;
     beds = {
-      'amb-suit': out ? (mars ? 0.8 : 1) : 0,
-      'amb-mars-wind': out && mars ? [1, 0.7, 0.4][dust] : 0,
-      'amb-mars-dust': out && mars ? [0, 0.5, 1][dust] : 0,
+      'amb-suit': out ? (air ? 0.8 : 1) : 0,
+      'amb-mars-wind': out && air ? (bedTone ? bedTone.wind : [1, 0.7, 0.4])[dust] : 0,
+      'amb-mars-dust': out && dusty ? (bedTone ? bedTone.sand : [0, 0.5, 1])[dust] : 0,
       'amb-hab': inn ? 1 : 0,
       'amb-storm': storm === 2 ? (out ? 1 : inn ? 0.4 : 0) : storm === 1 ? (out ? 0.35 : inn ? 0.15 : 0) : 0
     };
@@ -283,7 +290,10 @@
     var t = ctx.currentTime;
     worldLP.frequency.setTargetAtTime(env.lp, t, 0.25);
     bus.world.gain.setTargetAtTime(env.gain, t, 0.25);
-    BEDS.forEach(function (name) { if (beds[name] > 0) loop(name, { vol: beds[name], keep: true, fade: 0.7 }); else stopLoop(name, 0.7); });
+    BEDS.forEach(function (name) {
+      var rate = bedTone && (name === 'amb-mars-wind' || name === 'amb-mars-dust') ? bedTone.rate : undefined;
+      if (beds[name] > 0) loop(name, { vol: beds[name], keep: true, fade: 0.7, rate: rate }); else stopLoop(name, 0.7);
+    });
   }
   // a pop-up card pauses the game: the world drops back, like holding your breath
   function hush(v) {

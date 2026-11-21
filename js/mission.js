@@ -28,19 +28,25 @@
   function todayDate(s) { var w = s.weather[s.sol - 1]; return w && w.date ? w.date : new Date().toISOString().slice(0, 10); }
   function dw(s) { return s.site.dayWord; }
   function box(s) { return s.comms || (s.comms = { log: [], events: [], seq: 0, flash: null, outlookSeen: false }); }
+  // who answers: Mission Control on Earth (Houston), or Mission Control on the relay ship (a made-up planet far from Earth)
+  function hq(s) {
+    return s.site.comms === 'relay' ? { name: 'the relay ship', Name: 'The relay ship', short: 'relay', call: 'RELAY', voice: 'Mission Control' }
+      : { name: 'Earth', Name: 'Earth', short: 'Earth', call: 'HOUSTON', voice: 'Houston' };
+  }
 
   // ---------- the model behind every screen ----------
   // One call gathers what the link needs: planet positions, real light-time and the game's
   // compressed wait (sim.commInfo keeps those consistent with the repair radio calls).
   M.model = function (s) {
-    var sim = JA.sim, info = sim.commInfo(s), moon = s.site.id === 'moon';
+    var sim = JA.sim, info = sim.commInfo(s), near = s.site.comms === 'near';      // near: a fixed delay of about a second (the Moon)
+    var relay = s.site.comms === 'relay';                                          // relay: a ship in orbit, about 2 light-seconds up
     var p = JA.weather.planets(todayDate(s));
-    var oneWaySec = moon ? 1.5 : info.wait / 2;                      // game seconds for one trip
+    var oneWaySec = near ? 1.5 : info.wait / 2;                      // game seconds for one trip
     var inflight = box(s).log.filter(function (m) { return m.state === 'transit'; });
     var cur = inflight.length ? inflight[inflight.length - 1] : null, prog = 0;
     if (cur) prog = clamp((s.t - cur.t0) / Math.max(0.1, cur.t1 - cur.t0), 0, 1);
     var align = JA.weather.alignment(p);
-    return { moon: moon, p: p, minutes: moon ? 1.28 / 60 : p.minutes, oneWaySec: oneWaySec, dish: !!s.m.comms.on, dishBroken: !!s.m.comms.broken,
+    return { near: near, relay: relay, name: s.site.name, p: p, minutes: near ? 1.28 / 60 : relay ? 2 / 60 : p.minutes, oneWaySec: oneWaySec, dish: !!s.m.comms.on, dishBroken: !!s.m.comms.broken,
       cur: cur, prog: prog, pending: inflight.length, align: align, info: info };
   };
 
@@ -53,6 +59,7 @@
   // mdl: from M.model; t: seconds, for the slow dash crawl and the signal pulse.
   M.drawOrbit = function (ctx, cx, cy, Rr, mdl, t, o) {
     o = o || {};
+    if (mdl.relay) return drawRelay(ctx, cx, cy, Rr, mdl, t, o);
     var k = Rr / 1.72, P = orbitPaths(), p = mdl.p, ex = cx + p.earth.x * k, ey = cy - p.earth.y * k, mx = cx + p.mars.x * k, my = cy - p.mars.y * k;
     function path(pts, color, width) {
       ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
@@ -73,7 +80,7 @@
     ctx.save(); ctx.setLineDash([4, 5]); ctx.lineDashOffset = -t * 6;
     ctx.strokeStyle = live ? 'rgba(234, 240, 255, 0.5)' : 'rgba(234, 240, 255, 0.14)'; ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(mx, my); ctx.stroke(); ctx.restore();
-    if (mdl.cur && !mdl.moon) {
+    if (mdl.cur && !mdl.near) {
       var up = mdl.cur.dir === 'up', ax = up ? mx : ex, ay = up ? my : ey, bx = up ? ex : mx, by = up ? ey : my;
       for (var i = 0; i < 4; i++) {
         var q = clamp(mdl.prog - i * 0.035, 0, 1), px = ax + (bx - ax) * q, py = ay + (by - ay) * q;
@@ -84,15 +91,57 @@
     var pr = Rr * 0.055 * (o.scale || 1);
     ctx.fillStyle = 'rgba(93, 178, 255, 0.22)'; ctx.beginPath(); ctx.arc(ex, ey, pr * 1.9, 0, Math.PI * 2); ctx.fill();
     dot(ctx, ex, ey, pr, EARTH); dot(ctx, mx, my, pr * 0.8, MARS);
-    if (mdl.moon) { dot(ctx, ex + pr * 1.6, ey - pr * 1.1, pr * 0.3, '#d8dbe6'); }
+    if (mdl.near) { dot(ctx, ex + pr * 1.6, ey - pr * 1.1, pr * 0.3, '#d8dbe6'); }
     ctx.font = '600 ' + Math.round(Rr * 0.11) + 'px ' + FONT; ctx.textBaseline = 'middle';
     ctx.fillStyle = EARTH; ctx.textAlign = ex < cx ? 'right' : 'left'; ctx.fillText('Earth', ex + (ex < cx ? -pr * 1.6 : pr * 1.6), ey);
     ctx.fillStyle = MARS; ctx.textAlign = mx < cx ? 'right' : 'left'; ctx.fillText('Mars', mx + (mx < cx ? -pr * 1.5 : pr * 1.5), my);
     // "you are here"
-    var hx = mdl.moon ? ex : mx, hy = mdl.moon ? ey : my;
+    var hx = mdl.near ? ex : mx, hy = mdl.near ? ey : my;
     ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.5 + Math.sin(t * 3) * 0.25) + ')'; ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.arc(hx, hy, pr * 2.4, 0, Math.PI * 2); ctx.stroke();
   };
+
+  // A made-up planet far from Earth (comms 'relay'): the link is to Mission Control on a relay ship in orbit, so the
+  // instrument shows the planet, the ship going round it and the outpost, not the solar system. Made up, not to scale.
+  function drawRelay(ctx, cx, cy, Rr, mdl, t, o) {
+    var sc = o.scale || 1, pr = Rr * 0.36, orb = Rr * 0.84, i;
+    ctx.save(); ctx.strokeStyle = 'rgba(207, 227, 255, 0.32)'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.arc(cx, cy, orb, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    // the planet: a sand-coloured disc, lit from the upper left, with darker bands of dunes
+    var g = ctx.createRadialGradient(cx - pr * 0.35, cy - pr * 0.35, pr * 0.1, cx, cy, pr);
+    g.addColorStop(0, '#f6d79c'); g.addColorStop(0.7, '#e0ad62'); g.addColorStop(1, '#8a5a2c');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, pr, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, pr, 0, Math.PI * 2); ctx.clip();
+    ctx.strokeStyle = 'rgba(120, 70, 30, 0.3)'; ctx.lineWidth = pr * 0.07;
+    [-0.5, -0.12, 0.34].forEach(function (k) { ctx.beginPath(); ctx.ellipse(cx, cy + k * pr, pr * 1.1, pr * 0.14, 0, 0, Math.PI * 2); ctx.stroke(); });
+    ctx.restore();
+    // the outpost on top of the disc, the ship slowly going round, and the radio link between them
+    var hx = cx, hy = cy - pr, a = -Math.PI / 2 + 0.95 + t * 0.03, sx = cx + Math.cos(a) * orb, sy = cy + Math.sin(a) * orb;
+    var live = mdl.dish && !mdl.dishBroken;
+    ctx.save(); ctx.setLineDash([4, 5]); ctx.lineDashOffset = -t * 6;
+    ctx.strokeStyle = live ? 'rgba(234, 240, 255, 0.55)' : 'rgba(234, 240, 255, 0.14)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(sx, sy); ctx.stroke(); ctx.restore();
+    if (mdl.cur) {
+      var up = mdl.cur.dir === 'up', ax = up ? hx : sx, ay = up ? hy : sy, bx = up ? sx : hx, by = up ? sy : hy;
+      for (i = 0; i < 4; i++) {
+        var q = clamp(mdl.prog - i * 0.035, 0, 1);
+        dot(ctx, ax + (bx - ax) * q, ay + (by - ay) * q, (i ? 2.2 : 3.6) * sc, i ? 'rgba(255, 255, 255, ' + (0.45 - i * 0.1) + ')' : '#ffffff');
+      }
+    }
+    ctx.save(); ctx.translate(sx, sy); ctx.rotate(a);
+    ctx.fillStyle = '#5db2ff'; ctx.fillRect(-2.5 * sc, -16 * sc, 5 * sc, 10 * sc); ctx.fillRect(-2.5 * sc, 6 * sc, 5 * sc, 10 * sc);      // solar wings
+    ctx.fillStyle = '#cfe3ff'; ctx.fillRect(-7 * sc, -4.5 * sc, 14 * sc, 9 * sc);                                                     // the ship
+    ctx.restore();
+    dot(ctx, hx, hy, 4 * sc, '#ffffff');
+    ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.5 + Math.sin(t * 3) * 0.25) + ')'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(hx, hy, 11 * sc, 0, Math.PI * 2); ctx.stroke();
+    ctx.font = '600 ' + Math.round(Rr * 0.11) + 'px ' + FONT; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#3a2410'; ctx.textAlign = 'center'; ctx.fillText(mdl.name, cx, cy + pr * 0.12);
+    ctx.fillStyle = '#cfe3ff'; ctx.textAlign = sx < cx ? 'right' : 'left'; ctx.fillText('Relay ship', sx + (sx < cx ? -20 : 20) * sc, sy);
+    // Earth is not in this picture: by radio it is years away
+    ctx.fillStyle = MUTED; ctx.font = '500 ' + Math.round(Rr * 0.09) + 'px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText('Earth: years away by radio', cx, cy + Rr * 1.02);
+  }
 
   // ---------- the radio queue ----------
   // kind: 'status' | 'help' | 'repair' | 'storm'. Every message to Earth takes one light-trip; the
@@ -102,7 +151,7 @@
     return { sol: s.sol + 1, t: 6 };                                  // still travelling when the crew sleeps: it is there in the morning
   }
   M.canSend = function (s) {
-    if (!s.m.comms.on) return { ok: false, msg: s.m.comms.broken ? 'The Radio Dish is broken. No link to Earth until it is fixed.' : 'The Radio Dish has no power. Plug a power cell into its socket to open the link.' };
+    if (!s.m.comms.on) return { ok: false, msg: s.m.comms.broken ? 'The Radio Dish is broken. No link to ' + JA.homeName(s) + ' until it is fixed.' : 'The Radio Dish has no power. Plug a power cell into its socket to open the link.' };
     return { ok: true };
   };
   M.send = function (s, kind, text, opts) {
@@ -113,9 +162,9 @@
     b.log.push(up);
     // the answer starts back the moment the message lands on Earth
     var t2 = opts.replyAt != null ? opts.replyAt : a1.t + ow, a2 = a1.sol === s.sol ? arrival(s, t2) : { sol: a1.sol, t: a1.t + ow };
-    var down = { id: ++b.seq, kind: kind, dir: 'down', from: 'HOUSTON', text: null, sol: a1.sol, t0: a1.t, sol1: a2.sol, t1: a2.t, state: 'queued', silent: !!opts.silent, minutes: mdl.minutes, re: up.id };
+    var down = { id: ++b.seq, kind: kind, dir: 'down', from: hq(s).call, text: null, sol: a1.sol, t0: a1.t, sol1: a2.sol, t1: a2.t, state: 'queued', silent: !!opts.silent, minutes: mdl.minutes, re: up.id };
     b.log.push(down);
-    M.logEvent(s, '📡', 'Sent to Earth: ' + text, 0);
+    M.logEvent(s, '📡', 'Sent to ' + hq(s).name + ': ' + text, 0);
     if (b.log.length > 24) b.log.splice(0, b.log.length - 24);
     return { ok: true, msg: up, reply: down, oneWay: mdl.minutes, oneWaySec: ow };
   };
@@ -126,14 +175,15 @@
     var sim = JA.sim, low = [];
     if (s.leak > 0) low.push('seal that leak first');
     if (staleNow(s)) low.push('bake the CO₂ filter clean at the Air Scrubber');
-    if (s.water != null && s.water < R.waterWarn) low.push('water is low: an ice chunk in the tank');
-    if (s.air < 30) low.push('air is your priority: cell plus ice in the Air Maker');
+    if (s.water != null && s.water < R.waterWarn) low.push('water is low: ' + JA.waterWords(s).a + ' in the tank');
+    if (s.air < 30) low.push('air is your priority: cell plus ' + JA.waterWords(s).stuff + ' in the Air Maker');
     if (!(s.sol >= s.totalSols) && s.food < sim.dinner(s)) low.push('tonight\'s dinner is not covered: harvest or plant now');
     if (s.dose >= 60) low.push('badge is high: more soil bags on the dome before the next storm');
     var ph = sim.stormPhase(s);
-    if (kind === 'storm') return 'Houston copies. Stay inside until the all-clear' + (ph === 'over' ? ' — and we see it has passed, good work' : '') + '. Your shielding is at ' + Math.round(sim.shield(s) * 100) + '%; every bag on the dome counts for the next one.';
-    if (kind === 'help') return low.length ? 'Houston copies your request. Our recommendation, in order: ' + low.join('; ') + '. You are the one on site, Commander: your call.' : 'Houston copies. From here every system reads nominal. Keep the dish powered and we will keep watching the Sun for you.';
-    return 'Houston copies your status: air ' + pct(s.air) + '%, food ' + pct(s.food) + '%, badge ' + pct(s.dose) + '%' + (low.length ? '. One note: ' + low[0] + '.' : '. Looking good from here.');
+    var H = hq(s).voice;
+    if (kind === 'storm') return H + ' copies. Stay inside until the all-clear' + (ph === 'over' ? ' — and we see it has passed, good work' : '') + '. Your shielding is at ' + Math.round(sim.shield(s) * 100) + '%; every bag on the dome counts for the next one.';
+    if (kind === 'help') return low.length ? H + ' copies your request. Our recommendation, in order: ' + low.join('; ') + '. You are the one on site, Commander: your call.' : H + ' copies. From here every system reads nominal. Keep the dish powered and we will keep watching the Sun for you.';
+    return H + ' copies your status: air ' + pct(s.air) + '%, food ' + pct(s.food) + '%, badge ' + pct(s.dose) + '%' + (low.length ? '. One note: ' + low[0] + '.' : '. Looking good from here.');
   }
   // Called every frame by the game (only while a mission runs). ctx: { s, inside, say, onReply }
   M.update = function (dt, ctx) {
@@ -144,10 +194,10 @@
       if (m.state === 'queued' && (m.sol < now.sol || (m.sol === now.sol && now.t >= m.t0))) m.state = 'transit';
       if (m.state === 'transit' && due(m)) {
         m.state = 'received';
-        if (m.dir === 'up') M.logEvent(s, '🌍', 'Earth received your message (' + mmss(m.minutes) + ' later).', 0);
+        if (m.dir === 'up') M.logEvent(s, s.site.comms === 'relay' ? '🛰️' : '🌍', hq(s).Name + ' received your message (' + mmss(m.minutes) + ' later).', 0);
         else {
           m.text = m.text || replyText(s, m.kind);
-          M.logEvent(s, '📻', 'Houston: ' + m.text, 0);
+          M.logEvent(s, '📻', hq(s).voice + ': ' + m.text, 0);
           if (!m.silent && ctx.onReply) ctx.onReply(m);
         }
       }
@@ -168,15 +218,15 @@
     if (e.type === 'storm') {
       if (e.phase === 'warning') {
         var msg = s.m.comms.on ? 'Solar storm warning received. Crew moving to shelter.' : 'Increased radiation detected on suit sensor. Requesting guidance.';
-        M.logEvent(s, '🌩️', s.m.comms.on ? 'Earth: solar flare detected. Radiation storm inbound.' : 'Suit sensor: radiation rising. No warning from Earth (dish off).', 2);
+        M.logEvent(s, '🌩️', s.m.comms.on ? hq(s).Name + ': ' + (s.site.star ? 'flare detected on ' + s.site.star.name : 'solar flare detected') + '. Radiation storm inbound.' : 'Suit sensor: radiation rising. No warning from ' + hq(s).name + ' (dish off).', 2);
         var r = M.send(s, 'storm', msg);
         return { kind: 'alert', title: 'RADIATION STORM INBOUND', text: msg, sent: r.ok, dur: 7.5 };
       }
       if (e.phase === 'active') { M.logEvent(s, '☢️', 'Radiation storm hitting the outpost.', 2); return null; }
       M.logEvent(s, '✅', 'Storm passed. All clear.', 0); M.flash(s, '✅', 'ALL CLEAR · storm has passed', 20); return null;
     }
-    if (e.type === 'break') { M.logEvent(s, '⚠️', MACH[e.machine].name + ' failure: ' + JA.REPAIRS[e.machine].title, 1); return { kind: 'fault', title: 'SYSTEM FAULT · ' + MACH[e.machine].name.toUpperCase(), text: JA.REPAIRS[e.machine].title + ' Repair on site, or request the procedure from Earth.', dur: 6 }; }
-    if (e.type === 'advice') { M.logEvent(s, '📻', 'Houston: repair procedure for the ' + MACH[e.machine].name + ' received.', 0); return { kind: 'reply', title: 'EARTH REPLY RECEIVED', text: 'HOUSTON: Procedure for the ' + MACH[e.machine].name + ' attached. Go back to the machine to finish the repair.', dur: 6 }; }
+    if (e.type === 'break') { M.logEvent(s, '⚠️', MACH[e.machine].name + ' failure: ' + JA.REPAIRS[e.machine].title, 1); return { kind: 'fault', title: 'SYSTEM FAULT · ' + MACH[e.machine].name.toUpperCase(), text: JA.REPAIRS[e.machine].title + ' Repair on site, or request the procedure from ' + hq(s).name + '.', dur: 6 }; }
+    if (e.type === 'advice') { M.logEvent(s, '📻', hq(s).voice + ': repair procedure for the ' + MACH[e.machine].name + ' received.', 0); return { kind: 'reply', title: hq(s).call === 'RELAY' ? 'RELAY REPLY RECEIVED' : 'EARTH REPLY RECEIVED', text: hq(s).call + ': Procedure for the ' + MACH[e.machine].name + ' attached. Go back to the machine to finish the repair.', dur: 6 }; }
     if (e.type === 'daygoal') { M.logEvent(s, '🎯', 'Daily challenge complete: ' + s.day.goal.text, 0); M.flash(s, '🎯', 'MILESTONE · ' + s.day.goal.text, 25); return null; }
     if (e.type === 'discovery') { M.logEvent(s, '🔬', 'Lab result: ' + e.find.title, 0); return null; }
     if (e.type === 'crisis') { M.logEvent(s, '🚨', 'Crisis: ' + (JA.crisis.view(s) || {}).title, 2); return null; }
@@ -251,20 +301,20 @@
   function drawMain(ctx, w, h, s, t) {
     var mdl = M.model(s), al = M.alert(s), b = box(s);
     bg(ctx, w, h);
-    header(ctx, w, 'MISSION CONTROL · OUTPOST-01 · ' + (mdl.moon ? 'MOON' : 'MARS'), dw(s) + ' ' + s.sol + ' · ' + todayDate(s), al.lvl);
+    header(ctx, w, 'MISSION CONTROL · OUTPOST-01 · ' + String(s.site.short).toUpperCase(), dw(s) + ' ' + s.sol + ' · ' + todayDate(s), al.lvl);
     // left: the instrument
     var ox = w * 0.2, oy = 44 + (h - 44) * 0.47, orad = Math.min(w * 0.17, (h - 44) * 0.4);
     ctx.fillStyle = MUTED; ctx.font = '600 15px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(mdl.moon ? 'EARTH–MOON LINK · 384,400 KM' : 'EARTH–MARS LINK · ' + Math.round(mdl.p.km / 1e6) + ' MILLION KM', ox, 62);
+    ctx.fillText(mdl.relay ? 'OUTPOST–RELAY LINK · ABOUT 600,000 KM' : mdl.near ? 'EARTH–MOON LINK · 384,400 KM' : 'EARTH–MARS LINK · ' + Math.round(mdl.p.km / 1e6) + ' MILLION KM', ox, 62);
     M.drawOrbit(ctx, ox, oy + 8, orad, mdl, t, { scale: 1 });
     ctx.fillStyle = MUTED; ctx.font = '500 13px ' + MONO;
-    ctx.fillText('mean orbits · about ±3%', ox, h - 14);
+    ctx.fillText(mdl.relay ? 'made up · not to scale' : 'mean orbits · about ±3%', ox, h - 14);
     // middle: the link
     var lx = w * 0.42, lw = w * 0.3, up = mdl.cur && mdl.cur.dir === 'up';
     ctx.textAlign = 'left'; ctx.fillStyle = MUTED; ctx.font = '600 15px ' + MONO;
-    ctx.fillText(mdl.moon ? 'MOON → EARTH' : up ? 'MARS → EARTH' : mdl.cur ? 'EARTH → MARS' : 'ONE-WAY LIGHT TIME', lx, 66);
+    ctx.fillText(mdl.relay ? (up ? 'OUTPOST → RELAY' : mdl.cur ? 'RELAY → OUTPOST' : 'ONE-WAY LIGHT TIME') : mdl.near ? 'MOON → EARTH' : up ? 'MARS → EARTH' : mdl.cur ? 'EARTH → MARS' : 'ONE-WAY LIGHT TIME', lx, 66);
     ctx.fillStyle = INK; ctx.font = '700 48px ' + MONO;
-    ctx.fillText(mdl.moon ? '1.3 s' : mmss(mdl.minutes), lx, 106);
+    ctx.fillText(mdl.relay ? '2 s' : mdl.near ? '1.3 s' : mmss(mdl.minutes), lx, 106);
     var status, sc;
     if (!mdl.dish) { status = mdl.dishBroken ? 'DISH FAULT · NO LINK' : 'DISH UNPOWERED · NO LINK'; sc = BAD; }
     else if (mdl.cur) { status = 'SIGNAL IN TRANSIT · ' + Math.round(mdl.prog * 100) + '%'; sc = POWER; }
@@ -275,8 +325,8 @@
     var last = null; for (var i = b.log.length - 1; i >= 0 && !last; i--) if (b.log[i].state !== 'queued') last = b.log[i];
     ctx.fillStyle = MUTED; ctx.font = '600 14px ' + MONO; ctx.fillText('LAST TRANSMISSION', lx, 196);
     ctx.fillStyle = INK; ctx.font = '500 16px ' + FONT;
-    wrapText(ctx, last ? (last.dir === 'up' ? 'OUTPOST-01: ' : 'HOUSTON: ') + (last.text || '…') : 'No transmissions yet this mission.', lx, 218, lw, 20, 3);
-    ctx.fillStyle = MUTED; ctx.font = '600 14px ' + MONO; ctx.fillText('PENDING ' + mdl.pending + '  ·  ' + (mdl.moon ? 'NEAR-INSTANT LINK' :'MARS–EARTH: ' + mdl.align.toUpperCase()), lx, h - 22);
+    wrapText(ctx, last ? (last.dir === 'up' ? 'OUTPOST-01: ' : hq(s).call + ': ') + (last.text || '…') : 'No transmissions yet this mission.', lx, 218, lw, 20, 3);
+    ctx.fillStyle = MUTED; ctx.font = '600 14px ' + MONO; ctx.fillText('PENDING ' + mdl.pending + '  ·  ' + (mdl.relay ? 'RELAY LINK · EARTH YEARS AWAY' : mdl.near ? 'NEAR-INSTANT LINK' :'MARS–EARTH: ' + mdl.align.toUpperCase()), lx, h - 22);
     // right: the log
     var rx = w * 0.75, rw = w * 0.23;
     ctx.fillStyle = MUTED; ctx.font = '600 15px ' + MONO; ctx.fillText('MISSION LOG', rx, 66);
@@ -307,7 +357,7 @@
     var water = s.water != null ? clamp(s.water / 100, 0, 1) : clamp(m.food.water / R.waterSols, 0, 1);
     bar(ctx, x, 184, bw, water, '#6fb9ff', 'WATER TANK (crew + plants)', Math.round(water * 100) + '%');
     led(ctx, x + 6, 234, growing > 0, FOOD, 'Greenhouse · ' + growing + ' of ' + beds.length + ' beds growing' + (m.food.lamp <= 0 && growing ? ' · lamps off' : water <= 0 && growing ? ' · no water' : ''));
-    led(ctx, x + 6, 262, true, m.air.broken ? BAD : m.air.power > 0 ? OK : AMBER, 'Air Maker · ' + (m.air.broken ? 'FAULT' : m.air.power > 0 ? 'running · ' + m.air.queue + ' ice queued' : 'unpowered'));
+    led(ctx, x + 6, 262, true, m.air.broken ? BAD : m.air.power > 0 ? OK : AMBER, 'Air Maker · ' + (m.air.broken ? 'FAULT' : m.air.power > 0 ? 'running · ' + m.air.queue + (JA.iceWell(s) ? ' cans queued' : ' ice queued') : 'unpowered'));
     ctx.fillStyle = MUTED; ctx.font = '500 13px ' + MONO; ctx.fillText('FOOD STORE ' + pct(s.food) + '% · dinner −' + sim.dinner(s), x, h - 16);
   }
   function drawPower(ctx, w, h, s) {
@@ -340,7 +390,7 @@
     if (o && ph === 'none') { ctx.fillStyle = 'rgba(255,255,255,0.08)'; rr(ctx, x, 206, bw, 8, 4); ctx.fill(); ctx.fillStyle = o.chance >= 60 ? BAD : o.chance >= 40 ? AMBER : OK; rr(ctx, x, 206, Math.max(8, bw * o.chance / 100), 8, 4); ctx.fill(); }
     ctx.fillStyle = MUTED; ctx.font = '600 14px ' + MONO; ctx.fillText('SURFACE', x, 236);
     ctx.fillStyle = INK; ctx.font = '600 18px ' + FONT; ctx.fillText(look.icon + ' ' + look.label + ' · ≈' + Math.round(s.cellsToday) + ' cells of sun', x, 256);
-    var inst = JA.INSTRUMENTS[s.site.id].map(function (d) { return (s.inst[d.id] ? '● ' : '○ ') + d.name; }).join('   ');
+    var inst = JA.pick(s, JA.INSTRUMENTS).map(function (d) { return (s.inst[d.id] ? '● ' : '○ ') + d.name; }).join('   ');
     ctx.fillStyle = MUTED; ctx.font = '500 13px ' + MONO; ctx.fillText('INSTRUMENTS  ' + inst, x, h - 16);
   }
   M.screen = function (id, ctx, w, h, s, t) {
@@ -356,31 +406,33 @@
   function meter(label, v, color, value) { return '<div class="mc-meter"><span>' + label + '</span><div class="mc-bar"><i style="width:' + pct(v * 100) + '%;background:' + color + '"></i></div><b>' + value + '</b></div>'; }
   function logHtml(s, n) {
     var ev = box(s).events.slice(-n).reverse();
-    if (!ev.length) return '<p class="sub">Nothing logged yet. Storms, faults, calls to Earth and milestones will appear here.</p>';
+    if (!ev.length) return '<p class="sub">Nothing logged yet. Storms, faults, calls to ' + JA.homeName(s) + ' and milestones will appear here.</p>';
     return '<ul class="mc-log">' + ev.map(function (e) { return '<li class="l' + e.lvl + '"><em>' + dw(s).slice(0, 1) + e.sol + ' ' + clockText(e.t) + '</em><span>' + e.icon + ' ' + esc(e.text) + '</span></li>'; }).join('') + '</ul>';
   }
   function clockText(t) { var m = Math.floor(t / 60), sec = Math.floor(t % 60); return m + ':' + ('0' + sec).slice(-2); }
   function commsHtml(s, mdl) {
-    var last = null, b = box(s); for (var i = b.log.length - 1; i >= 0 && !last; i--) if (b.log[i].state !== 'queued') last = b.log[i];
+    var last = null, b = box(s), H = hq(s); for (var i = b.log.length - 1; i >= 0 && !last; i--) if (b.log[i].state !== 'queued') last = b.log[i];
     var status = !mdl.dish ? '<span class="mc-bad">NO LINK · ' + (mdl.dishBroken ? 'dish fault' : 'dish unpowered') + '</span>'
-      : mdl.cur ? '<span class="mc-warn">SIGNAL IN TRANSIT · ' + (mdl.cur.dir === 'up' ? 'to Earth' : 'from Earth') + ' · ' + Math.round(mdl.prog * 100) + '%</span>' : '<span class="mc-ok">LINK OPEN · listening</span>';
-    return '<div class="mc-link"><div><small>' + (mdl.moon ? 'MOON → EARTH' : 'ONE-WAY LIGHT TIME') + '</small><b>' + (mdl.moon ? '1.3 s' : mmss(mdl.minutes)) + '</b><small>' + (mdl.moon ? '384,400 km' : Math.round(mdl.p.km / 1e6) + ' million km · ' + mdl.align) + '</small></div>' +
-      '<div><small>STATUS</small>' + status + '<small>pending ' + mdl.pending + ' · last: ' + (last ? esc((last.dir === 'up' ? 'you → Earth: ' : 'Earth → you: ') + (last.text || '…')).slice(0, 90) : 'none') + '</small></div></div>';
+      : mdl.cur ? '<span class="mc-warn">SIGNAL IN TRANSIT · ' + (mdl.cur.dir === 'up' ? 'to ' + H.name : 'from ' + H.name) + ' · ' + Math.round(mdl.prog * 100) + '%</span>' : '<span class="mc-ok">LINK OPEN · listening</span>';
+    return '<div class="mc-link"><div><small>' + (mdl.relay ? 'OUTPOST → RELAY' : mdl.near ? 'MOON → EARTH' : 'ONE-WAY LIGHT TIME') + '</small><b>' + (mdl.relay ? '2 s' : mdl.near ? '1.3 s' : mmss(mdl.minutes)) + '</b><small>' + (mdl.relay ? 'about 600,000 km · Earth is years away' : mdl.near ? '384,400 km' : Math.round(mdl.p.km / 1e6) + ' million km · ' + mdl.align) + '</small></div>' +
+      '<div><small>STATUS</small>' + status + '<small>pending ' + mdl.pending + ' · last: ' + (last ? esc((last.dir === 'up' ? 'you → ' + H.short + ': ' : H.short + ' → you: ') + (last.text || '…')).slice(0, 90) : 'none') + '</small></div></div>';
   }
   // ctx: { s, onSend(result, kind, text), close }
   M.open = function (id, ctx) {
     var s = ctx.s, U = JA.ui, sim = JA.sim, html, actions = {}, mdl = M.model(s);
-    function closeBtn() { return '<div class="modal-actions">' + (id === 'console' && JA.sunwatch ? '<button class="btn ghost" data-act="sun">☀️ Sun Watch</button>' : '') + '<button class="btn primary" data-act="ok">Back to the room</button></div>'; }
+    function closeBtn() { return '<div class="modal-actions">' + (id === 'console' && JA.sunwatch ? '<button class="btn ghost" data-act="sun">' + (s.weatherSource === 'star' ? '⭐ Star Watch' : '☀️ Sun Watch') + '</button>' : '') + '<button class="btn primary" data-act="ok">Back to the room</button></div>'; }
     actions.ok = function () { JA.audio.play('tap'); U.closeModal(); };
     if (id === 'console') {
-      var can = M.canSend(s);
-      html = '<div class="mc-card"><div class="mc-head"><small>📻 Mission Control workstation</small><h2>Earth link</h2></div>' +
-        '<canvas class="mc-orbit" width="640" height="360" aria-label="Diagram of the Sun, Earth and Mars with the radio link between Earth and ' + (mdl.moon ? 'the Moon' : 'Mars') + '"></canvas>' +
+      var can = M.canSend(s), H = hq(s);
+      html = '<div class="mc-card"><div class="mc-head"><small>📻 Mission Control workstation</small><h2>' + (mdl.relay ? 'Relay link' : 'Earth link') + '</h2></div>' +
+        '<canvas class="mc-orbit" width="640" height="360" aria-label="' + (mdl.relay ? 'Diagram of ' + esc(s.site.name) + ' with the relay ship in orbit and the radio link between the ship and the outpost'
+          : 'Diagram of the Sun, Earth and Mars with the radio link between Earth and ' + (mdl.near ? 'the Moon' : 'Mars')) + '"></canvas>' +
         commsHtml(s, mdl) +
-        '<p class="sub">Radio travels at the speed of light, and light still needs ' + (mdl.moon ? '1.3 seconds to reach the Moon' : mmss(mdl.minutes) + ' to cross ' + Math.round(mdl.p.km / 1e6) + ' million km') + '. Every message waits that long each way. Positions come from the mean orbits of the planets for today\'s real date, about ±3%.</p>' +
+        (mdl.relay ? '<p class="sub">Radio travels at the speed of light. The relay ship is about 600,000 km up, so every message takes about 2 seconds each way. Earth is so far away that a message would take years, so Mission Control lives on the ship. ' + esc(s.site.name) + ', its relay ship and these numbers are made up; the speed of light is real.</p>'
+          : '<p class="sub">Radio travels at the speed of light, and light still needs ' + (mdl.near ? '1.3 seconds to reach the Moon' : mmss(mdl.minutes) + ' to cross ' + Math.round(mdl.p.km / 1e6) + ' million km') + '. Every message waits that long each way. Positions come from the mean orbits of the planets for today\'s real date, about ±3%.</p>') +
         '<h3>Transmit</h3><div class="mc-actions">' +
-        '<button class="opt" data-act="status"' + (can.ok ? '' : ' disabled') + '><b>📨 Send status report</b><span>Air, food and radiation readings. Houston answers after a full round trip.</span></button>' +
-        '<button class="opt" data-act="help"' + (can.ok ? '' : ' disabled') + '><b>🆘 Request guidance</b><span>' + (s.glitch && s.glitch.state === 'broken' ? 'A machine is broken: Earth will send the repair procedure.' : 'Ask Earth what to fix first. The answer takes two light-trips.') + '</span></button></div>' +
+        '<button class="opt" data-act="status"' + (can.ok ? '' : ' disabled') + '><b>📨 Send status report</b><span>Air, food and radiation readings. ' + H.voice + ' answers after a full round trip.</span></button>' +
+        '<button class="opt" data-act="help"' + (can.ok ? '' : ' disabled') + '><b>🆘 Request guidance</b><span>' + (s.glitch && s.glitch.state === 'broken' ? 'A machine is broken: ' + H.name + ' will send the repair procedure.' : 'Ask ' + H.name + ' what to fix first. The answer takes two light-trips.') + '</span></button></div>' +
         (can.ok ? '' : '<p class="sub mc-bad">' + esc(can.msg) + '</p>') +
         '<h3>Mission log</h3>' + logHtml(s, 8) + closeBtn() + '</div>';
       actions.sun = function () { JA.audio.play('tap'); U.closeModal(); if (JA.sunwatch) JA.sunwatch.open(s, ctx.weather); };
@@ -398,9 +450,9 @@
       html = '<div class="mc-card"><div class="mc-head"><small>🫁 Life-support station</small><h2>Air, water, food</h2></div>' +
         meter('Air', s.air / 100, AIR, pct(s.air) + '%') + (filt != null ? meter('CO₂ filter', filt / 100, stale ? BAD : filt < R.filterWarn ? AMBER : OK, Math.round(filt) + '% clean') : '') +
         meter('Water tank', water / 100, '#6fb9ff', Math.round(water) + '%') + meter('Food store', s.food / 100, FOOD, pct(s.food) + '%') +
-        row('💨', 'Crew breathing · ' + Math.round(need * left) + ' air still needed today', 'The crew draws about ' + Math.round(need) + ' air per shift' + (stale ? ', more while the air is stale' : '') + '. The Air Maker turns one ice chunk into ' + R.airPerIce + ' air, but only with a power cell plugged in.', s.air < need * left ? 'alert' : 'good') +
+        row('💨', 'Crew breathing · ' + Math.round(need * left) + ' air still needed today', 'The crew draws about ' + Math.round(need) + ' air per shift' + (stale ? ', more while the air is stale' : '') + '. The Air Maker turns one ' + JA.waterWords(s).chunk + ' into ' + R.airPerIce + ' air, but only with a power cell plugged in.', s.air < need * left ? 'alert' : 'good') +
         row('🧪', 'CO₂ filter · ' + (stale ? 'FULL' : filt != null ? Math.round(filt) + '% clean' : 'nominal'), stale ? 'The filter is saturated, carbon dioxide is building up and the tanks must push out extra air. A power cell at the Air Scrubber bakes it clean.' : 'Every breath out is CO₂. On the Space Station it is soaked up by beds of zeolite that are baked clean and used again; a failed scrubber is one of the fastest ways a cabin becomes dangerous.', stale ? 'alert' : '') +
-        row('💧', 'Water tank · ' + Math.round(water) + '%' + (recycle != null ? ' · recycler returns ' + recycle + '%' : ''), 'One tank serves the crew and the plants, and only ice adds new water. Plants need light AND water, so every ice chunk is a choice between the Air Maker and this tank. On the Space Station about 98% of water is recycled, even sweat and breath.', water <= 0 ? 'alert' : '') +
+        row('💧', 'Water tank · ' + Math.round(water) + '%' + (recycle != null ? ' · recycler returns ' + recycle + '%' : ''), 'One tank serves the crew and the plants, and only ' + (JA.iceWell(s) ? 'well water' : 'ice') + (s.site.dew ? ' and dew add' : ' adds') + ' new water. Plants need light AND water, so every ice chunk is a choice between the Air Maker and this tank. On the Space Station about 98% of water is recycled, even sweat and breath.', water <= 0 ? 'alert' : '') +
         row('🥬', 'Greenhouse · ' + growing + ' of ' + m.food.beds.length + ' beds growing', 'Dinner tonight costs ' + sim.dinner(s) + ' food. A bed needs about a full ' + dw(s).toLowerCase() + ' to ripen, so what you plant now is tomorrow\'s meal, not tonight\'s.', s.sol < s.totalSols && s.food < sim.dinner(s) ? 'alert' : '') +
         closeBtn() + '</div>';
     } else if (id === 'power') {
@@ -410,19 +462,19 @@
         pw.eff.map(function (e, k) { return meter('Panel ' + (k + 1), e, e > 0.85 ? OK : e > 0.65 ? AMBER : BAD, Math.round(e * 100) + '%'); }).join('') +
         row(pw.low ? '🟠' : '🟢', pw.low ? 'Reduced power: no reserve and nothing running' : 'Power ' + (pw.loads ? pw.loads + ' load' + (pw.loads > 1 ? 's' : '') + ' running' : 'nominal · no loads yet'),
           'Every power cell is one choice. Air Maker, Greenhouse lamps, Lab, Soil Bagger, Radio Dish and the rover all drink from the same rack, and panels stop charging after ' + Math.round(R.chargeSpan * 100) + '% of the shift when the Sun gets low.', pw.low ? 'alert' : 'good') +
-        row('☀️', 'Panels at ' + Math.round(pw.eff.reduce(function (a, b) { return a + b; }, 0) / 3 * 100) + '% average', s.site.id === 'mars' ? 'Dust settles on the glass all day; brush a panel and it is back to 100%. The real Opportunity rover lived 14 years longer than planned because wind gusts cleaned its panels.' : 'The Sun moves across the sky, so a fixed panel slowly loses output. Turn it to face the Sun again and it is back to 100%.', '') +
+        row('☀️', 'Panels at ' + Math.round(pw.eff.reduce(function (a, b) { return a + b; }, 0) / 3 * 100) + '% average', s.site.dusty ? 'Dust settles on the glass all day; brush a panel and it is back to 100%. The real Opportunity rover lived 14 years longer than planned because wind gusts cleaned its panels.' : 'The Sun moves across the sky, so a fixed panel slowly loses output. Turn it to face the Sun again and it is back to 100%.', '') +
         row('🚙', 'Rover battery ' + Math.round(mm.rover.charge / roverCap(s) * 100) + '%', 'The battery only drains while driving. One cell gives ' + R.roverPerCell + ' seconds of driving.', '') +
         closeBtn() + '</div>';
     } else {
       var ph = sim.stormPhase(s), env = sim.env(s), look = s.site.env[env.kind], o = outlookOf(s), sf = sim.shield(s), wx = sim.weather(s);
-      var fc = o ? 'Storm odds today: ' + o.chance + '% (' + o.words + ')' : s.forecast ? (wx && wx.level ? ['', 'Small', 'Medium', 'BIG'][wx.level] + ' solar storm expected today' : 'Quiet Sun today (forecast from Earth)') : 'No forecast today (the dish was off)';
-      html = '<div class="mc-card"><div class="mc-head"><small>🔭 Science · environment station</small><h2>Radiation and the Sun</h2></div>' +
+      var fc = o ? 'Storm odds today: ' + o.chance + '% (' + o.words + ')' : s.forecast ? (wx && wx.level ? ['', 'Small', 'Medium', 'BIG'][wx.level] + ' solar storm expected today' : (s.site.star ? 'Quiet star today' : 'Quiet Sun today') + ' (forecast from ' + hq(s).name + ')') : 'No forecast today (the dish was off)';
+      html = '<div class="mc-card"><div class="mc-head"><small>🔭 Science · environment station</small><h2>Radiation and ' + (s.site.star ? esc(s.site.star.name) : 'the Sun') + '</h2></div>' +
         meter('Radiation badge', s.dose / 100, DOSE, pct(s.dose) + '%') + meter('Dome shielding', sf, '#c9a6ff', Math.round(sf * 100) + '%') +
         (o && ph === 'none' ? meter('Storm odds today', o.chance / 100, o.chance >= 60 ? BAD : o.chance >= 40 ? AMBER : OK, o.chance + '% · ' + o.words) : '') +
         row(ph === 'active' ? '☢️' : ph === 'warning' ? '🌩️' : ph === 'over' ? '✅' : '🌤️', ph === 'active' ? 'Radiation storm in progress' : ph === 'warning' ? 'Storm arriving: stay inside' : ph === 'over' ? 'Storm passed: all clear' : fc,
           ph === 'none' ? 'If a storm comes, the Radio Dish gives ' + R.warnDish + ' s of warning; without it the suit sensor gives only ' + R.warnNoDish + ' s. Inside, the walls and ' + s.bags + ' soil bags block ' + Math.round(sf * 100) + '% of the radiation.' : 'A radiation storm is a flood of fast particles from a solar flare. Inside, the walls and ' + s.bags + ' soil bags block ' + Math.round(sf * 100) + '% of it.', ph === 'active' || ph === 'warning' ? 'alert' : '') +
         row(look.icon, look.label + ' · about ' + Math.round(s.cellsToday) + ' power cells of sunlight', look.why, '') +
-        row('📡', 'Instruments deployed: ' + Object.keys(s.inst).length + ' of ' + JA.INSTRUMENTS[s.site.id].length, JA.INSTRUMENTS[s.site.id].map(function (d) { return (s.inst[d.id] ? '✓ ' : '○ ') + d.name; }).join(' · ') + '. Each one adds a perk: the radiation sensor lengthens storm warnings; the weather station adds tomorrow\'s sunlight forecast.', '') +
+        row('📡', 'Instruments deployed: ' + Object.keys(s.inst).length + ' of ' + JA.pick(s, JA.INSTRUMENTS).length, JA.pick(s, JA.INSTRUMENTS).map(function (d) { return (s.inst[d.id] ? '✓ ' : '○ ') + d.name; }).join(' · ') + '. Each one adds a perk: the radiation sensor lengthens storm warnings; the weather station adds tomorrow\'s sunlight forecast.', '') +
         '<h3>Mission log</h3>' + logHtml(s, 6) + closeBtn() + '</div>';
     }
     U.modal(html, { cls: 'wide', actions: actions });
@@ -452,8 +504,8 @@
     e.className = 'kind-' + data.kind;
     e.querySelector('.mc-title').textContent = data.title || '';
     e.querySelector('.mc-msg').textContent = data.text || '';
-    e.querySelector('.mc-delay').textContent = mdl ? (mdl.moon ? 'ONE-WAY DELAY 1.3 s' : 'ESTIMATED ONE-WAY DELAY ' + mmss(mdl.minutes)) : '';
-    e.querySelector('.mc-dir').textContent = msg ? (msg.dir === 'up' ? (mdl.moon ? 'MOON → EARTH' : 'MARS → EARTH') : (mdl.moon ? 'EARTH → MOON' : 'EARTH → MARS')) : (mdl && !mdl.dish ? 'NO LINK · DISH UNPOWERED' : 'LINK OPEN');
+    e.querySelector('.mc-delay').textContent = mdl ? (mdl.relay ? 'ONE-WAY DELAY ABOUT 2 s' : mdl.near ? 'ONE-WAY DELAY 1.3 s' : 'ESTIMATED ONE-WAY DELAY ' + mmss(mdl.minutes)) : '';
+    e.querySelector('.mc-dir').textContent = msg ? (mdl.relay ? (msg.dir === 'up' ? 'OUTPOST → RELAY' : 'RELAY → OUTPOST') : msg.dir === 'up' ? (mdl.near ? 'MOON → EARTH' : 'MARS → EARTH') : (mdl.near ? 'EARTH → MOON' : 'EARTH → MARS')) : (mdl && !mdl.dish ? 'NO LINK · DISH UNPOWERED' : 'LINK OPEN');
     M.overlayFrame(s);
   };
   M.overlayFrame = function (s) {

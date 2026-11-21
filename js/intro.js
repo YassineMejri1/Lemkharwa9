@@ -32,24 +32,46 @@
   // vo: the recorded line in audio/landing/ (each one fits before the next line starts).
   // Lines without a recording fall back to the read-aloud voice.
   var VO = 'audio/landing/';
+  // The lines of the film that belong to one planet: [the words, the recording in audio/landing/]. A line without a
+  // recording (null) is read by the read-aloud voice. home: the "my home for the next N days" recording for each mission length.
+  var FILM = {
+    moon: { first: '09-first-step-moon', home: { 5: '13-home-5-days', 8: '14-home-8-days', 10: '15-home-10-days' },
+      bootprint: ['My first bootprint. With no wind and no rain, it could stay here for a million years.', '10-bootprint-moon'],
+      air: ['No air. No sound. Only my own breathing.', '11-no-air-moon'],
+      gravity: ['And gravity so gentle that every step is a little flight.', '12-gravity-moon'],
+      earth: ['And that is Earth. Everyone I have ever known is on that small blue ball.', '16-earth-moon'],
+      title: '384,400 km from home', light: 0.12, hop: 1.9, endPitch: 0.1, faceEarth: true },
+    mars: { first: '17-first-step-mars', home: { 5: '21-home-5-sols', 8: '22-home-8-sols', 10: '23-home-10-sols' },
+      bootprint: ['My first bootprint. One day the wind will sweep it away. But not today.', '18-bootprint-mars'],
+      air: ['Thin, cold air, and a sky the colour of butterscotch.', '19-thin-air-mars'],
+      gravity: ['And gravity so gentle that I weigh about a third of what I do on Earth.', '20-gravity-mars'],
+      earth: ['Somewhere in that sky, Earth is just a pale dot of light.', '24-earth-mars'],
+      title: 'Seven months from home', light: 0.2, hop: 2.7, endPitch: 0.07, faceEarth: false },
+    // Sahrun (made up): no recordings yet, so the read-aloud voice speaks its lines
+    sahrun: { first: null, home: {},
+      bootprint: ['My first bootprint. By tonight the wind will have filled it with sand.', null],
+      air: ['Hot, dry wind, and sand hissing against my visor.', null],
+      gravity: ['Half of Earth\'s gravity. Every step is a little bounce.', null],
+      earth: ['Earth is so far away that it is just one faint star among thousands.', null],
+      title: 'A made-up world, far from home', light: 0.2, hop: 3.1, endPitch: 0.07, faceEarth: false }
+  };
   function script(s) {
-    var moon = s.site.id === 'moon', dw = s.site.dayWord.toLowerCase() + 's';
-    var home = (moon ? { 5: '13-home-5-days', 8: '14-home-8-days', 10: '15-home-10-days' } : { 5: '21-home-5-sols', 8: '22-home-8-sols', 10: '23-home-10-sols' })[s.totalSols];
+    var F = JA.pick(s, FILM), dw = s.site.dayWord.toLowerCase() + 's';
+    var home = F.home[s.totalSols];
     return [
       { t: 4.6, who: 'Mission Control', text: 'Outpost One, you are GO for landing.', dur: 3.0, radio: true, vo: '01-go-for-landing' },
       { t: 8.4, text: 'There it is. The robots finished building it last week.', dur: 3.4, vo: '05-there-it-is' },
       { t: 12.6, who: 'Mission Control', text: 'Sixty metres… thirty… the engine is kicking up dust!', dur: 3.6, radio: true, vo: '02-sixty-metres' },
       { t: TM.land + 0.3, who: 'Mission Control', text: 'Contact! Engines off.', dur: 2.3, radio: true, vo: '03-contact' },
       { t: TM.land + 2.8, text: 'We made it.', dur: 1.9, vo: '06-we-made-it' },
-      { t: TM.step + 0.4, text: 'Here goes. My first step on ' + s.site.name + '.', dur: 2.6, vo: moon ? '09-first-step-moon' : '17-first-step-mars' },
-      { t: TM.step + 3.7, text: moon ? 'My first bootprint. With no wind and no rain, it could stay here for a million years.'
-        : 'My first bootprint. One day the wind will sweep it away. But not today.', dur: 4.2, vo: moon ? '10-bootprint-moon' : '18-bootprint-mars' },
-      { t: TM.walk + 1.8, text: moon ? 'No air. No sound. Only my own breathing.' : 'Thin, cold air, and a sky the colour of butterscotch.', dur: 3.4, vo: moon ? '11-no-air-moon' : '19-thin-air-mars' },
-      { t: TM.walk + 6.0, text: moon ? 'And gravity so gentle that every step is a little flight.' : 'And gravity so gentle that I weigh about a third of what I do on Earth.', dur: 3.8, vo: moon ? '12-gravity-moon' : '20-gravity-mars' },
+      { t: TM.step + 0.4, text: 'Here goes. My first step on ' + s.site.name + '.', dur: 2.6, vo: F.first },
+      { t: TM.step + 3.7, text: F.bootprint[0], dur: 4.2, vo: F.bootprint[1] },
+      { t: TM.walk + 1.8, text: F.air[0], dur: 3.4, vo: F.air[1] },
+      { t: TM.walk + 6.0, text: F.gravity[0], dur: 3.8, vo: F.gravity[1] },
       { t: TM.walk2 + 1.2, text: 'That rock looks like a good seat.', dur: 3.0, vo: '07-good-seat' },
       { t: TM.sit + 2.7, text: 'Stop. Sit. Breathe.', dur: 2.3, vo: '08-stop-sit-breathe' },
       { t: TM.vista + 2.6, text: 'That is the outpost. My home for the next ' + s.totalSols + ' ' + dw + '.', dur: 3.6, vo: home },
-      { t: TM.vista + 6.8, text: moon ? 'And that is Earth. Everyone I have ever known is on that small blue ball.' : 'Somewhere in that sky, Earth is just a pale dot of light.', dur: 3.9, vo: moon ? '16-earth-moon' : '24-earth-mars' },
+      { t: TM.vista + 6.8, text: F.earth[0], dur: 3.9, vo: F.earth[1] },
       { t: TM.vista + 11.0, who: 'Mission Control', text: 'Ready when you are, Commander.', dur: 2.6, radio: true, vo: '04-ready-commander' }
     ];
   }
@@ -232,7 +254,7 @@
         }
       }
     }
-    $('cine-data').textContent = landed ? 'ALT 000 m   ·   ENGINE OFF   ·   ' + (st.moon ? 'MOON' : 'MARS') + ' SURFACE'
+    $('cine-data').textContent = landed ? 'ALT 000 m   ·   ENGINE OFF   ·   ' + st.F.name + ' SURFACE'
       : 'ALT ' + ('00' + Math.round(alt)).slice(-3) + ' m   ·   DESCENT ' + vel.toFixed(1) + ' m/s   ·   FUEL ' + Math.round(11 - 6 * u) + '%';
   }
   function touchdown() {
@@ -300,7 +322,7 @@
   }
   function shotWalk(t, dt) {
     var e = st.eye, tau = t - TM.walk, speed = 2.3 * ease(seg(tau, 0, 1.4));
-    if (!st.fx.hop && tau >= 6.4) { st.fx.hop = 1; st.w.air = true; st.w.vy = st.moon ? 1.9 : 2.7; Au.play('jump'); }
+    if (!st.fx.hop && tau >= 6.4) { st.fx.hop = 1; st.w.air = true; st.w.vy = st.F.hop; Au.play('jump'); }
     walk(dt, speed, st.P1.x, st.P1.z);
     var glance = ease(seg(tau, 1.6, 4.2)) * (1 - ease(seg(tau, 7.4, 10.4)));
     e.yaw = st.yawE + glance * 0.62 + Math.sin(tau * 0.5) * 0.03;
@@ -391,7 +413,7 @@
   // ---------- the running order ----------
   function events(s) {
     return [
-      { t: 0.05, fn: function () { title(s.site.place, s.site.id === 'moon' ? 'The Moon' : 'Mars', s.site.id === 'moon' ? '384,400 km from home' : 'Seven months from home'); } },
+      { t: 0.05, fn: function () { title(s.site.place, s.site.title, JA.pick(s, FILM).title); } },
       { t: TM.descent - 0.5, fn: function () { title(); cls('win', true); cls('data', true); U.fade(false); } },
       { t: TM.land, fn: touchdown },
       { t: TM.fade1, fn: function () { U.fade(true); } },
@@ -421,19 +443,20 @@
     var sF = Math.max(sC + 0.06 + Math.min(out, 0.62) + SOLE_Z, seat.clear + 0.27), sQ = Math.max(seat.edge, seat.clear) + 0.44;
     var C = { x: R.x - e.x * sC, z: R.z - e.z * sC };
     var yawRocket = Math.atan2(pad.x - C.x, pad.z - C.z), yawSit = near(yawRocket, yawE + Math.PI);
-    var yawHab = near(Math.atan2(-C.x, -C.z), yawSit), moon = site === 'moon';
+    var yawHab = near(Math.atan2(-C.x, -C.z), yawSit), F = JA.pick(site, FILM);
+    F.name = JA.siteOf(site).short.toUpperCase();
     var yawEarth = near(Math.atan2(-0.5, -0.84), yawSit);
     st = {
-      t: 0, done: done, moon: moon, pad: pad, dir: dir, dirYaw: Math.atan2(dir.x, dir.z), e: e, yawE: yawE, S: S, R: R, C: C,
+      t: 0, done: done, F: F, pad: pad, dir: dir, dirYaw: Math.atan2(dir.x, dir.z), e: e, yawE: yawE, S: S, R: R, C: C,
       P1: { x: S.x + e.x * STEP, z: S.z + e.z * STEP }, P2: { x: R.x - e.x * (sQ + walk2Length()), z: R.z - e.z * (sQ + walk2Length()) }, Q: null,
       Q2: { x: R.x - e.x * (sF - 0.06 - SOLE_Z), z: R.z - e.z * (sF - 0.06 - SOLE_Z) },
       seatY: seat.top + SEAT_HIP - HIP_SIT, seat: seat,
       padTop: A.groundAt(S.x, S.z), groundP1: Tn.height(S.x + e.x * STEP, S.z + e.z * STEP),
-      yawSit: yawSit, yawEnd: moon ? yawHab * 0.45 + yawEarth * 0.55 : yawHab - 0.42, pitchEnd: moon ? 0.1 : 0.07,
+      yawSit: yawSit, yawEnd: F.faceEarth ? yawHab * 0.45 + yawEarth * 0.55 : yawHab - 0.42, pitchEnd: F.endPitch,
       eye: { x: pad.x, y: pad.y + 260, z: pad.z, yaw: 0, pitch: -1, roll: 0, fov: 58 },
       w: { phase: 0, step: 0, dist: 0, hop: 0, vy: 0, air: false },
       sitQ: 0, lean: 0, headSide: 0, duck: 0, body: false, bodyYaw: yawE, fx: {}, rum: 0, lineOff: 0,
-      dustCol: moon ? 0xb8b9c4 : 0xd9a070, cues: script(s), ci: 0, ev: events(s), ei: 0, breath: 2
+      dustCol: JA.siteOf(site).colors.dust, cues: script(s), ci: 0, ev: events(s), ei: 0, breath: 2
     };
     // the boots: standing on the pad, the prints out on the dust past its sloping rim, and resting by the rock
     st.home = [spot(0, S.x, S.z, yawE), spot(1, S.x, S.z, yawE)];
@@ -445,7 +468,7 @@
     Au.music(null); Au.scene({ place: 'cabin', site: site });
     st.cues.forEach(function (c) { if (c.vo) Au.preloadVoice(VO + c.vo + '.mp3'); });   // this film's lines, ready before they are needed
     A.astro.mode = 'hidden';
-    W.env.t = moon ? 0.12 : 0.2;
+    W.env.t = F.light;
     W.cam.mode = 'cine';
     $('cine').className = ''; $('cine-line').className = ''; title();
     document.body.classList.add('cine');

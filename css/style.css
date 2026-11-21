@@ -240,6 +240,7 @@ body.touch #hands, body.touch #rover-hud { bottom: calc(112px + var(--safe-b)); 
 .info-row.good { box-shadow: inset 0 0 0 2px var(--ok); }
 .tagline { display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; background: var(--air); color: #05263a; margin-right: 6px; vertical-align: 2px; }
 .tagline.archive { background: var(--sci); color: #3a2200; }
+.tagline.made { background: #e8b26a; color: #3a1f00; }      /* made up by the game (a made-up star), never real data */
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; align-items: center; margin: 8px 0; font-size: 0.95rem; }
 .keys span { display: flex; gap: 4px; }
 .rep { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center; background: rgba(255, 255, 255, 0.06); border-radius: 16px; padding: 10px 13px; margin: 8px 0; }

@@ -111,7 +111,7 @@ function keepAlive(s) { s.air = 90; s.food = 90; s.dose = 0; }
 // ---- 6. regression: the bot still completes missions on every site and level, every crisis choice
 (function () {
   var total = 0, won = 0, errs = 0, lost = {};
-  ['moon', 'mars'].forEach(function (site) {
+  Object.keys(JA.SITES).forEach(function (site) {      // every planet
     ['cadet', 'commander', 'veteran'].forEach(function (level) {
       [0, 1, 2].forEach(function (opt) {
         for (var seed = 1; seed <= 8; seed++) {
