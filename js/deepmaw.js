@@ -7,8 +7,10 @@
         (with the Sandquake Sensor set up you get the warning sooner, by radio)
      2. it bursts straight up out of that ring, rears high into the air, and arcs over
      3. it dives back into the sand forty or fifty metres away, and is gone
-   Inside the ring when it bursts out, and it swallows you. It does not like the taste of a spacesuit: it spits you
-   out, and you wake up at the airlock without what you were carrying, short of air and time (js/game.js does that).
+   Inside the ring when it bursts out, and it swallows you: the camera pulls back and you watch, in slow motion, as
+   its mouth comes up round you and sweeps you into it, then it rears up and dives with you inside. It does not like
+   the taste of a spacesuit: it spits you out, and you wake up at the airlock without what you were carrying, short
+   of air and time (js/game.js does that).
    It cannot burrow through hard ground: rocks, the buildings and the rover are safe. So is the habitat.
    Real science used here (the cards in js/data.js, JA.MECHS 'worm' and 'shakealert'): strong shaking is often led
    by smaller, faster waves, and earthquake warning systems such as USGS ShakeAlert use them to warn people seconds
@@ -26,12 +28,18 @@
   var WARN = 5, WARN_SENSOR = 7.5; // seconds of shaking before it bursts out (the Sandquake Sensor hears it sooner)
   var HOME = 0.4;                  // for this share of the warning it still steers towards you, then it is committed
   var CATCH = 6.5;                 // metres: inside this ring when it bursts out, you are swallowed
-  var SPIT = 3.4;                  // seconds inside it before it spits you out
+  // Swallowed: the camera pulls back so you watch it happen, in slow motion, then you are inside it. Seconds from
+  // the moment it bursts out: when the screen goes dark ("GULP!"), and when it spits you out.
+  var GULP_AT = 4.6, SPIT_AT = 6.5;
   var SPEED = 30;                  // MADE UP: metres per second along its path
   var SEGS = 34, SEG = 3.0, R0 = 5.4;      // MADE UP: body rings, metres between them, radius at the head (11 m thick, 100 m long)
-  var mesh = null, meshRoot = null, path = null, fx = { id: -1 }, veil = null, rumbling = false, openT = 0;
-  var m4 = new T.Matrix4(), q = new T.Quaternion(), UP = new T.Vector3(0, 1, 0), sc = new T.Vector3(), HIDE = new T.Matrix4().makeScale(0, 0, 0);
+  var mesh = null, meshRoot = null, path = null, fx = { id: -1 }, veil = null, rumbling = false, openT = 0, cine = null;
+  var m4 = new T.Matrix4(), q = new T.Quaternion(), UP = new T.Vector3(0, 1, 0), sc = new T.Vector3(), HIDE = new T.Matrix4().makeScale(0, 0, 0), tmp = new T.Vector3();
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function smooth(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+  // how fast the worm moves while it swallows you (1 = full speed): almost still while the camera pulls back,
+  // slow as the mouth comes up round you, then back up to speed as it arcs over
+  function slow(c) { return c < 0.6 ? 0.1 : c < 2.3 ? 0.22 : c < 3.1 ? 0.22 + 0.78 * (c - 2.3) / 0.8 : 1; }
   function has(s) { return !!(s && s.site && s.site.worm); }
 
   function plan(s) {
@@ -158,6 +166,85 @@
   }
   function dropMesh() { if (mesh && mesh.group.parent) mesh.group.parent.remove(mesh.group); mesh = null; }
 
+  // ---------- swallowed: the film of it ----------
+  // Where the camera watches from: off to one side of its path and a little behind, about thirty metres away and
+  // high enough to look down into its mouth (and over the dunes in between), never inside a rock or a building.
+  function vantage(ev, P, from) {
+    var sx = -ev.dz, sz = ev.dx, side0 = (from.x - ev.tx) * sx + (from.z - ev.tz) * sz >= 0 ? 1 : -1;
+    var C = (JA.base && JA.base.colliders) || [], best = null;
+    [side0, -side0].forEach(function (sg) {
+      [30, 24].forEach(function (dd) {
+        var x = ev.tx + sx * sg * dd - ev.dx * 10, z = ev.tz + sz * sg * dd - ev.dz * 10, i, f;
+        for (i = 0; i < C.length; i++) if (Math.hypot(x - C[i].x, z - C[i].z) < C[i].r + 4) return;
+        var h = Math.max(Tn.height(x, z) + 4.5, P.y0 + 15);
+        for (f = 0.1; f < 0.85; f += 0.1) {                        // the line of sight must clear the sand in between
+          var gx = x + (ev.tx - x) * f, gz = z + (ev.tz - z) * f;
+          h = Math.max(h, (Tn.height(gx, gz) + 1.5 - (P.y0 + 3) * f) / (1 - f));
+        }
+        var cost = h - P.y0 + (sg === side0 ? 0 : 3) + (dd === 30 ? 0 : 2);
+        if (!best || cost < best.cost) best = { x: x, y: Math.min(h, P.y0 + 32), z: z, cost: cost };
+      });
+    });
+    return best ? new T.Vector3(best.x, best.y, best.z) : new T.Vector3(ev.tx - ev.dx * 26, P.y0 + 16, ev.tz - ev.dz * 26);
+  }
+  function startCine(ev, P) {
+    var cm = W.cam;
+    cine = { from: cm.pos.clone(), look: cm.look.clone(), at: vantage(ev, P, cm.pos), spot: new T.Vector3(ev.tx, P.y0 + 3.5, ev.tz) };
+    cine.far = cine.at.clone().sub(cine.spot).setY(0).multiplyScalar(0.6).add(cine.at);      // further out along the same line
+    cine.far.y = Math.max(cine.at.y, Tn.height(cine.far.x, cine.far.z) + 6);
+    cm.cine.pos.copy(cine.from); cm.cine.look.copy(cine.look); cm.cine.fov = 54; cm.cine.roll = 0;
+    cm.mode = 'cine';
+  }
+  function endCine() {
+    if (!cine) return;
+    cine = null;
+    if (W.cam.mode === 'cine') { W.cam.mode = 'play'; W.cam.cine.fov = 52; }
+  }
+  // each frame while it has you: you are swept up off the sand into its mouth, and the camera follows it over
+  function cineFrame(dt, s, ctx, ev, P, head) {
+    var c = fx.c, a = ctx.astro, cm = W.cam;
+    if (a && !fx.swallowed) {
+      if (!fx.lift && head.y > P.y0 - 5) {                        // the mouth breaks the sand right under you
+        fx.lift = true; a.spin = 2.5;
+        W.burst(ev.tx, P.y0 + 1, ev.tz, 60, 6, s.site.colors.dust, { life: 3.5, size: 1.8, grow: 2, alpha: 0.4, up: 1, lift: 5, grav: W.gravity * 0.25 });
+        if (JA.audio) JA.audio.play('thud');
+      }
+      if (fx.lift) {                                              // up off your feet, pulled in towards the middle of the mouth
+        var k = Math.min(1, dt * 4);
+        a.pos.x += (head.x - a.pos.x) * k; a.pos.z += (head.z - a.pos.z) * k; a.pos.y += 12 * dt * slow(c);
+        a.vel.set(0, 0, 0); a.vy = 0; a.onGround = false;
+        if (a.group) a.group.position.copy(a.pos);
+      }
+      if ((fx.lift && head.y > a.pos.y + 0.5) || c > 2.8) {      // the teeth close over you
+        fx.swallowed = true;
+        if (ctx.gulp) ctx.gulp();
+        W.burst(head.x, head.y + 2, head.z, 30, 5, s.site.colors.dust, { life: 2, size: 1.2, grow: 1.6, alpha: 0.6, up: 1, lift: 3, grav: W.gravity * 0.3 });
+      }
+    }
+    if (!cine) return;
+    // the camera: a quick pull back to the side, it watches the mouth come up, then backs away to see it arc over
+    cm.cine.pos.lerpVectors(cine.from, cine.at, smooth(c / 0.8));
+    if (c > 2.2) cm.cine.pos.lerp(cine.far, smooth((c - 2.2) / 1.8));
+    tmp.copy(cine.spot).lerp(head, smooth((c - 1.6) / 1.5));
+    tmp.y = Math.max(tmp.y, P.y0 + 2);
+    cine.look.lerp(tmp, Math.min(1, dt * 3.5));
+    cm.cine.look.copy(cine.look);
+    if (!fx.veil && c > GULP_AT) { fx.veil = true; showVeil(true, 'GULP!'); }
+    if (c > SPIT_AT) spit(s, ctx);
+  }
+  // out again: at the airlock (js/game.js moves you there and takes the cost)
+  function spit(s, ctx) {
+    fx.spat = true; showVeil(false); endCine();
+    if (ctx.spit) ctx.spit();
+    if (ctx.host && JA.sim && JA.sim.note) { JA.sim.note(s, 'worm'); JA.sim.note(s, 'shakealert'); }
+  }
+  // the hunt ended while it had you (the day is over): just give the view back, with no cost
+  function letGo(ctx) {
+    if (!fx.caught || fx.spat) return;
+    fx.spat = true; showVeil(false); endCine();
+    if (ctx.free) ctx.free();
+  }
+
   // the inside of the worm: dark red, then black, with words on top
   function showVeil(on, text) {
     if (!veil) {
@@ -172,9 +259,11 @@
 
   // ---------- each frame ----------
   // ctx: { outside (on foot, out on the surface), driving, pos, host, busy, astro, say(text), tip(id, text),
-  //        gulp() (it has you: hide the astronaut, drop the cargo), spit() (wake up at the airlock) }
+  //        grab() (it has you: you cannot run, your cargo is gone, the camera is ours for a few seconds),
+  //        gulp() (you are inside it: hide the astronaut), spit() (wake up at the airlock),
+  //        free() (the hunt ended while it had you: just give the view back) }
   Y.update = function (dt, s, ctx) {
-    if (!has(s) || !W.root) { if (mesh) dropMesh(); stopSound(); return; }
+    if (!has(s) || !W.root) { letGo(ctx); if (mesh) dropMesh(); stopSound(); return; }
     if (!s.worm) { if (!ctx.host) return; plan(s); }
     var r = s.worm, ev = r.ev, me = ctx.pos || { x: 0, z: 0 };
     // the host: on a hunting day, a player who lingers on open sand on foot gets hunted
@@ -184,8 +273,8 @@
       openT = exposed && day && r.last !== s.sol && !ctx.busy && s.t > s.dayLength * 0.2 && s.t < s.dayLength * 0.88 && ph !== 'warning' && ph !== 'active' ? openT + dt : 0;
       if (openT > OPEN) { openT = 0; begin(s, ctx, day); ev = r.ev; }
     }
-    if (!ev || ev.sol !== s.sol) { if (ev && ctx.host) r.ev = null; if (mesh) dropMesh(); stopSound(); showVeil(false); return; }
-    if (fx.id !== ev.id) fx = { id: ev.id, out: false, dive: false, gulped: false, spat: false, judged: false };
+    if (!ev || ev.sol !== s.sol) { if (ev && ctx.host) r.ev = null; letGo(ctx); if (mesh) dropMesh(); stopSound(); showVeil(false); return; }
+    if (fx.id !== ev.id) { letGo(ctx); fx = { id: ev.id, out: false, dive: false, caught: false, lift: false, swallowed: false, veil: false, spat: false, c: 0, vt: 0 }; }
     if (!mesh || meshRoot !== W.root) buildMesh();
     var tw = s.t - ev.t0, t = W.time, P = pathOf(ev), near;
 
@@ -211,30 +300,36 @@
 
     // 2. out of the sand, over the top and back in
     mesh.ring.visible = mesh.pit.visible = false;
-    var sh = P.s0 + (tw - ev.warn) * SPEED;
-    if (sh - SEGS * SEG > P.L) {                                  // the tail is back under the sand: it is gone
-      if (ctx.host) { ev.over = true; r.ev = null; }
-      dropMesh(); stopSound(); return;
-    }
     if (!fx.out) {
       fx.out = true; ev.out = true;
-      W.burst(ev.tx, P.y0 + 1, ev.tz, 170, 16, s.site.colors.dust, { life: 3.2, size: 3, grow: 3, alpha: 0.75, up: 1, lift: 14, grav: W.gravity * 0.6 });
-      W.burst(ev.tx, P.y0 + 0.5, ev.tz, 60, 26, s.site.colors.soil, { life: 2.2, size: 1.2, grow: 1.5, alpha: 0.85, up: 0.6, lift: 6, grav: W.gravity });
-      if (JA.audio) { JA.audio.play('launch'); JA.audio.play('touchdown'); }
-      if (JA.fx && JA.fx.pulse && ctx.outside) JA.fx.pulse('shock', 1);
       // were you still inside the ring?
       var caught = ctx.outside && !ctx.driving && ctx.astro && (ctx.astro.mode === 'walk' || ctx.astro.mode === 'busy') && Math.hypot(me.x - ev.tx, me.z - ev.tz) < CATCH;
-      if (caught) { fx.gulped = true; showVeil(true, 'GULP!'); if (ctx.gulp) ctx.gulp(); if (ctx.host) r.eaten++; }
-      else if (ctx.host) {
+      if (caught) {
+        // it has you: you watch it happen from a little way off, in slow motion (the sand bursts up with the mouth)
+        fx.caught = true; fx.vt = tw - ev.warn;
+        if (ctx.grab) ctx.grab();
+        startCine(ev, P);
+        if (ctx.host) r.eaten++;
+      } else {
+        W.burst(ev.tx, P.y0 + 1, ev.tz, 170, 16, s.site.colors.dust, { life: 3.2, size: 3, grow: 3, alpha: 0.75, up: 1, lift: 14, grav: W.gravity * 0.6 });
+        W.burst(ev.tx, P.y0 + 0.5, ev.tz, 60, 26, s.site.colors.soil, { life: 2.2, size: 1.2, grow: 1.5, alpha: 0.85, up: 0.6, lift: 6, grav: W.gravity });
+      }
+      if (JA.audio) { JA.audio.play('launch'); JA.audio.play('touchdown'); }
+      if (JA.fx && JA.fx.pulse && ctx.outside) JA.fx.pulse('shock', 1);
+      if (!caught && ctx.host) {
         var d = Math.hypot(me.x - ev.tx, me.z - ev.tz);
         if (ctx.outside && d < 60) { r.escaped++; if (ctx.say) ctx.say('That was close! A deepmaw, a giant sand worm! It cannot burrow through rock, so rocks, buildings and the rover are safe places.'); }
         if (d < 140 && JA.sim && JA.sim.note) { JA.sim.note(s, 'worm'); JA.sim.note(s, 'shakealert'); }
       }
     }
-    if (fx.gulped && !fx.spat && tw > ev.warn + SPIT) {
-      fx.spat = true; showVeil(false);
-      if (ctx.spit) ctx.spit();
-      if (ctx.host && JA.sim && JA.sim.note) { JA.sim.note(s, 'worm'); JA.sim.note(s, 'shakealert'); }
+    // how far along its path it is: the one who was swallowed sees it on their own slowed clock
+    var since = tw - ev.warn, k = 1;
+    if (fx.caught) { if (!fx.spat) { fx.c += dt; k = slow(fx.c); } fx.vt += dt * k; since = fx.vt; }
+    var sh = P.s0 + since * SPEED;
+    if (sh - SEGS * SEG > P.L) {                                  // the tail is back under the sand: it is gone
+      if (fx.caught && !fx.spat) spit(s, ctx);
+      if (ctx.host) { ev.over = true; r.ev = null; }
+      dropMesh(); stopSound(); return;
     }
     if (!fx.dive && sh > P.s1 - 6) {
       fx.dive = true;
@@ -242,12 +337,14 @@
       if (JA.audio) JA.audio.play('thud');
     }
     // fountains of sand where the body comes out of the ground, and where it goes back in
-    var tail = sh - SEGS * SEG, cd = s.site.colors.dust;
+    // kf: the sand slows down with the film (then fewer, finer grains, or they hang in the air like bubbles)
+    var tail = sh - SEGS * SEG, cd = s.site.colors.dust, kf = Math.max(k, 0.35), film = kf < 1;
     function fountain(x, y, z, rate) {
-      var nn = W.rate(rate, dt);
+      var nn = W.rate(rate * kf * (film ? 0.5 : 1), dt);
       for (var u = 0; u < nn; u++) {
-        var aa = Math.random() * Math.PI * 2, rr = R0 * (0.95 + Math.random() * 0.4), sp = 2 + Math.random() * 4;
-        W.emit(x + Math.cos(aa) * rr, y + 0.3, z + Math.sin(aa) * rr, { vx: Math.cos(aa) * sp, vy: 9 + Math.random() * 12, vz: Math.sin(aa) * sp, life: 2, size: 0.9 + Math.random() * 0.7, grow: 1.6, color: cd, alpha: 0.75, grav: W.gravity }); 
+        var aa = Math.random() * Math.PI * 2, rr = R0 * (0.95 + Math.random() * 0.4), sp = (2 + Math.random() * 4) * kf;
+        W.emit(x + Math.cos(aa) * rr, y + 0.3, z + Math.sin(aa) * rr, { vx: Math.cos(aa) * sp, vy: (9 + Math.random() * 12) * kf, vz: Math.sin(aa) * sp, life: 2 / Math.sqrt(kf),
+          size: (film ? 0.45 : 0.9) + Math.random() * (film ? 0.4 : 0.7), grow: 1.6, color: cd, alpha: film ? 0.5 : 0.75, grav: W.gravity * kf * kf });
       }
     }
     if (sh > P.s0 && tail < P.s0 + 4) fountain(ev.tx, P.y0, ev.tz, 4);
@@ -273,17 +370,19 @@
     mesh.head.position.copy(pos); mesh.head.quaternion.setFromUnitVectors(UP, tan);
     var open = 0.9 + 0.1 * Math.sin(t * 7);                       // the mouth flexes
     mesh.head.scale.set(open, 1, open);
+    if (fx.caught && !fx.spat) cineFrame(dt, s, ctx, ev, P, pos);
     // sand pouring off it while it is up in the air
     if (above.length) {
       var nf = W.rate(1.5, dt), cs = s.site.colors.dust;
       for (var f = 0; f < nf; f++) {
         var b = above[Math.floor(Math.random() * above.length)], aa = Math.random() * Math.PI * 2;
+        if (cine && Math.hypot(b[0] - W.cam.pos.x, b[1] - W.cam.pos.y, b[2] - W.cam.pos.z) < b[3] + 16) continue;      // not right in front of the lens
         W.emit(b[0] + Math.cos(aa) * b[3] * 0.8, b[1] - b[3] * 0.3, b[2] + Math.sin(aa) * b[3] * 0.8, { vx: (Math.random() - 0.5) * 2, vy: -1, vz: (Math.random() - 0.5) * 2, life: 1.8, size: 1.1, grow: 1.4, color: cs, alpha: 0.6, grav: W.gravity });
       }
     }
     near = clamp(1 - Math.hypot(me.x - pos.x, me.z - pos.z) / 160, 0, 1);
-    W.cam.shake = Math.max(W.cam.shake || 0, (tw - ev.warn < 1.2 ? 1.1 : 0.45) * near * (ctx.outside ? 1 : 0.4));
-    sound(tw - ev.warn < 2.5 ? 0.2 * near + 0.04 : 0.06 * near, 34);
+    W.cam.shake = Math.max(W.cam.shake || 0, (since < 1.2 ? 1.1 : 0.45) * near * (ctx.outside ? 1 : 0.4) * (cine ? 0.35 : 1));
+    sound(since < 2.5 ? 0.2 * near + 0.04 : 0.06 * near, 34);
   };
   function sound(v, f) { if (!JA.audio) return; rumbling = true; JA.audio.loop('worm', { f: f, v: v, type: 'sawtooth' }); }
   function stopSound() { if (rumbling && JA.audio) JA.audio.stopLoop('worm', 0.6); rumbling = false; }
@@ -293,6 +392,8 @@
     var ev = has(s) && s.worm && s.worm.ev; if (!ev || ev.sol !== s.sol || s.t - ev.t0 >= ev.warn) return null;
     return out.set(ev.tx, Tn.height(ev.tx, ev.tz) + 3, ev.tz);
   };
+  // the game moved on (night, a new mission) while it had you: no film, no dark screen
+  Y.reset = function () { if (fx.caught) fx.spat = true; showVeil(false); endCine(); };
   Y.active = function (s) { return !!(has(s) && s.worm && s.worm.ev && s.worm.ev.sol === s.sol); };
   Y.openSand = openSand;
   Y.CATCH = CATCH;

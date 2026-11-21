@@ -345,3 +345,7 @@ body.touch #goal-list li.now::after, body.touch #goal-list li.now .g-now { displ
 body.in-rocket #goals { display: none; }
 body.in-rocket #inside { width: min(270px, 36vw); }
 body.in-rocket #inside p { font-size: 0.8rem; }
+
+/* swallowed by a deepmaw (js/deepmaw.js): a few seconds of film, so the screen is cleared */
+body.worm-cam #hud, body.worm-cam #goals, body.worm-cam #radio, body.worm-cam #minimap, body.worm-cam #tags,
+body.worm-cam #prompt, body.worm-cam #hands, body.worm-cam #crew-hud { opacity: 0; pointer-events: none; transition: opacity 0.4s; }

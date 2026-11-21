@@ -288,6 +288,7 @@
     G.tips = {}; G.tut = {}; G.tutStep = 0; G.mini = null; G.charge = null; G.ending = null; G.caseItem = null; G.fast = false; G.clock = 0; G.sayAt = 0; G.sayQ = []; G.sparkAt = 0;
     G.hintAt = 0; G.goalAt = 0; G.goal = null; G.lastWarn = -1; G.bannerUntil = 0; G.geiger = 0; G.crisisOpen = false;   // or a second mission inherits the first one's timers
     G.topic = ''; G.topicAt = 0; G.pages = 0; G.cut = null; G.cutCool = 0;
+    if (G.wormCam) { ext('worm', 'reset'); G.wormCam = false; document.body.classList.remove('worm-cam'); }
     buildZones(); buildAim();
     G.rigs = snap ? snap.rigs : B.spots.ice.map(function () { return { state: 'idle', p: 0, t: 0 }; }); B.rigs = G.rigs;      // the ice drills (see stepRigs)
     if (snap) { G.tut = Object.assign({}, snap.tut || {}); G.tut.moved = G.tut.jumped = false; }
@@ -1212,19 +1213,31 @@
   // the deepmaw (js/deepmaw.js, a planet with worm: true): the host decides when it hunts; it swallows the astronaut
   // who is still in its ring, then spits them out at the airlock without their cargo, short of air and time
   var WORM = { outside: true, driving: false, pos: null, host: true, busy: false, astro: null, say: function (t) { say(t, true); }, tip: function (id, t) { return tip(id, t); },
-    gulp: function () { wormGulp(); }, spit: function () { wormSpit(); } };
+    grab: function () { wormGrab(); }, gulp: function () { wormGulp(); }, spit: function () { wormSpit(); }, free: function () { wormFree(); } };
   function wormStep(dt, host) {
     WORM.outside = G.mode === 'play'; WORM.driving = !!A.rover.driver; WORM.pos = A.astro.pos; WORM.host = host; WORM.busy = !!(G.crisisOpen || G.mini); WORM.astro = A.astro;
     ext('worm', 'update', dt, G.s, WORM);
   }
-  function wormGulp() {
+  // it has you: you cannot run any more, and for a few seconds js/deepmaw.js films it from a little way off
+  // (so the helmet view steps aside and the screen is cleared a little)
+  function wormGrab() {
     var a = A.astro;
     if (a.carrying) { if (guest()) putDown(); else A.remove(a.carrying); }      // what you carried is gone (a guest drops it: the host owns the things)
-    a.vel.set(0, 0, 0); a.mode = 'hidden'; G.mini = null; U.drillUi && U.drillUi(null);
-    Au.play('bad'); fxPulse('glitch', 1);
+    a.vel.set(0, 0, 0); a.mode = 'held'; G.mini = null; U.drillUi && U.drillUi(null);
+    G.wormCam = true; if (G.pov) A.setFirstPerson(false);
+    document.body.classList.add('worm-cam');
+    Au.play('bad');
+  }
+  function wormGulp() { A.astro.mode = 'hidden'; fxPulse('glitch', 1); }      // inside it
+  function wormFree() {
+    if (!G.wormCam) return;
+    G.wormCam = false; document.body.classList.remove('worm-cam');
+    if (G.pov) A.setFirstPerson(true);
+    if (A.astro.mode === 'held') A.astro.mode = 'walk';
   }
   function wormSpit() {
     var s = G.s;
+    wormFree();
     A.astro.mode = 'walk';
     if (!guest()) sim.wormBite(s);
     skipTime(R.wormTime, true, ' of the shift lost inside the deepmaw');
@@ -1650,6 +1663,7 @@
     }
     G.mode = 'night'; G.mini = null; G.charge = null; hideAim(); Au.stopAll(); G.sayQ.length = 0;
     if (G.room) leaveRoom(true);
+    if (G.wormCam) { ext('worm', 'reset'); wormFree(); }          // the day ended while a deepmaw had you: no film over the night report
     // the bubble is put away for the night, so these two are heard, not shown
     if (!Au.readingOn()) Au.line(info.late ? 'hud-clock-over' : info.sleep ? 'day-sleep' : null);
     if (A.rover.driver) exitRoverLocal(true);
@@ -2408,7 +2422,7 @@
     if (c) c.afterFrame();
     if (!paused) { hudFrame(); if (G.s && (G.mode === 'play' || G.mode === 'inside')) sayNext(); }
     soundFrame(dt, paused);
-    var povOn = !!G.pov && (G.mode === 'play' || G.mode === 'inside') && !!G.s && !G.cut;
+    var povOn = !!G.pov && (G.mode === 'play' || G.mode === 'inside') && !!G.s && !G.cut && !G.wormCam;
     if (povOn) {
       POV.yaw = W.cam.yaw; POV.pos = me(); POV.home = B.spots.door; POV.goal = G.goal && G.goal.target; POV.goalIcon = G.goal ? G.goal.icon : '';
       POV.air = G.s.air; POV.moving = Math.hypot(G.input.x, G.input.z) > 0.2; POV.effort = POV.moving && G.input.sprint;
