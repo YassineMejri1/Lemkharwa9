@@ -313,7 +313,7 @@ func unit_checks() -> void:
 	ok("Europa is built on the Moon's world", eu.id == "moon" and eu.planet == "europa" and eu.gravity == 1.31)
 	ok("a planet changes its own weather words only", eu.env.sun.label != Data.SITES.moon.env.sun.label and Data.SITES.moon.env.sun.cells == 7)
 	ok("the Moon and Mars are themselves", Data.SITES.moon.planet == "moon" and Data.SITES.mars.id == "mars" and not Data.SITES.mars.has("like"))
-	for p in ["europa", "titan", "io"]:
+	for p in ["europa", "titan", "io", "sahrun"]:
 		var won: Dictionary = bot(p, "cadet", 5, { "science": true }).s
 		ok(p + " can be won", won.over and won.over.type == "win", str(won.over))
 	ok("Titan has its own radio delay", Sim.comm_info(game("titan", "cadet", 3)).minutes == 160)
@@ -336,6 +336,19 @@ func unit_checks() -> void:
 	ok("a geyser shoots at the start of its beat and hisses at the end", hz.beat(13.0, 0.0) == 1.0 and hz.beat(-1.0, 0.0) == hz.PERIOD - 1.0)
 	hz.build(hroot, "mars")
 	ok("Mars has no hazards", hz.list.is_empty())
+	# Sahrun, the web version's made-up desert planet, and its deepmaw
+	var sa: Dictionary = Data.SITES.sahrun
+	ok("Sahrun is built on the Mars world, with its own numbers", sa.id == "mars" and sa.gravity == 4.9 and sa.env.storm.label == "Sandstorm!" and Data.SITES.mars.gravity == 3.71)
+	ok("Sahrun's Mission Control is on a relay ship: seconds away", Sim.comm_info(game("sahrun", "cadet", 3)).minutes == 0)
+	ok("the deepmaw hunts on day 3, and a safe day carries the hunt over", hz.hunt_days(5, 2, []) == [] and hz.hunt_days(5, 4, []) == [3] and hz.hunt_days(8, 7, [3]) == [6] and hz.hunt_days(5, 5, [3]) == [])
+	var cols: Array = Base.colliders
+	Base.colliders = [{ "x": 100.0, "z": 0.0, "r": 3.0 }]
+	ok("open sand is far from the outpost, from rocks and from the edge", hz.open_sand(0, 120) and not hz.open_sand(0, 30) and not hz.open_sand(108, 0) and not hz.open_sand(0, 165))
+	Base.colliders = cols
+	var hunt := { "tx": 0.0, "tz": 100.0, "dx": 1.0, "dz": 0.0, "dist": 40.0, "high": 28.0 }
+	ok("its arc leaves the sand, tops out and dives back under", hz.arc(hunt, 0.5).y > maxf(hz.arc(hunt, 0).y, hz.arc(hunt, 1).y) + 13 and hz.arc(hunt, -0.1).y < hz.arc(hunt, 0).y and is_equal_approx(hz.arc(hunt, 1).x, 40))
+	hz.build(hroot, "sahrun")
+	ok("Sahrun builds its worm, hidden until it hunts", hz.kind == "worm" and hz._body.get_child_count() == hz.SEGS and not hz._body.visible and hz.marker({ "t": 0.0 }) == null)
 	hz.free()
 	hroot.free()
 

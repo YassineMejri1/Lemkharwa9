@@ -35,7 +35,7 @@ const LEVEL_ORDER := ["cadet", "commander", "veteran"]
 ## is written from the web version). Each names the world it is built on ("like") and lists what differs. Its "id"
 ## stays that world, so every "moon" / "mars" branch and table still works; "planet" is the planet itself.
 const PLANETS_PATH := "res://data/planets.json"
-const PLANET_ORDER := ["moon", "mars", "europa", "titan", "io"]
+const PLANET_ORDER := ["moon", "mars", "europa", "titan", "io", "sahrun"]
 
 
 func _init() -> void:

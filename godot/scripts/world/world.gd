@@ -19,7 +19,11 @@ const LOOKS := {
 		"hemiSky": 0xd9963f, "hemiGround": 0x4a3414, "hemiInt": 0.62, "fog": 0xb07a2e, "zenith": 0x7a5216, "horizon": 0xc48a35, "glow": 0xffcf8a, "sunSize": 120,
 		"dust": 0x9a7a45 },
 	"io": { "ground": 0xc9b03c, "ground2": 0xa5672a, "rock": 0x8f7a35, "mountain": 0x4d4420, "range": 0x9a8632,
-		"hemiSky": 0xd8c79a, "hemiGround": 0x4a3d18, "sunSize": 150, "dust": 0xd9c45a, "earth": false }
+		"hemiSky": 0xd8c79a, "hemiGround": 0x4a3d18, "sunSize": 150, "dust": 0xd9c45a, "earth": false },
+	# Sahrun, the made-up desert planet of the web version: its colours there (js/world.js), on the Mars world
+	"sahrun": { "ground": 0xd9a35b, "ground2": 0xb57a3c, "rock": 0xb07a4a, "mountain": 0x9a6438, "range": 0xc89058, "sunColor": 0xffd29a, "sunInt": 1.3,
+		"hemiSky": 0x86b0c6, "hemiGround": 0x8a5a30, "hemiInt": 0.55, "fog": 0xe6c894, "zenith": 0x2466a0, "horizon": 0xf2c682, "glow": 0xffcf8a, "sunSize": 280,
+		"dust": 0xe8c48a, "volcano": false }
 }
 const EARTH_DIR := Vector3(-0.5, 0.2, -0.84)
 const PN := 2400          # particles
@@ -315,7 +319,7 @@ func _build_ground() -> void:
 		rmat = sm
 	_override_all(range_node, rmat, false)
 	root.add_child(range_node)
-	if site_id == "mars":            # a giant volcano on the horizon
+	if site_id == "mars" and look.get("volcano", true):            # a giant volcano on the horizon
 		Mats.add(root, Mats.cone(640, 190, 24), Mats.mat(look.mountain), 300, 100, -1250, false)
 
 	# pebbles and rocks

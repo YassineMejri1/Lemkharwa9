@@ -1074,6 +1074,8 @@ func clean_all_panels(s: Dictionary) -> void:
 func comm_info(s: Dictionary) -> Dictionary:
 	if s.site.id == "moon" and not s.site.has("delay"):
 		return { "oneWay": "1.3 seconds", "round": "about 3 seconds", "wait": 3.0, "minutes": 0 }
+	if s.site.get("delay") == 0:           # Mission Control is on a relay ship in orbit (Sahrun)
+		return { "oneWay": "about 2 seconds", "round": "about 4 seconds", "wait": 3.0, "minutes": 0 }
 	var date = Js.orv(weather(s).get("date"), Weather.today_iso())
 	var one: float = s.site.delay if s.site.has("delay") else Weather.mars_delay_min(date)      # delay: a far planet's own radio minutes
 	var rnd := one * 2

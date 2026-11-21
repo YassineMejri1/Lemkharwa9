@@ -66,5 +66,28 @@
    "shadow": { "cells": 3, "icon": "🌋", "label": "Ash fall", "why": "Ash from an eruption is falling on the solar panels. They will charge very slowly today!" },
    "dark": { "cells": 1, "icon": "🌚", "label": "Eruption cloud", "why": "A giant eruption cloud hides the Sun all day. The panels make almost nothing, so today runs on the power cells you saved." }
   }
+ },
+ "sahrun": {
+  "like": "mars",
+  "short": "Sahrun",
+  "name": "Sahrun",
+  "emoji": "🏜️",
+  "place": "Edge of the Great Erg",
+  "dayWord": "Day",
+  "gravity": 4.9,
+  "doseDay": 2.5,
+  "doseNight": 1.5,
+  "stormMult": 0.35,
+  "delay": 0,
+  "hazard": "worm",
+  "iceName": "Deep Well",
+  "commText": "Mission Control rides on a relay ship in orbit, and a radio message reaches it in about 2 seconds. Earth itself is so far away that a message would take years.",
+  "blurb": "A made-up desert world from science fiction. Sandstorms bury the Sun, and a giant sand worm hunts on the open sand.",
+  "why": "We built here because a deep well beside the dunes reaches water hidden in the rock under the sand: the only water for many kilometres.",
+  "env": {
+   "clear": { "cells": 7, "icon": "☀️", "label": "Blazing sun", "why": "Not a cloud in the sky. Dry desert air lets almost all the sunlight through, so the panels drink it up." },
+   "dusty": { "cells": 4.5, "icon": "🌫️", "label": "Sand haze", "why": "Fine sand hangs in the air and scatters the sunlight before it reaches the panels." },
+   "storm": { "cells": 2, "icon": "🌪️", "label": "Sandstorm!", "why": "A wall of sand is rolling across the desert and hiding the Sun. On Earth these storms are called haboobs." }
+  }
  }
 }

@@ -74,7 +74,7 @@ Only in this version: hazards (see Planets).
 
 ## Planets (only in this version)
 
-The levels are planets, in the order of `Data.PLANET_ORDER`: Moon, Mars, Europa, Titan, Io. Winning a planet opens the
+The levels are planets, in the order of `Data.PLANET_ORDER`: Moon, Mars, Europa, Titan, Io, Sahrun. Winning a planet opens the
 next one (`Game.done`, kept in `user://settings.cfg`), and gives it stars: 1 for Cadet, 2 for Commander, 3 for Veteran.
 
 **For testing, every planet is open now: `Game.all_open` is `true`. Set it to `false` to bring the order back.**
@@ -95,6 +95,16 @@ stays the base world, so every `"moon"` / `"mars"` branch and table still works,
 | Europa | Moon | slippery ice (`grip`), geysers that throw you up, strong radiation, a small Sun |
 | Titan | Mars | thick air: you fall slowly (`fall`); little sunlight, almost no radiation |
 | Io | Moon | lava pools that knock you back, the strongest radiation |
+| Sahrun | Mars | made up; a desert with a deepmaw, a giant sand worm that hunts you on open sand; heavier gravity, a radio answer in seconds |
+
+Sahrun comes from the web version (`js/data.js`, `js/world.js`, `js/deepmaw.js`). Here it has the web's numbers, words
+and colours, and a short port of the deepmaw (same hunting days, warning, catch ring and cost). Not ported yet: sand
+rays, the dew catcher and hot thirsty days, water cans in place of ice, the desert landmarks, the haboob wall, the
+swallowing film, and its science cards.
+
+**Do not run `tools/godot/export_data.js` yet.** Since Sahrun, the web data has a new shape (planet traits, words that
+differ for each planet), and the scripts here still read the old one. `data/game_data.json` is the web data from before
+Sahrun; the Moon and Mars play the same in both.
 
 - Looks: `World.LOOKS` has one entry per planet with only the colours that differ.
 - Hazards: `scripts/addons/hazards.gd` (geysers, lava). The same on every screen of a crew, with no network messages.

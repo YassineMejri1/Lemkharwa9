@@ -755,7 +755,7 @@ func welcome_modal() -> void:
 ## The radio delay for this mission's real dates, and who talks to you.
 func comm_welcome() -> String:
 	if fun:
-		return s.site.commText + " Earth is too far away to help in time, so a crewmate inside the habitat talks you through your work."
+		return s.site.commText + ("" if Sim.comm_info(s).minutes == 0 else " Earth is too far away to help in time, so a crewmate inside the habitat talks you through your work.")
 	if s.site.id == "moon":
 		return s.site.commText + " That is why Mission Control can talk you through your work live."
 	var c := Sim.comm_info(s)
@@ -1990,7 +1990,7 @@ func crisis_modal() -> void:
 	Au.play("alarm")
 	World.cam.shake = maxf(World.cam.shake, 0.3)
 	# On Mars the call comes from the crewmate inside: Earth would hear about this crisis only minutes from now.
-	var mars: bool = s.site.id == "mars"
+	var mars: bool = s.site.id == "mars" and Sim.comm_info(s).minutes > 0
 	var far := (" Earth is " + str(Sim.comm_info(s).oneWay) + " away by radio, far too slow to help in time.") if mars else " There is no time to talk it through."
 	var opts_html := ""
 	var speak: String = v.title + " " + v.text + " You decide."
@@ -2034,7 +2034,7 @@ func crisis_result(x: Dictionary) -> void:
 
 
 ## A choice that takes time: the shift clock jumps forward while you work on it indoors.
-func skip_time(frac: float, home := false) -> void:
+func skip_time(frac: float, home := false, why := " of the shift went into the job") -> void:
 	var secs: float = frac * s.dayLength
 	var total := secs
 	var ev: Array = []
@@ -2051,7 +2051,7 @@ func skip_time(frac: float, home := false) -> void:
 	get_tree().create_timer(0.45).timeout.connect(func():
 		if mode == "play" or mode == "inside":
 			Ui.fade(false))
-	Ui.banner("⏩ " + clock_text(total) + " of the shift went into the job", "info")
+	Ui.banner("⏩ " + clock_text(total) + why, "info")
 	banner_until = clock + 5
 	if guest():
 		return
@@ -3782,6 +3782,9 @@ func hud_frame() -> void:
 		place_mark(marks, gt + Vector3(0, 2.2, 0), goal.get("icon", "🎯"), lbl.call(gt), "goal", "#ffd23f")
 	if alarm or far.call(sp.door, 34):
 		place_mark(marks, sp.door + Vector3(0, 6, 0), "🏠", lbl.call(sp.door), "alarm" if alarm else "", "#4dff9a")
+	var worm = ext("hazards", "marker", [s])
+	if worm != null:
+		place_mark(marks, worm, "⚠️", "RUN!", "alarm", "#ff5468")
 	if not Actors.rover.driver and far.call(Actors.rover.pos, 22):
 		place_mark(marks, Actors.rover.pos + Vector3(0, 4, 0), "🚙", lbl.call(Actors.rover.pos), "", "#9fe8ff")
 	var icep := Terrain.at("ice", 6)

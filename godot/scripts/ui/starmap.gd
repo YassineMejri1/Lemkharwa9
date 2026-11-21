@@ -12,7 +12,8 @@ extends Control
 ## To add a planet: give it a place in AT, and a look in PLANET (its "kind" is its place in AT).
 
 ## where each planet sits, as a share of the screen; the route starts beside the astronaut
-const AT := { "moon": Vector2(0.365, 0.6), "mars": Vector2(0.505, 0.33), "europa": Vector2(0.64, 0.585), "titan": Vector2(0.775, 0.3), "io": Vector2(0.9, 0.56) }
+const AT := { "moon": Vector2(0.34, 0.6), "mars": Vector2(0.455, 0.33), "europa": Vector2(0.57, 0.585), "titan": Vector2(0.685, 0.3), "io": Vector2(0.8, 0.56),
+	"sahrun": Vector2(0.915, 0.31) }
 const START := Vector2(0.225, 0.8)
 const R := 66.0                          # the glass bubble's radius
 const TOP := Color("#16021b")
@@ -86,7 +87,7 @@ void fragment() {
 		col = mix(col, vec3(1.0, 0.85, 0.5), smoothstep(0.6, 0.95, b) * 0.6);
 		halo = vec3(1.0, 0.62, 0.2);
 		halo_a = 0.8;
-	} else {                                    // Io: sulfur yellow with volcanoes
+	} else if (kind == 4) {                     // Io: sulfur yellow with volcanoes
 		col = mix(vec3(0.97, 0.85, 0.28), vec3(0.95, 0.56, 0.16), smoothstep(0.45, 0.65, fbm(s * 1.5 + 5.0)));
 		col = mix(col, vec3(1.0, 0.97, 0.74), smoothstep(0.62, 0.78, fbm(s * 2.2 + 13.0)) * 0.8);
 		float v = spot(s * 1.6 + 0.5);
@@ -94,6 +95,12 @@ void fragment() {
 		col = mix(col, vec3(0.2, 0.08, 0.08), 1.0 - smoothstep(0.35, 0.5, v));
 		halo = vec3(1.0, 0.8, 0.3);
 		halo_a = 0.45;
+	} else {                                    // Sahrun (made up): golden dunes, rust streaks, a teal sky
+		float dn = sin(s.y * 11.0 + sin(s.x * 3.0) * 1.6 + fbm(s * 1.3) * 3.0);
+		col = mix(vec3(0.94, 0.71, 0.36), vec3(0.77, 0.5, 0.24), smoothstep(-0.2, 0.6, dn));
+		col = mix(col, vec3(0.7, 0.3, 0.18), smoothstep(0.62, 0.8, fbm(s * 2.1 + 17.0)) * 0.7);
+		halo = vec3(0.35, 0.78, 0.88);
+		halo_a = 0.6;
 	}
 	if (locked > 0.5) {                         // not open yet: a dark shape with a pink glow
 		col = mix(vec3(0.06, 0.05, 0.18), vec3(0.17, 0.11, 0.4), fbm(s * 1.4));
@@ -343,8 +350,8 @@ class Orb extends Button:
 		disabled = not open                  # a locked planet can still take the focus, so you can read why
 		for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 			add_theme_stylebox_override(st, StyleBoxEmpty.new())
-		size = Vector2(170, 226)
-		pivot_offset = Vector2(85, R + 34)
+		size = Vector2(150, 226)
+		pivot_offset = Vector2(75, R + 34)
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if open else Control.CURSOR_FORBIDDEN
 		var m := ShaderMaterial.new()
 		m.shader = StarMap._shader
