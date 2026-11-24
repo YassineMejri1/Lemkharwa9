@@ -7,6 +7,7 @@ const FILES := {
 	"rules": "res://tests/test_rules.gd",
 	"ui": "res://tests/test_ui.gd",
 	"crew": "res://tests/test_crew.gd",
+	"party": "res://tests/test_party.gd",
 }
 
 

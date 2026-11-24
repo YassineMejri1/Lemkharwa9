@@ -509,7 +509,7 @@ func lobby() -> void:
 		+ ("<p class=\"crew-knock\" id=\"crew-knock\">📡 Someone is connecting…</p>" if host else "") \
 		+ ("<p class=\"sub\">Everyone shares the outpost: one air supply, one Solar Rack, one rover. Split the jobs and talk to each other!</p>" if host \
 			else "<p class=\"crew-waiting\" id=\"crew-waiting\">⏳ Waiting for " + esc(name(0)) + " to launch the mission…</p>") \
-		+ "<div class=\"modal-actions\"><button class=\"btn ghost\" data-act=\"leave\">Leave the crew</button>" + ("<button class=\"btn primary\" data-act=\"plan\">Plan the mission ▶</button>" if host else "") + "</div>",
+		+ "<div class=\"modal-actions\"><button class=\"btn ghost\" data-act=\"leave\">Leave the crew</button>" 			+ ("<button class=\"btn ghost\" data-act=\"party\">🎉 Party games</button><button class=\"btn primary\" data-act=\"plan\">Plan the mission ▶</button>" if host else "") + "</div>",
 		{ "cls": "crew-room", "noFocus": keep, "actions": {
 			"copy": func():
 				Au.play("tap")
@@ -523,6 +523,10 @@ func lobby() -> void:
 				Au.play("tap")
 				Ui.close_modal()
 				Game.star_map(),
+			"party": func():
+				Au.play("tap")
+				Ui.close_modal()
+				Game.ext("party", "open"),
 		} })
 	_refresh_room()
 
@@ -538,6 +542,9 @@ func _on_join(pid: int, hi: Dictionary) -> void:
 	else:
 		Ui.toast("👋 " + p.name + " joined the crew", _w().x / 2, _w().y * 0.25, "#7be36a")
 		_late_start(pid)
+		if _party():
+			_make_puppets()
+			Game.ext("party", "joined", [pid])
 
 
 ## Which moment of the mission the crew is in, for a player who joins now (see late_join in game.gd).
@@ -626,6 +633,19 @@ func _on_message(pid: int, m: Dictionary) -> void:
 
 func _live() -> bool:
 	return started and Game.s != null          # this screen has the mission (messages before that are not for it yet)
+
+
+## Party mode (scripts/addons/party.gd) has no mission, but the crew's astronauts are sent and drawn all the same.
+func _party() -> bool:
+	return started and Game.mode == "party"
+
+
+func _h_party(pid: int, m: Dictionary) -> void:
+	Game.ext("party", "net", [pid, m])
+
+
+func _g_party(pid: int, m: Dictionary) -> void:
+	Game.ext("party", "net", [pid, m])
 
 
 # ---------- the guest's side ----------
@@ -723,7 +743,7 @@ func _g_wait(_pid: int, _m: Dictionary) -> void:
 
 ## D: for each crewmate, how long before this packet the host heard their state (so a relayed state keeps its own time)
 func _g_w(_pid: int, m: Dictionary) -> void:
-	if not _live():
+	if not _live() and not _party():
 		return
 	var t := now()
 	host_off = _offset(host_off, t - float(m.ts))
@@ -1022,7 +1042,7 @@ func _follow_rover() -> void:
 func _my_state() -> Array:
 	var a = Actors.astro
 	var inp: Dictionary = Game.input
-	var moving: bool = Vector2(inp.x, inp.z).length() > 0.2 and (Game.mode == "play" or Game.mode == "inside")
+	var moving: bool = Vector2(inp.x, inp.z).length() > 0.2 and (Game.mode == "play" or Game.mode == "inside" or (Game.mode == "party" and Game._walking()))
 	var out: bool = (Game.mode == "play" or Game.mode == "observe") and Game.room == null
 	var f := (1 if a.on_ground else 0) | (2 if moving else 0) | (4 if inp.get("puff", false) and moving else 0) | (8 if a.aim else 0) \
 		| (16 if a.throw_t > 0 else 0) | (32 if out else 0) | (64 if a.carrying else 0)
@@ -1083,7 +1103,7 @@ static func _sample(buf: Buf, t: float):
 
 
 func _make_puppets() -> void:
-	if Actors.astro == null or Game.s == null:
+	if Actors.astro == null or (Game.s == null and not _party()):
 		return
 	for p in _others():
 		if p.puppet and Actors.crew.has(p.puppet):
@@ -1169,7 +1189,7 @@ func _pose_puppets(dt: float) -> void:
 
 # ---------- names over heads, and the crew in the corner ----------
 func _name_tags() -> void:
-	var show: bool = (Game.mode == "play" or Game.mode == "inside") and Game.cut == null and not Ui.modal_open()
+	var show: bool = (Game.mode == "play" or Game.mode == "inside" or Game.mode == "party") and Game.cut == null and not Ui.modal_open()
 	for p in _others():
 		var b = p.puppet
 		if p.tag == null:
@@ -1517,7 +1537,7 @@ func guest_started(items) -> void:
 func frame(dt: float) -> void:
 	if not on:
 		return
-	if Game.s == null or not started or Actors.astro == null:
+	if (Game.s == null and not _party()) or not started or Actors.astro == null:
 		_hud.visible = false
 		return
 	local = Actors.astro

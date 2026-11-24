@@ -47,6 +47,7 @@ godot/
                            starmap.gd (the level map of planets)
   scripts/audio/           audio.gd (recordings, synth stand-ins, voice lines), synth.gd, music_gen.gd
   scripts/addons/          the optional extras, one file each (see below)
+  scripts/party/           the party mode's mini-games, one file each
   scripts/net/net.gd       crew mode's network
   tests/                   headless tests
   tools/                   test bots (play.gd, crew_test.gd), compile check (check.gd)
@@ -70,7 +71,7 @@ godot/
 Each is optional: `Game.ADDONS` loads every one that is there and compiles, and the game runs without any of them.
 All of them are ported: journal, minimap, pov, sky, observe, fx, interior, mission, sunwatch, keepsake, holo,
 colony (the town that grows between missions, and the "what could it become" film), pioneer, intro, crew.
-Only in this version: hazards (see Planets).
+Only in this version: hazards (see Planets) and party (see Party mode).
 
 ## Planets (only in this version)
 
@@ -113,6 +114,36 @@ Sahrun; the Moon and Mars play the same in both.
 - To add a planet: one entry in `data/planets.json`, its id in `Data.PLANET_ORDER`, its colours in `World.LOOKS`, and
   its place and look on the star map (`AT` and the `PLANET` shader in `scripts/ui/starmap.gd`).
 
+## Party mode (only in this version)
+
+Short mini-games for 1 to 4 astronauts: **Party games** on the title screen (alone), or the host's **Party games**
+button in the crew room (with friends, on the same network code as crew mode). Every planet gets four mini-games, one
+for each tier. Only the Moon has its four so far; the other planets show as "coming next".
+
+| Tier | Game | Kind | How it plays |
+|---|---|---|---|
+| Easy | Shooting Star | reflex | Press SPACE when a shooting star crosses the sky. Satellites and flaring stars do not count. 5 rounds. |
+| Intermediate | Phase Chase | memory | A hologram shows some of the Moon's phases; run onto the same pads in that order. 3 rounds, each one phase longer. |
+| Hard | Eagle Drop | skill | Hold SPACE to fire your lander's engine. Land softly and soon, with little fuel. 3 rounds, each from higher up. |
+| Extreme | Meteor Storm | survival | Keep out of the red rings. One hit and you are out; the last astronaut standing wins. |
+
+After each game 1st, 2nd and 3rd place win 3, 2 and 1 stars (equal scores share a place); the stars add up over the
+party. Alone there are no stars, only your score. Esc opens a small card to leave or to pick another game.
+
+How it is built (`scripts/addons/party.gd`, and one script per game in `scripts/party/`):
+- The host owns `st`, the whole party (the game, the round, every player's result, the stars), and sends it whenever
+  it changes. Every screen shows what it says. Alone, your own game is the host.
+- Every screen builds the same round from `st.seed` (an `Rng32`), so the meteors or the order of the phases need no
+  messages. A game only judges its own player and reports the result to the host (`P.report`). What a guest's game
+  reports is checked field by field (`safe`).
+- Every screen counts a round from the moment the host announced it (`st.at`, turned into this computer's time with
+  the clock offset crew mode already keeps), so a slow link or a slow computer is not behind the others.
+- The astronauts are sent and drawn by crew mode as in a mission (`crew._party()` lets that run without a mission).
+- The arena is the flat plain where the town grows in a mission (`Terrain.L.colony`), empty here.
+- To add a game: an entry in `GAMES` (its planet, and its place there is its tier) and a script with `start()`,
+  `round()` and `frame(dt)`. Four entries for a planet and it shows up in the menu.
+- Not done yet: a player who joins in the middle of a game waits for the next one (no watching).
+
 ## Crew mode (multiplayer, up to 4)
 
 `scripts/addons/crew.gd` (the game side, from js/crew.js) and `scripts/net/net.gd` (from js/net.js).
@@ -134,7 +165,7 @@ Sahrun; the Moon and Mars play the same in both.
 
 ## Testing
 
-- All headless tests: `Godot_console.exe --headless --path godot res://tests/run_tests.tscn` (pick with `-- only=rules,ui,crew`).
+- All headless tests: `Godot_console.exe --headless --path godot res://tests/run_tests.tscn` (pick with `-- only=rules,ui,crew,party`).
 - Compile check of add-ons: `--headless --path . res://tools/check.tscn -- files=colony,crew`.
 - Robot player: `--fixed-fps 30 --path . res://tools/play.tscn -- site=moon level=cadet nointro=1` with options
   `shots=1` (screenshots to tools/shots/), `max=N` frames, `shift=S` seconds per day, `pov=1`, `map=1`, `inside=F`
@@ -145,3 +176,6 @@ Sahrun; the Moon and Mars play the same in both.
   `... -- role=guest code=TESTQ net=lan` (options: `net=relay` relay only, `solo=1` host starts alone so the guest
   joins late, `shift=S`, `grab=1` the guest picks up a power cell through the host, `shots=1`, `crewlog=1`).
   `net=lan` never uses the relay or the router.
+- Party mode with a robot player: `--path . res://tools/party_test.tscn -- games=star,phase,eagle,storm shots=1` alone,
+  or a host and a guest at once: `... -- role=host code=TESTP net=lan shots=1` and `... -- role=guest code=TESTP net=lan`
+  (the guest's robot is the clumsy one: it jumps early, steps on a wrong pad, crashes a lander and stands in the storm).

@@ -511,6 +511,7 @@ func title_scene() -> void:
 		c.to_lobby()
 	if room != null:
 		leave_room(true)
+	ext("party", "stop")
 	mode = "title"
 	s = null
 	fun = false
@@ -2229,6 +2230,9 @@ var POV := { "yaw": 0.0, "pos": null, "home": null, "goal": null, "goalIcon": ""
 
 
 func pause_modal() -> void:
+	if mode == "party":
+		ext("party", "pause")
+		return
 	if s == null or (mode != "play" and mode != "inside") or Ui.modal_open():
 		return
 	Au.play("tap")
@@ -3844,6 +3848,13 @@ func _play_or_inside() -> bool:
 	return mode == "play" or mode == "inside"
 
 
+## may the keys move your astronaut now? (in a party the mini-game says)
+func _walking() -> bool:
+	if mode == "party":
+		return ext("party", "walking") == true
+	return _play_or_inside() and mini == null and cut == null
+
+
 func _pause_open() -> bool:
 	return Ui.modal_open() and Ui.modal_doc != null and str(Ui.modal_doc.get_meta("cls", "")).find("pause") >= 0
 
@@ -4235,6 +4246,11 @@ func bind_ui() -> void:
 			Au.play("tap")
 			Ui.show_part("title", false)
 			star_map(),
+		"party": func():
+			Au.unlock()
+			Au.gen.unlock()
+			Au.play("tap")
+			ext("party", "open"),
 		"crew": func():
 			Au.unlock()
 			Au.play("tap")
@@ -4361,8 +4377,10 @@ func advance(step: float) -> void:
 				step_launch(step)
 			"observe":
 				step_observe(step)
+			"party":
+				ext("party", "step", [step])
 		if Actors.astro:
-			Actors.update(step, input if _play_or_inside() and mini == null and cut == null else null)
+			Actors.update(step, input if _walking() else null)
 		if s and _play_or_inside():
 			MCTX.s = s
 			MCTX.weather = weather
@@ -4433,11 +4451,13 @@ func crew_frame(step: float, is_paused: bool, c) -> void:
 			ext("intro", "step", [step])
 	if mode == "launch":
 		step_launch(step)
+	if mode == "party":
+		ext("party", "step", [step])        # a party does not stop for one player's card either
 	if c.host and not still and day:
 		world_step(step)
 	c.frame(step)
 	if Actors.astro:
-		Actors.update(step, input if not is_paused and _play_or_inside() and mini == null and cut == null else null)
+		Actors.update(step, input if not is_paused and _walking() else null)
 	if s and not still:
 		if day and (c.host or s.get("sky")):
 			SKY.outside = mode == "play"
@@ -4477,7 +4497,7 @@ func _enter_tree() -> void:
 
 
 ## the optional extras, in scripts/addons/: each one that is there and compiles is switched on
-const ADDONS := ["journal", "minimap", "pov", "sky", "observe", "fx", "interior", "mission", "sunwatch", "keepsake", "holo", "colony", "pioneer", "intro", "crew", "hazards"]
+const ADDONS := ["journal", "minimap", "pov", "sky", "observe", "fx", "interior", "mission", "sunwatch", "keepsake", "holo", "colony", "pioneer", "intro", "crew", "hazards", "party"]
 
 
 func load_addons() -> void:

@@ -32,7 +32,7 @@ var fatal_label: Label
 var parts := {}
 
 ## callbacks the game sets
-var title_actions := {}          # start, crew, how, science, journal
+var title_actions := {}          # start, party, crew, how, science, journal
 var settings_actions := {}       # view, pause, sound, read, journal, holo, info, map
 var inside_actions := {}         # sun, fast, sleep, out
 var on_meter := Callable()
@@ -1285,7 +1285,7 @@ func _build_title() -> void:
 	var gap := Control.new()
 	gap.custom_minimum_size.y = 12
 	v.add_child(gap)
-	for b in [["start", "▶ Start mission", "BtnPrimary"], ["crew", "🧑‍🚀 Play with friends", "BtnGhost"]]:
+	for b in [["start", "▶ Start mission", "BtnPrimary"], ["party", "🎉 Party games", "BtnGhost"], ["crew", "🧑‍🚀 Play with friends", "BtnGhost"]]:
 		var bt := Button.new()
 		bt.text = b[1]
 		bt.theme_type_variation = b[2]
